@@ -12,7 +12,4 @@ streamlit==1.29.0
 pillow==10.1.0
 requests==2.31.0
 python-multipart==0.0.9
-rich==13.0.0
-markdown-it-py==1.1.0
-mdurl==0.1.0
-pygments==2.13.0
+protobuf>=4.0.0

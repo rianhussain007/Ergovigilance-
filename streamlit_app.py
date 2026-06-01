@@ -1,12 +1,11 @@
-"""
-Streamlit entry point for Ergonomic Posture Analysis
-"""
 import sys
 from pathlib import Path
 
 # Add the repo root to Python path for imports
 repo_root = Path(__file__).resolve().parent
-sys.path.insert(0, str(repo_root))
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
 
-# Import and run the frontend app
-from frontend import app  # noqa: F401
+# Import the Streamlit app
+if __name__ == "__main__":
+    from frontend.app import *  # noqa: F401, F403
