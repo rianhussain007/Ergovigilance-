@@ -1,0 +1,12 @@
+path: /kaggle/input/posture-keypoints-detection
+train: images/train # train images (relative to 'path')
+val: images/val # val images (relative to 'path') 
+test: images/val
+
+# Keypoints
+kpt_shape: [4, 3] # number of keypoints, number of dims (2 for x,y or 3 for x,y,visible)
+flip_idx: [0, 1, 2, 3]
+
+# Classes dictionary
+names:
+    0: person

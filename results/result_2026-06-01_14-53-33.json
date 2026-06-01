@@ -1,0 +1,20 @@
+{
+  "filename": "result_2026-06-01_14-53-33.jpg",
+  "source_filename": "webcam_0",
+  "timestamp": "2026-06-01T14:53:33",
+  "risk_level": "MEDIUM",
+  "confidence": 86.79,
+  "features": {
+    "neck_flexion": 1.3467,
+    "trunk_flexion": 1.6888,
+    "left_shoulder_elev": 36.6936,
+    "right_shoulder_elev": 45.4253,
+    "shoulder_symmetry": 2.7,
+    "alignment_deviation": 3.1921
+  },
+  "unavailable_features": [
+    "neck_flexion",
+    "trunk_flexion",
+    "alignment_deviation"
+  ]
+}
