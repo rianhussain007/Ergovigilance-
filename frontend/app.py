@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import sys
 from io import BytesIO
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +14,11 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont
+
+# Handle imports - add repo root to path for Streamlit Cloud
+repo_root = Path(__file__).resolve().parent.parent
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
 
 from backend.services.features import FEATURE_COLUMNS, FEATURE_THRESHOLDS
 from backend.services.pose import ImageQualityError, NoPersonDetectedError, annotate_pose, detect_pose_from_bgr
