@@ -32,7 +32,8 @@ def evaluate(dataset_path: Path, model_path: Path, output_path: Path) -> dict:
     stratify = y if y.value_counts().min() >= 2 else None
     _, X_test, _, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=stratify)
 
-    bundle = joblib.load(model_path)
+    loaded = joblib.load(model_path)
+    bundle = loaded if isinstance(loaded, dict) and "model" in loaded else {"model": loaded, "metrics": {}}
     model = bundle["model"]
     make_model_compatible(model)
 

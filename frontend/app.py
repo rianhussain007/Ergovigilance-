@@ -37,17 +37,31 @@ RISK_COPY = {
 
 @st.cache_resource
 def load_model():
-    bundle = joblib.load(MODEL_PATH)
+    loaded = joblib.load(MODEL_PATH)
+    bundle = coerce_model_bundle(loaded)
     make_model_compatible(bundle["model"])
     return bundle
 
 
+def coerce_model_bundle(loaded):
+    if isinstance(loaded, dict) and "model" in loaded:
+        loaded.setdefault("feature_columns", FEATURE_COLUMNS)
+        return loaded
+    return {"model": loaded, "feature_columns": FEATURE_COLUMNS, "labels": getattr(loaded, "classes_", None)}
+
+
 def make_model_compatible(model) -> None:
-    if not hasattr(model, "monotonic_cst"):
-        model.monotonic_cst = None
-    for estimator in getattr(model, "estimators_", []):
-        if not hasattr(estimator, "monotonic_cst"):
-            estimator.monotonic_cst = None
+    try:
+        if not hasattr(model, "monotonic_cst"):
+            model.monotonic_cst = None
+    except Exception:
+        pass
+    for estimator in np.asarray(getattr(model, "estimators_", [])).ravel():
+        try:
+            if not hasattr(estimator, "monotonic_cst"):
+                estimator.monotonic_cst = None
+        except Exception:
+            continue
 
 
 def badge_color(level: str) -> str:
@@ -70,7 +84,8 @@ def predict_frame(image_bgr: np.ndarray) -> tuple[str, float, dict[str, float], 
     features = pose["features"]
     bundle = load_model()
     model = bundle["model"]
-    vector = [[features[name] for name in FEATURE_COLUMNS]]
+    feature_columns = bundle.get("feature_columns", FEATURE_COLUMNS)
+    vector = pd.DataFrame([{name: features[name] for name in feature_columns}], columns=feature_columns)
     probabilities = normalized_probabilities(model.predict_proba(vector)[0])
     class_index = int(np.argmax(probabilities))
     risk_level = str(model.classes_[class_index])

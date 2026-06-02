@@ -6,6 +6,7 @@ from typing import Any, Dict
 import cv2
 import joblib
 import numpy as np
+import pandas as pd
 from fastapi import FastAPI, File, HTTPException, UploadFile
 
 from backend.services.features import FEATURE_COLUMNS
@@ -24,17 +25,30 @@ def load_model() -> Dict[str, Any]:
     if _model_bundle is None:
         if not MODEL_PATH.exists():
             raise RuntimeError(f"Model file not found: {MODEL_PATH}")
-        _model_bundle = joblib.load(MODEL_PATH)
+        _model_bundle = coerce_model_bundle(joblib.load(MODEL_PATH))
         make_model_compatible(_model_bundle["model"])
     return _model_bundle
 
 
+def coerce_model_bundle(loaded: Any) -> Dict[str, Any]:
+    if isinstance(loaded, dict) and "model" in loaded:
+        loaded.setdefault("feature_columns", FEATURE_COLUMNS)
+        return loaded
+    return {"model": loaded, "feature_columns": FEATURE_COLUMNS, "labels": getattr(loaded, "classes_", None)}
+
+
 def make_model_compatible(model: Any) -> None:
-    if not hasattr(model, "monotonic_cst"):
-        model.monotonic_cst = None
-    for estimator in getattr(model, "estimators_", []):
-        if not hasattr(estimator, "monotonic_cst"):
-            estimator.monotonic_cst = None
+    try:
+        if not hasattr(model, "monotonic_cst"):
+            model.monotonic_cst = None
+    except Exception:
+        pass
+    for estimator in np.asarray(getattr(model, "estimators_", [])).ravel():
+        try:
+            if not hasattr(estimator, "monotonic_cst"):
+                estimator.monotonic_cst = None
+        except Exception:
+            continue
 
 
 def normalized_probabilities(raw_probabilities: np.ndarray) -> np.ndarray:
@@ -68,7 +82,8 @@ async def predict(file: UploadFile = File(...)) -> Dict[str, Any]:
         features = pose["features"]
         bundle = load_model()
         model = bundle["model"]
-        vector = [[features[name] for name in FEATURE_COLUMNS]]
+        feature_columns = bundle.get("feature_columns", FEATURE_COLUMNS)
+        vector = pd.DataFrame([{name: features[name] for name in feature_columns}], columns=feature_columns)
         probabilities = normalized_probabilities(model.predict_proba(vector)[0])
         class_index = int(np.argmax(probabilities))
         risk_level = str(model.classes_[class_index])
