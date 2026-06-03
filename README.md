@@ -74,16 +74,13 @@ http://127.0.0.1:8000/health
 ## Screenshots
 
 ### Image Upload
-
-![Image Upload](docs/screenshots/image_upload.png)
+-[will be uploaded]
 
 ### Live Camera
 
-![Live Camera](docs/screenshots/live_camera.png)
-
+-[will be uploaded]
 ### History Dashboard
-
-![History](docs/screenshots/history.png)
+-[will be uploaded]
 
 ## Model Training
 
