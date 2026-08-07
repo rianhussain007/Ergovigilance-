@@ -2,9 +2,13 @@
 
 import sys
 import os
-sys.path.insert(0, r"C:\GGS_intership\posture_analysis")
-sys.path.insert(0, r"C:\GGS_intership\posture_analysis\backend_api")
-os.chdir(r"C:\GGS_intership\posture_analysis\backend_api")
+from pathlib import Path
+
+# Repo-relative paths (was a hardcoded Windows checkout path that broke CI).
+ROOT = Path(__file__).resolve().parents[1]
+BACKEND_API = ROOT / "backend_api"
+sys.path.insert(0, str(BACKEND_API))
+sys.path.insert(0, str(ROOT))
 
 from app.core.database import init_local_database, get_connection
 from backend.alerts.engine import AlertEngine
