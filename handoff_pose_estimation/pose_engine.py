@@ -104,6 +104,11 @@ class PoseEngine:
                         features["movement_velocity"] = round(max(d_neck, d_trunk) / dt, 2)
                     else:
                         features["movement_velocity"] = 0.0
+                    # Wrist movement velocity: frame-to-frame wrist position change.
+                    # NOTE: legacy archive copy. Production code lives in
+                    # backend/services/pose_engine.py, which computes this in
+                    # pixel space (px/s) to match the task classifier; do not
+                    # port this normalized-units version back.
                     if self._prev_features.get("left_wrist") is not None and len(keypoints) > 16:
                         lw = keypoints[15]
                         rw = keypoints[16]

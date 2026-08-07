@@ -12,6 +12,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+# The script prints degree/arrow glyphs; on Windows the cp1252 console
+# cannot encode them and crashes. Force UTF-8 output.
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 
 def _gauss(value: float, mean: float, sigma: float) -> float:
     if sigma <= 0:
