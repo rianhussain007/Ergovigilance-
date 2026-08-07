@@ -1,5 +1,9 @@
 """
 Phase 1 test: Run two cameras (or one real + one mock) and track FPS
+
+Hardware-gated: this spins up real video captures and runs a 30-second
+benchmark loop, so it is excluded from the default suite and CI (run with
+``pytest -m hardware``).
 """
 import os
 import sys
@@ -7,6 +11,7 @@ import time
 import threading
 import numpy as np
 import cv2
+import pytest
 
 # Add repo root and backend_api to path
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -54,6 +59,7 @@ class MockVideoCapture:
         self.running = False
 
 
+@pytest.mark.hardware
 def test_multi_camera_fps():
     model_path = os.path.join(REPO_ROOT, "models", "pose_landmarker_lite.task")
     if not os.path.exists(model_path):

@@ -52,5 +52,23 @@ jobs:
       - name: Run backend test suite
         run: pytest backend_api/tests -q
 
+      - name: Legacy unit scripts (self-contained)
+        run: |
+          set -e
+          for f in \
+            scripts/test_event_bus.py \
+            scripts/test_context_engine.py \
+            scripts/test_alert_engine.py \
+            scripts/test_issue_detection.py \
+            scripts/test_history_engine.py \
+            scripts/test_context_snapshot.py \
+            scripts/test_recommendation_engine.py \
+            scripts/test_recommendation_engine_v2.py \
+            scripts/test_alert_persistence.py \
+            scripts/test_session_analytics.py; do
+            echo "== $f =="
+            timeout 120 python "$f"
+          done
+
       - name: Python dependency audit (fail on known vulnerabilities)
         run: pip-audit -r backend_api/requirements.txt --progress-spinner off
