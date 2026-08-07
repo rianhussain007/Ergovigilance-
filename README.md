@@ -1,5 +1,7 @@
 # ErgoVigilance — AI Ergonomic Posture & Movement Monitoring
 
+[![CI](https://github.com/rianhussain007/Ergovigilance-/actions/workflows/ci.yml/badge.svg)](https://github.com/rianhussain007/Ergovigilance-/actions/workflows/ci.yml)
+
 ErgoVigilance is an AI-powered industrial ergonomics monitoring platform. It watches workers through a webcam, detects posture and movement in real time using MediaPipe pose estimation, converts the skeleton into biomechanical features, and produces context-aware risk scores, alerts, recommendations, fatigue/exposure tracking, session recording, replay, and evidence-backed reports for operators, supervisors, and safety managers.
 
 ```
@@ -232,10 +234,10 @@ Admins can inspect current usage and trigger a pass on demand via `GET /api/rete
 
 ## Testing & CI
 
-The pytest suite in `backend_api/tests/` is the primary suite (live monitor, retention, migrations, and an API smoke layer that regression-tests auth, lockout, and the fail-closed 503 path). It is fully isolated — tests run against a temp SQLite DB and temp retention dirs, never your real data:
+The pytest suite in `backend_api/tests/` is the primary suite (live monitor, retention, migrations, privacy, and an API smoke layer that regression-tests auth, lockout, and the fail-closed 503 path). It is fully isolated — tests run against a temp SQLite DB and temp retention dirs, never your real data:
 
 ```bash
-cd backend_api && pytest          # 23 tests, ~25 s
+cd backend_api && pytest          # 36 tests, ~35 s
 pytest -m hardware                # opt-in hardware tests (real cameras, 30 s FPS benchmark)
 ```
 
@@ -246,9 +248,9 @@ Frontend validation (in `ui_posture/`): `npm run lint` (TypeScript) and `npm run
 **GitHub Actions** (`.github/workflows/ci.yml`) runs on every push/PR:
 
 - **Frontend job**: `npm ci` → `npm run lint` → `npm run build` → `npm audit --omit=dev` (fails on known vulnerabilities).
-- **Backend job**: install `backend_api/requirements-dev.txt` → `python scripts/verify_models.py` (model checksums) → `pytest backend_api/tests -q` → 10 legacy unit scripts → `pip-audit -r backend_api/requirements.txt` (fails on known vulnerabilities).
+- **Backend job**: install `backend_api/requirements-dev.txt` → `python scripts/verify_models.py` (model checksums) → `pytest backend_api/tests -q` → all 22 legacy `scripts/test_*.py` → `pip-audit -r backend_api/requirements.txt` (fails on known vulnerabilities).
 
-All legacy scripts are green — the stale ones were repaired (module-path drift in `test_trend_analysis`/`test_safety_reporting`/`test_session_persistence` was rewritten against the current function APIs; sprint 12–16 now tolerate the removed `MockDashboardRepository.ts` and use repo-relative paths; `test_task_recognition`'s reaching case now feeds the motion signal the scorer uses; `test_ai_assistant_live` self-skips without a running stack).
+CI is green (first verified run 2026-08-07). See `ROADMAP.md` for the prioritized list of remaining work (CI polish, dev-tooling repairs, hardware-gated validations, P2 product decisions).
 
 ---
 
@@ -268,4 +270,4 @@ All legacy scripts are green — the stale ones were repaired (module-path drift
 - Single-person tracking only (`num_poses=1`), CPU-only inference (~15–20 FPS at 640×480).
 - Risk thresholds are open-source defaults, not clinically validated; the RULA-informed score is a lower-bound estimate (wrist angle/twist, force/load and muscle-use adjustments are defaulted).
 - The whole pipeline has so far been validated by one person in one room/camera setup — see `docs/CURRENT_STATE.md` for the full, honest list of gaps and next steps.
-- Legacy Streamlit-era artifacts (`frontend/app.py`, `packages.txt`, old root `requirements.txt`) are no longer part of the product; the root `requirements.txt` now simply redirects to `backend_api/requirements.txt`. They are kept in git history for reference.
+- Legacy Streamlit-era artifacts (`frontend/`, `streamlit_app.py`, `packages.txt`, `run_frontend.bat`, `.streamlit/`) were removed in 2026-08 — they imported deleted pre-pivot modules and could no longer run. They remain in git history (`git log --all`) for reference. The old root `requirements.txt` now simply redirects to `backend_api/requirements.txt`.
