@@ -27,6 +27,12 @@ class SessionAnalytics:
         self._trunk_sum: float = 0.0
         self._shoulder_sum: float = 0.0
         self._knee_sum: float = 0.0
+        # Phase-A feature averages (head/hand/stance)
+        self._fhp_sum: float = 0.0
+        self._head_tilt_sum: float = 0.0
+        self._wrist_dev_sum: float = 0.0
+        self._stance_sum: float = 0.0
+        self._weight_shift_sum: float = 0.0
 
     @property
     def elapsed_seconds(self) -> float:
@@ -65,6 +71,11 @@ class SessionAnalytics:
         self._trunk_sum += features.get("trunk_flexion", 0.0)
         self._shoulder_sum += features.get("shoulder_symmetry", 0.0)
         self._knee_sum += features.get("knee_angle", 0.0)
+        self._fhp_sum += features.get("forward_head_posture", 0.0)
+        self._head_tilt_sum += features.get("head_tilt_angle", 0.0)
+        self._wrist_dev_sum += features.get("wrist_deviation_angle", 0.0)
+        self._stance_sum += features.get("stance_stability", 0.0)
+        self._weight_shift_sum += features.get("weight_shift_offset", 0.0)
 
     def get_summary(self) -> Dict:
         if self._frame_count == 0:
@@ -80,6 +91,11 @@ class SessionAnalytics:
                 "avg_trunk_flexion": 0.0,
                 "avg_shoulder_symmetry": 0.0,
                 "avg_knee_angle": 0.0,
+                "avg_forward_head_posture": 0.0,
+                "avg_head_tilt_angle": 0.0,
+                "avg_wrist_deviation_angle": 0.0,
+                "avg_stance_stability": 0.0,
+                "avg_weight_shift_offset": 0.0,
             }
 
         total = self._frame_count
@@ -97,6 +113,11 @@ class SessionAnalytics:
         avg_trunk = round(self._trunk_sum / total, 2)
         avg_shoulder = round(self._shoulder_sum / total, 2)
         avg_knee = round(self._knee_sum / total, 2)
+        avg_fhp = round(self._fhp_sum / total, 2)
+        avg_head_tilt = round(self._head_tilt_sum / total, 2)
+        avg_wrist_dev = round(self._wrist_dev_sum / total, 2)
+        avg_stance = round(self._stance_sum / total, 2)
+        avg_weight_shift = round(self._weight_shift_sum / total, 2)
 
         return {
             "session_duration_seconds": round(self.elapsed_seconds, 1),
@@ -110,6 +131,11 @@ class SessionAnalytics:
             "avg_trunk_flexion": avg_trunk,
             "avg_shoulder_symmetry": avg_shoulder,
             "avg_knee_angle": avg_knee,
+            "avg_forward_head_posture": avg_fhp,
+            "avg_head_tilt_angle": avg_head_tilt,
+            "avg_wrist_deviation_angle": avg_wrist_dev,
+            "avg_stance_stability": avg_stance,
+            "avg_weight_shift_offset": avg_weight_shift,
         }
 
 
@@ -153,6 +179,11 @@ def save_session_summary(
         "avg_trunk_flexion": summary["avg_trunk_flexion"],
         "avg_shoulder_symmetry": summary["avg_shoulder_symmetry"],
         "avg_knee_angle": summary["avg_knee_angle"],
+        "avg_forward_head_posture": summary.get("avg_forward_head_posture", 0.0),
+        "avg_head_tilt_angle": summary.get("avg_head_tilt_angle", 0.0),
+        "avg_wrist_deviation_angle": summary.get("avg_wrist_deviation_angle", 0.0),
+        "avg_stance_stability": summary.get("avg_stance_stability", 0.0),
+        "avg_weight_shift_offset": summary.get("avg_weight_shift_offset", 0.0),
     }
 
     if alerts_data:

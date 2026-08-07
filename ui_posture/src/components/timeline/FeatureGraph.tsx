@@ -10,6 +10,11 @@ const FEATURE_LABELS: Record<string, string> = {
   shoulder_symmetry: 'Shoulder Sym',
   alignment_deviation: 'Alignment Dev',
   knee_angle: 'Knee Angle',
+  forward_head_posture: 'Forward Head Posture',
+  head_tilt_angle: 'Head Tilt',
+  wrist_deviation_angle: 'Wrist Deviation',
+  stance_stability: 'Stance Stability',
+  weight_shift_offset: 'Weight Shift',
 };
 
 const FEATURE_COLORS: Record<string, string> = {
@@ -21,6 +26,11 @@ const FEATURE_COLORS: Record<string, string> = {
   shoulder_symmetry: '#a78bfa',
   alignment_deviation: '#fbbf24',
   knee_angle: '#38bdf8',
+  forward_head_posture: '#f97316',
+  head_tilt_angle: '#22d3ee',
+  wrist_deviation_angle: '#e879f9',
+  stance_stability: '#4ade80',
+  weight_shift_offset: '#facc15',
 };
 
 interface Props {

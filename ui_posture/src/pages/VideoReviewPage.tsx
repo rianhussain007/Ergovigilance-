@@ -12,6 +12,11 @@ const FEATURE_LABELS: Record<string, string> = {
   shoulder_symmetry: "Shoulder Symmetry",
   alignment_deviation: "Alignment Deviation",
   knee_angle: "Knee Angle",
+  forward_head_posture: "Forward Head Posture",
+  head_tilt_angle: "Head Tilt",
+  wrist_deviation_angle: "Wrist Deviation",
+  stance_stability: "Stance Stability",
+  weight_shift_offset: "Weight Shift",
 };
 
 // MediaPipe Pose connections for skeleton drawing (from video_feed.py)

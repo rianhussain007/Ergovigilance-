@@ -385,6 +385,11 @@ const UNAVAILABLE_GUIDANCE: Record<string, string> = {
   left_shoulder_elev: 'N/A — reposition your left arm in frame',
   right_shoulder_elev: 'N/A — reposition your right arm in frame',
   shoulder_symmetry: 'N/A — reposition your shoulders in frame',
+  forward_head_posture: 'N/A — face the camera so your face is visible',
+  head_tilt_angle: 'N/A — face the camera so your face is visible',
+  wrist_deviation_angle: 'N/A — move your hands into frame',
+  stance_stability: 'N/A — move back so your legs are visible',
+  weight_shift_offset: 'N/A — move back so your legs are visible',
 };
 
 function TelemetryRow({ feature, unavailableFeatures = [], isApproximate }: { feature: ErgonomicFeature; unavailableFeatures?: string[]; isApproximate?: boolean }) {

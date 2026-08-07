@@ -60,6 +60,47 @@ _ISSUE_RULES = [
         "high_min": 25,
         "inverted": False,
     },
+    # Phase-A additions (2026-08): head / wrist / stance issues
+    {
+        "issue": "Forward Head Posture",
+        "feature": "forward_head_posture",
+        "med_min": 10,
+        "med_max": 20,
+        "high_min": 20,
+        "inverted": False,
+    },
+    {
+        "issue": "Head Tilt",
+        "feature": "head_tilt_angle",
+        "med_min": 10,
+        "med_max": 20,
+        "high_min": 20,
+        "inverted": False,
+    },
+    {
+        "issue": "Wrist Deviation",
+        "feature": "wrist_deviation_angle",
+        "med_min": 5,
+        "med_max": 15,
+        "high_min": 15,
+        "inverted": False,
+    },
+    {
+        "issue": "Unstable Stance",
+        "feature": "stance_stability",
+        "med_min": 0.7,
+        "med_max": 0.7,
+        "high_min": 0.5,
+        "inverted": True,
+    },
+    {
+        "issue": "Weight Shift",
+        "feature": "weight_shift_offset",
+        "med_min": 8,
+        "med_max": 15,
+        "high_min": 15,
+        "inverted": False,
+    },
 ]
 
 

@@ -94,6 +94,12 @@ class LiveRepository(DashboardRepository):
             ("shoulder_symmetry", "Shoulder Symmetry", "%", 0, 30),
             ("alignment_deviation", "Alignment Deviation", "%", 0, 20),
             ("knee_angle", "Knee Angle", "°", 80, 180),
+            # Phase-A additions (2026-08): head / wrist / stance ergonomics
+            ("forward_head_posture", "Forward Head Posture", "%", 0, 30),
+            ("head_tilt_angle", "Head Tilt", "°", 0, 30),
+            ("wrist_deviation_angle", "Wrist Deviation", "°", 0, 25),
+            ("stance_stability", "Stance Stability", "", 0, 1),
+            ("weight_shift_offset", "Weight Shift", "%", 0, 20),
         ]
 
         from backend.services.features import risk_breakdown
@@ -114,7 +120,7 @@ class LiveRepository(DashboardRepository):
                 "unit": unit,
                 "min": mn,
                 "max": mx,
-                "status": status_map.get(frisk, "good"),
+                "status": status_map.get(frisk, "unavailable"),
             })
 
         issues_list = []
