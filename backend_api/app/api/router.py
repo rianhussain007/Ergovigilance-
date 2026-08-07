@@ -33,6 +33,7 @@ from app.api.task_config import router as task_config_router
 from app.api.worker_trends import router as worker_trends_router
 from app.api.settings import router as settings_router
 from app.api.retention import router as retention_router
+from app.api.privacy import router as privacy_router
 
 api_router = APIRouter()
 
@@ -67,3 +68,4 @@ api_router.include_router(task_config_router, prefix="/api", tags=["Task Config"
 api_router.include_router(worker_trends_router, prefix="/api", tags=["Worker Trends"])
 api_router.include_router(settings_router, prefix="/api", tags=["Settings"])
 api_router.include_router(retention_router, prefix="/api", tags=["Retention"])
+api_router.include_router(privacy_router, prefix="/api", tags=["Privacy"])

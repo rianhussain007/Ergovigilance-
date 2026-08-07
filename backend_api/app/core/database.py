@@ -421,6 +421,14 @@ def load_active_alerts() -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def delete_alerts_for_worker(worker_id: str) -> int:
+    """Delete all alert rows for a worker (used by the privacy wipe endpoint)."""
+    with get_connection() as conn:
+        cur = conn.execute("DELETE FROM alerts WHERE worker_id = ?", (worker_id,))
+        conn.commit()
+        return cur.rowcount
+
+
 def load_alert_history() -> list[dict]:
     """Load all ACKNOWLEDGED and RESOLVED alerts from the database."""
     with get_connection() as conn:
