@@ -14,5 +14,14 @@ playwright>=1.61.0,<2.0.0
 opencv-python-headless>=4.10.0.84,<5.0.0
 mediapipe>=0.10.5,<1.0.0
 numpy>=2.0.0,<3.0.0
+# Trained task classifier v2 + risk-calibration overlay (models/task_model_v2.pkl,
+# models/risk_calibration_model.pkl) are joblib pickles of sklearn estimators.
+# Loading is defensive (lazy, fail-open to the Gaussian/rule path) so a minimal
+# install without these still runs.
+joblib>=1.3.0,<2.0.0
+# Pinned <1.9: sklearn 1.9 renamed the _hist_gradient_boosting._loss Cython
+# module, breaking joblib pickles trained with 1.8 (our task/risk models).
+# Keep the runtime within the training major; retrain + re-pickle on upgrade.
+scikit-learn>=1.3.0,<1.9.0
 requests>=2.32.0,<3.0.0
 prometheus-client>=0.21.0,<1.0.0

@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import math
+import os
 import time
 from collections import deque
-from typing import Dict, List, Sequence
+from pathlib import Path
+from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 
@@ -31,7 +33,19 @@ NOSE = 0
 
 
 class TaskRecognition:
-    def __init__(self, window_size: int = 10) -> None:
+    """Task/activity recognition for the live pipeline.
+
+    Model-primary with Gaussian fallback: when a trained classifier
+    (models/task_model_v2.pkl, loaded lazily) is available and its top
+    prediction exceeds the confidence threshold (default 0.6), the model
+    decides; otherwise the deterministic Gaussian scorer runs. A missing
+    or unreadable model file never raises — the Gaussian covers it.
+    """
+
+    DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "task_model_v2.pkl"
+
+    def __init__(self, window_size: int = 10,
+                 model_path: Optional[str] = None) -> None:
         self._current_task: str = "Unknown"
         self._confidence: float = 0.0
         self._reason: str = "Insufficient data"
@@ -41,6 +55,14 @@ class TaskRecognition:
         self._last_smoothed_task: str = "Unknown"
         self._task_start_time: float = time.time()
 
+        env_path = os.environ.get("ERGOVIGILANCE_TASK_MODEL")
+        self._model_path = Path(model_path) if model_path else (
+            Path(env_path) if env_path else self.DEFAULT_MODEL_PATH)
+        self._model_bundle: dict | None = None
+        self._model_tried: bool = False
+        self._confidence_threshold: float = 0.6
+        self._using_model: bool = False
+
     def get_current_task(self) -> str:
         return self._current_task
 
@@ -49,6 +71,48 @@ class TaskRecognition:
 
     def get_reason(self) -> str:
         return self._reason
+
+    @property
+    def using_model(self) -> bool:
+        """True when the last prediction came from the trained classifier."""
+        return self._using_model
+
+    def _get_model_bundle(self) -> dict | None:
+        """Load the trained task model once; never raise on absence/corruption."""
+        if self._model_tried:
+            return self._model_bundle
+        self._model_tried = True
+        try:
+            import joblib  # optional runtime dep — degrades to Gaussian if absent
+            if not self._model_path.exists():
+                return None
+            bundle = joblib.load(self._model_path)
+            if not isinstance(bundle, dict) or "model" not in bundle:
+                return None
+            self._model_bundle = bundle
+            self._confidence_threshold = float(
+                bundle.get("config", {}).get("confidence_threshold", 0.6))
+        except Exception:
+            self._model_bundle = None
+        return self._model_bundle
+
+    def _predict_with_model(self, features: Dict[str, float]) -> tuple[str, float] | None:
+        """Return (task, confidence) if the model is confident, else None."""
+        bundle = self._get_model_bundle()
+        if bundle is None:
+            return None
+        try:
+            cols = bundle["feature_columns"]
+            row = [features.get(c, 0.0) for c in cols]
+            proba = bundle["model"].predict_proba([row])[0]
+            best = int(np.argmax(proba))
+            conf = float(proba[best])
+            task = str(bundle["labels"][best])
+        except Exception:
+            return None
+        if conf < self._confidence_threshold:
+            return None
+        return task, conf
 
     def reset(self) -> None:
         self._current_task = "Unknown"
@@ -95,11 +159,21 @@ class TaskRecognition:
             self._current_task = "Unknown"
             self._confidence = 0.0
             self._reason = "Degenerate keypoints - no person detected"
+            self._using_model = False
             return {
                 "task": "Unknown",
                 "confidence": 0.0,
                 "reason": "Degenerate keypoints - no person detected",
             }
+
+        # ── Model-primary path: confident trained classifier wins ──
+        model_pred = self._predict_with_model(features)
+        if model_pred is not None:
+            self._using_model = True
+            model_task, model_conf = model_pred
+            return self._finalize(model_task, round(model_conf * 100.0, 1),
+                                  "Trained task classifier (v2)", kps)
+        self._using_model = False
 
         l_elbow_angle = _angle_between(lsh, lel, lwr)
         r_elbow_angle = _angle_between(rsh, rel, rwr)
@@ -231,6 +305,18 @@ class TaskRecognition:
         if not chosen_reasons and best_task == "Unknown":
             self._reason = "No clear task pattern detected"
 
+        return self._finalize(self._current_task, self._confidence, self._reason, kps)
+
+    def _finalize(self, task: str, confidence: float, reason: str,
+                  kps: np.ndarray) -> Dict:
+        """Apply window smoothing + dwell tracking and build the result dict.
+
+        Shared by the model-primary path and the Gaussian fallback so both
+        get identical temporal behavior.
+        """
+        self._current_task = task
+        self._confidence = confidence
+        self._reason = reason
         self._prev_kps = kps.copy()
 
         # ── Temporal smoothing: confidence-weighted sliding window ──
