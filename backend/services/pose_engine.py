@@ -29,6 +29,7 @@ from backend.services.task_recognition import TaskRecognition
 from backend.core.constants import RISK_LEVELS_DICT as RISK_LEVELS  # noqa: F401
 from backend.core.constants import CONFIDENCE_LANDMARKS  # noqa: F401
 from backend.core.types import ProcessedFrame  # noqa: F401
+from backend.core.utils import wrist_movement_velocity_px
 
 
 def _compute_confidence(landmarks) -> float:
@@ -117,15 +118,20 @@ class PoseEngine:
                         features["movement_velocity"] = round(max(d_neck, d_trunk) / dt, 2)
                     else:
                         features["movement_velocity"] = 0.0
-                    # Wrist movement velocity: frame-to-frame wrist position change
-                    if self._prev_features.get("left_wrist") is not None and len(keypoints) > 16:
-                        lw = keypoints[15]  # left wrist
-                        rw = keypoints[16]  # right wrist
-                        prev_lw = self._prev_features["left_wrist"]
-                        prev_rw = self._prev_features["right_wrist"]
-                        d_lw = ((lw[0] - prev_lw[0])**2 + (lw[1] - prev_lw[1])**2) ** 0.5
-                        d_rw = ((rw[0] - prev_rw[0])**2 + (rw[1] - prev_rw[1])**2) ** 0.5
-                        features["wrist_movement_velocity"] = round(max(d_lw, d_rw) / dt, 2)
+                    # Wrist movement velocity: frame-to-frame wrist position
+                    # change in pixels/second — the physical scale the task
+                    # classifier's Reaching gaussian expects (~150 px/s).
+                    # Helper guards against missing wrists from either frame.
+                    if len(keypoints) > 16:
+                        features["wrist_movement_velocity"] = wrist_movement_velocity_px(
+                            prev_left=self._prev_features.get("left_wrist"),
+                            prev_right=self._prev_features.get("right_wrist"),
+                            curr_left=keypoints[15],
+                            curr_right=keypoints[16],
+                            dt=dt,
+                            width=w_f,
+                            height=h_f,
+                        )
                     else:
                         features["wrist_movement_velocity"] = 0.0
                 else:
