@@ -2,6 +2,7 @@
 
 import sys
 import os
+import tempfile
 from pathlib import Path
 
 # Repo-relative paths (was a hardcoded Windows checkout path that broke CI).
@@ -9,6 +10,13 @@ ROOT = Path(__file__).resolve().parents[1]
 BACKEND_API = ROOT / "backend_api"
 sys.path.insert(0, str(BACKEND_API))
 sys.path.insert(0, str(ROOT))
+
+# Point the auth/alerts DB at a throwaway temp file so this script never
+# writes test alerts into the developer's real backend_api/local_auth.db.
+# Must be set before app.core.database/config are imported.
+os.environ["AUTH_DB_PATH"] = os.path.join(
+    tempfile.mkdtemp(prefix="ergovigilance-alert-test-"), "test_alerts.db"
+)
 
 from app.core.database import init_local_database, get_connection
 from backend.alerts.engine import AlertEngine

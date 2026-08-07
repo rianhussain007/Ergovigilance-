@@ -19,55 +19,44 @@ has an acceptance criterion so it is unambiguous when done.
 
 ---
 
-## 1. Quick wins — CI & polish (small, safe)
+## 1. Quick wins — CI & polish (small, safe) ✅ done 2026-08-07
 
-- [ ] **Bump GitHub Actions versions** to targets running Node.js 24
-  (`actions/checkout@v5`? `actions/setup-python@v6`, `actions/setup-node@v5` — verify the
-  latest major that clears the deprecation warning). CI still fails nothing today, but the
-  warning is a future breakage. *Accept: no Node-20 deprecation annotation on the next run.*
-- [ ] **Add a CI status badge** to the top of `README.md`
-  (`https://github.com/rianhussain007/Ergovigilance-/actions/workflows/ci.yml/badge.svg`).
-  *Accept: badge renders and shows green.*
-- [ ] **README status section** — replace the "known-stale scripts" note (obsolete since the
-  suite is green) with a current status table + link to this file.
-  *Accept: README accurately reflects CI green + done items.*
+- [x] **Bump GitHub Actions versions** to targets running Node.js 24
+  (`checkout@v7`, `setup-python@v7`, `setup-node@v7`). Clears the Node-20 deprecation warning.
+- [x] **Add a CI status badge** to the top of `README.md`.
+- [x] **README status section** — replaced the stale notes (23→36 tests, "10 legacy scripts"→
+  "22-script suite") and linked `ROADMAP.md` from the CI section.
 
-## 2. Broken dev scripts (not in CI → rot silently)
+## 2. Broken dev scripts (not in CI → rot silently) ✅ done 2026-08-07
 
-These were never in the `test_*.py` loop, so CI stays green while they are broken:
+These were never in the `test_*.py` loop, so CI stays green while they were broken:
 
-- [ ] **`scripts/generate_trend_report.py`** — imports `TrendAnalysis` from
-  `backend.services.trend_analysis`; that class no longer exists (module now exposes
-  `analyze_risk_trend`). Rewrite against the function API (same pattern as
-  `test_trend_analysis.py`). *Accept: script runs on a sample session JSON.*
-- [ ] **`scripts/generate_safety_report.py`** — imports `SafetyReport` from
-  `backend.services.safety_reporting`; module is now `safety_report.py` exposing
-  `analyze_safety`. Rewrite against it. *Accept: script runs on a sample session JSON.*
-- [ ] **`scripts/smoke_test_model.py`** — imports `annotate_pose`, `detect_pose_from_bgr`
-  from `backend.services.pose`, which was **deleted** in the pivot. Either rewrite against
-  `backend.services.pose_engine` (single-frame detect) or delete. *Accept: no import error.*
-- [ ] **`start_backend.py`, `start_frontend.py`, `inspect_exports.py`** — hardcoded
-  `C:\GGS_intership\posture_analysis` paths; same portability bug we just fixed in
-  `test_alert_persistence.py`. Make repo-relative. *Accept: no drive-letter literals.*
-- [ ] **`frontend/app.py`** (legacy Streamlit entry point) — imports the deleted
-  `backend.services.pose`. README documents it as out-of-product; decide **delete or archive**
-  it (and `streamlit_app.py`, `packages.txt`, `handoff_pose_estimation/`, `Week4/`) so the
-  repo stops carrying dead entry points. *Accept: decision made + executed.*
+- [x] **`scripts/generate_trend_report.py`** — rewritten against `analyze_risk_trend`;
+  verified on the real `outputs/sessions` (74 sessions → `reports/trend_report.md`).
+- [x] **`scripts/generate_safety_report.py`** — rewritten against `analyze_safety`;
+  verified on a real session JSON → `reports/session_report.md`.
+- [x] **`scripts/smoke_test_model.py`** — **deleted** (decision: it exercised the archived
+  `best_model.pkl` SVM on the deleted kaggle images and imported the removed
+  `backend.services.pose`; the production path is `pose_engine` with full test coverage).
+- [x] **`start_backend.py`, `start_frontend.py`, `inspect_exports.py`** — repo-relative
+  paths (no drive-letter literals). `run_backend.bat` fixed to serve `backend_api`
+  (`app.main:app` instead of the deleted `backend.main`).
+- [x] **Legacy Streamlit entry points removed** — `frontend/`, `streamlit_app.py`,
+  `packages.txt`, `run_frontend.bat`, `.streamlit/` deleted (decision: they imported deleted
+  pre-pivot modules and could not run; README documented them as out-of-product and git
+  history retains them). **Kept by decision:** `handoff_pose_estimation/` and `Week4/` —
+  self-contained research artifacts, not broken entry points.
 
-## 3. Test isolation & repo hygiene
+## 3. Test isolation & repo hygiene ✅ done 2026-08-07
 
-- [ ] **`test_alert_persistence.py` writes to the real dev DB** — it calls
-  `init_local_database()` with no env override, so it pollutes
-  `backend_api/local_auth.db` on every run (it inserted ~1400 `ALT-TEST` rows during this
-  session's CI replica). Point `AUTH_DB_PATH` at a temp file (as `backend_api/tests/conftest.py`
-  does) or reset the DB after the run. *Accept: running it leaves the dev DB untouched.*
-- [ ] **Reset/clean the dev `local_auth.db`** — currently holds 1416 alert rows from test
-  runs; decide whether to wipe alerts history or reset the file (gitignored, so no CI impact).
-  *Accept: decision made.*
-- [ ] **Stray runtime artifacts at repo root** — `backend_log.txt`, `frontend_pid.txt`,
-  `vite_log.txt`, `vite.pid`, `*.log`, `server_output.txt` etc. were never gitignored
-  (`.gitignore` only covered `.log`/`.pid` extensions and the `_archive` dirs). Remove from
-  tracking + extend `.gitignore`. *Accept: `git status` clean after a dev run.*
+- [x] **`test_alert_persistence.py` no longer touches the dev DB** — sets `AUTH_DB_PATH` to
+  a throwaway temp file before importing `app.core.database`. Verified: dev DB alert count
+  unchanged (1414) across runs.
+- [x] **Dev `local_auth.db`** — kept as-is (the ~1414 rows are real dev-session data; the
+  `ALT-TEST` rows this session added were purged). No wipe.
+- [x] **Stray runtime artifacts** — verified already untracked and covered by `.gitignore`
+  (`*.log`, `*.err`, `*.pid`, `queryex`, `auth_tokens_verify.json`, the `backend_*/server_*/vite_*`
+  txt files). No further action needed.
 
 ## 4. Validation that needs hardware/runtime (cannot be done headlessly)
 
