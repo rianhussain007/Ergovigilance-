@@ -254,7 +254,10 @@ class ContextIntelligenceEngine:
                 feature_scores[feature] = float("nan")
             else:
                 score = self._score_feature(value, med, high, inverted)
-                feature_scores[feature] = score
+                # Coerce to a plain python float — numpy scalars (from smoothed
+                # or numpy-sourced feature values) break JSON serialization
+                # downstream (pydantic cannot serialize numpy.float32/64).
+                feature_scores[feature] = float(score)
 
         # Only features exceeding their own medium threshold contribute.
         # Among those, use a weighted combination: highest contributes fully,

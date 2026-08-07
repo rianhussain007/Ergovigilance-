@@ -804,7 +804,22 @@ class LiveRepository(DashboardRepository):
             rula_is_partial = rula_result.get("is_partial_score", False)
 
         import math
-        clean_scores = {k: (None if isinstance(v, float) and math.isnan(v) else v) for k, v in snapshot.feature_scores.items()}
+
+        def _clean_score(v) -> float | None:
+            """Coerce a score to a JSON-safe float (numpy scalars and NaN -> None)."""
+            if v is None:
+                return None
+            try:
+                if v != v:  # NaN check works for both python and numpy floats
+                    return None
+            except Exception:
+                return None
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
+        clean_scores = {k: _clean_score(v) for k, v in snapshot.feature_scores.items()}
 
         return ContextSnapshotResponse(
             session_id=snapshot.session_id,

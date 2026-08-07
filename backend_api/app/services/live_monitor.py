@@ -52,6 +52,26 @@ RECORDINGS_DIR = os.environ.get(
 )
 
 
+def export_recommendations_from_bundle(rec_bundle) -> list[dict]:
+    """Flatten RecommendationEngine.export()'s dict-shaped bundle into timeline rows.
+
+    ``export()`` serializes via ``RecommendationBundle.to_dict()``, so each
+    recommendation is a plain dict — access by key, never by attribute.
+    """
+    if not rec_bundle:
+        return []
+    return [
+        {
+            "id": r.get("id", ""),
+            "title": r.get("title", ""),
+            "category": r.get("category", ""),
+            "priority": r.get("priority", ""),
+        }
+        for r in rec_bundle.get("bundle", {}).get("recommendations", [])
+        if isinstance(r, dict)
+    ]
+
+
 class _SessionVideoRecorder:
     """Best-effort MP4 sidecar recorder for the raw camera feed."""
 
@@ -487,10 +507,7 @@ class LiveMonitoringService:
             recs_from_engine = []
             try:
                 rec_bundle = self.recommendation_engine.export() if hasattr(self.recommendation_engine, 'export') else {}
-                recs_from_engine = [
-                    {"id": r.id, "title": r.title, "category": r.category, "priority": r.priority}
-                    for r in rec_bundle.get("bundle", {}).get("recommendations", [])
-                ] if rec_bundle else []
+                recs_from_engine = export_recommendations_from_bundle(rec_bundle)
             except Exception as exc:
                 logger.error("Failed to export recommendations for %s: %s", self.state.session_id, exc, exc_info=True)
 
