@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Navigate, Outlet, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router';
 import Sidebar from './Sidebar';
 import { Header } from '@/src/components/layout/Header';
 import { useDashboard } from '@/src/hooks/useDashboard';

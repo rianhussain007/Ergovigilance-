@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import Layout from './components/Layout';
 import LiveMonitoring from './pages/LiveMonitoring';
 import AnalyticsPage from './pages/AnalyticsPage';

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { Search, ArrowUpDown, AlertTriangle, CheckCircle, XCircle, Clock, ExternalLink, ChevronDown } from 'lucide-react';
 import type { StatusType, SessionDetail, SessionAlertEntry, SessionRecord } from '@/src/types/api';
 import { useDemo } from '@/src/demo/DemoProvider';

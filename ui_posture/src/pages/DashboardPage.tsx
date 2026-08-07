@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { ElementType, ReactNode } from 'react';
-import { useNavigate, useOutletContext } from 'react-router-dom';
+import { useNavigate, useOutletContext } from 'react-router';
 import {
   Activity,
   AlertTriangle,

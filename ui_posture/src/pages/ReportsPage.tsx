@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { FileText, Download, Search, Clock, Shield, TrendingUp, FileSpreadsheet, FileJson, ArrowLeft, AlertTriangle, CheckCircle, ChevronUp, Minus, ChevronDown, Loader2 } from 'lucide-react';
 import { useToast } from '@/src/hooks/useToast';
 import { EmptyState, SectionHeader, LoadingCard } from '@/src/components/common';

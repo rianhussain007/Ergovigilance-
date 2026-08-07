@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink } from 'react-router';
 import { LayoutDashboard, Radio, BarChart3, FileText, History, Settings, ChevronLeft, ChevronRight, Activity, Building2, Camera, ScrollText, Server, Clapperboard, Users, ClipboardList } from 'lucide-react';
 import { motion } from 'motion/react';
 

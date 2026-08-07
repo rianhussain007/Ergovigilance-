@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { apiFetch } from '@/src/services/apiClient';
 import { useAuth } from '@/src/auth/AuthContext';
-import { Navigate } from 'react-router-dom';
+import { Navigate } from 'react-router';
 
 interface PilotRequest {
   id: number;

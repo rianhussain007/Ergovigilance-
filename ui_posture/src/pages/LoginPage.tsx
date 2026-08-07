@@ -1,5 +1,5 @@
 import { FormEvent, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router';
 import { Activity, Lock } from 'lucide-react';
 import { useAuth } from '@/src/auth/AuthContext';
 

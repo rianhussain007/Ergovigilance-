@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Camera, AlertTriangle, FileText, Users, Activity, ChevronRight, ArrowUpRight, Brain } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link } from 'react-router';
 
 const useIntersectionObserver = (options = { threshold: 0.1 }) => {
   const ref = useRef<HTMLDivElement>(null);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams } from 'react-router';
 import { AlertTriangle, Sparkles } from 'lucide-react';
 import { getRecordingSummary, getRecordingTimeline, getRecordingVideoUrl } from '@/src/services/dashboardService';
 import type { RecordingSummary, TimelineEntry } from '@/src/types/api';
