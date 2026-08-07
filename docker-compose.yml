@@ -11,6 +11,10 @@ services:
     environment:
       - DEBUG=true
       - USE_MOCK_REPOSITORY=true
+      # Set a strong secret for production: DEBUG=false + missing/known secret = refused to start
+      - AUTH_JWT_SECRET=${AUTH_JWT_SECRET:-dev-local-ergo-vigilance-secret-change-me}
+      # True because the nginx frontend is the trusted proxy; do not expose :8000 publicly
+      - TRUST_PROXY_HEADERS=true
       - CORS_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost
       - LOG_LEVEL=INFO
       - AUTH_DB_PATH=/data/local_auth.db

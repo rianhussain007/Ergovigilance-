@@ -8,6 +8,7 @@ import hmac
 import json
 import os
 import time
+import warnings
 from dataclasses import dataclass
 from typing import Any
 
@@ -16,10 +17,51 @@ try:
 except ImportError as exc:  # pragma: no cover - startup configuration error
     raise RuntimeError("bcrypt is required for local authentication. Install backend_api requirements.") from exc
 
+from app.core.config import settings
 
-JWT_SECRET = os.getenv("AUTH_JWT_SECRET", "dev-local-ergo-vigilance-secret-change-me")
+
+_DEV_JWT_SECRET = "dev-local-ergo-vigilance-secret-change-me"
+
+
+def _resolve_jwt_secret() -> str:
+    """Resolve the JWT signing secret, failing fast in production.
+
+    Outside debug mode the secret must be explicitly provided and must not be
+    the well-known development default — otherwise tokens would be forgeable.
+    """
+    secret = os.getenv("AUTH_JWT_SECRET", "").strip()
+    if secret:
+        if not settings.DEBUG and len(secret) < 32:
+            raise RuntimeError(
+                "AUTH_JWT_SECRET is too short. Use at least 32 characters when DEBUG=false. "
+                "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+            )
+        if secret == _DEV_JWT_SECRET and not settings.DEBUG:
+            raise RuntimeError(
+                "AUTH_JWT_SECRET is set to the known development default. "
+                "Provide a strong, unique secret when DEBUG=false."
+            )
+        return secret
+    if not settings.DEBUG:
+        raise RuntimeError(
+            "AUTH_JWT_SECRET must be set when DEBUG=false (production). "
+            "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(48))\""
+        )
+    warnings.warn(
+        "Using the development-default AUTH_JWT_SECRET. Set a strong AUTH_JWT_SECRET "
+        "for any non-local deployment.",
+        stacklevel=2,
+    )
+    return _DEV_JWT_SECRET
+
+
+JWT_SECRET = _resolve_jwt_secret()
 JWT_ALGORITHM = "HS256"
 JWT_TTL_SECONDS = int(os.getenv("AUTH_JWT_TTL_SECONDS", "28800"))
+
+# Fixed dummy hash compared against when the account does not exist, so that
+# unknown emails take the same bcrypt time as known ones (anti-enumeration).
+DUMMY_PASSWORD_HASH = bcrypt.hashpw(b"ergo-vigilance-dummy-password", bcrypt.gensalt()).decode("utf-8")
 
 
 @dataclass(frozen=True)

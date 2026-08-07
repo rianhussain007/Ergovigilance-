@@ -17,6 +17,11 @@ class Settings:
     USE_MOCK_REPOSITORY: bool = (
         os.getenv("USE_MOCK_REPOSITORY", "false").lower() == "true"
     )
+    # When true, client IPs are read from the X-Forwarded-For header (only set
+    # this when the API sits behind a trusted reverse proxy that overwrites it).
+    TRUST_PROXY_HEADERS: bool = (
+        os.getenv("TRUST_PROXY_HEADERS", "false").lower() == "true"
+    )
     MOCK_DATA_DIR: str = os.getenv(
         "MOCK_DATA_DIR", "app/utils/mock_data"
     )

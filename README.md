@@ -138,8 +138,9 @@ Visit **http://localhost:3000** and log in with one of the seeded accounts below
 | `USE_MOCK_REPOSITORY` | `false` | `true` = serve mock data (no camera), `false` = live pipeline |
 | `MOCK_DATA_DIR` | `app/utils/mock_data` | Mock JSON source |
 | `AUTH_DB_PATH` | `backend_api/local_auth.db` | SQLite path (Docker: `/data/local_auth.db`) |
-| `AUTH_JWT_SECRET` | dev default | **Change in any real deployment** |
+| `AUTH_JWT_SECRET` | dev default | **Required when `DEBUG=false`** — the server refuses to start without a strong secret (and rejects the known dev default). Generate: `python -c "import secrets; print(secrets.token_urlsafe(48))"` |
 | `AUTH_JWT_TTL_SECONDS` | `28800` (8 h) | JWT expiry |
+| `TRUST_PROXY_HEADERS` | `false` | Set `true` only behind a trusted proxy (e.g. the nginx frontend) so `X-Forwarded-For` is honored for rate limiting; otherwise the socket IP is used to prevent header spoofing |
 | `LOG_LEVEL` | `INFO` | Logging level |
 | `POSE_MODEL_PATH` | `models/pose_landmarker_lite.task` | MediaPipe pose model |
 | `SESSIONS_DIR` | `outputs/sessions` | Where recorded sessions are stored |
@@ -170,7 +171,9 @@ Demo workers seeded: `worker-001 / Asha Patel / Assembly / Day` and `worker-002 
 - Send it as `Authorization: Bearer <token>` on all subsequent requests.
 - Permissions (operator / supervisor / safety_mgr / admin) are enforced server-side; unauthorized calls return 403.
 - Passwords are bcrypt-hashed; the plaintext list is written only to `backend_api/SEED_CREDENTIALS.local.txt`, which is **gitignored — never commit it**.
-- Set `AUTH_JWT_SECRET` to a strong value in any deployment that isn't a local demo.
+- **Brute-force protection is built in**: 5 failed attempts per account or 10 per IP within 15 minutes locks that account/IP for 15 minutes (HTTP 429 with `Retry-After`). Trade-off: anyone can deliberately lock a known email for 15 minutes — monitor `login_locked` audit events and consider CAPTCHA in high-risk deployments.
+- Set `AUTH_JWT_SECRET` to a strong value in any deployment that isn't a local demo — the server **refuses to start** without it when `DEBUG=false`.
+- In live mode (`USE_MOCK_REPOSITORY=false`) the API **fails closed**: if the monitoring service is unavailable, requests return HTTP 503 rather than silently serving mock data.
 
 ---
 

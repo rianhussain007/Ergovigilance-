@@ -132,6 +132,19 @@ def init_local_database() -> None:
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS login_attempts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL,
+                ip TEXT NOT NULL DEFAULT '',
+                success INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_login_attempts_email ON login_attempts(email)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_login_attempts_ip ON login_attempts(ip)")
         _seed_users(conn, SEED_USERS)
         _seed_workers(conn, SEED_WORKERS)
         conn.commit()
@@ -253,6 +266,75 @@ def _write_local_credentials_file() -> None:
         "",
     ]
     CREDENTIALS_PATH.write_text("\n".join(lines), encoding="utf-8")
+
+
+LOGIN_ATTEMPTS_RETENTION_SECONDS = 24 * 60 * 60
+
+
+def record_login_attempt(email: str, ip: str, success: bool) -> None:
+    """Record a login attempt for brute-force / lockout tracking.
+
+    Old rows are pruned opportunistically so the table stays bounded.
+    """
+    now = datetime.now(timezone.utc).isoformat()
+    cutoff = datetime.fromtimestamp(
+        datetime.now(timezone.utc).timestamp() - LOGIN_ATTEMPTS_RETENTION_SECONDS, tz=timezone.utc
+    ).isoformat()
+    with get_connection() as conn:
+        conn.execute(
+            "DELETE FROM login_attempts WHERE created_at < ?",
+            (cutoff,),
+        )
+        conn.execute(
+            "INSERT INTO login_attempts (email, ip, success, created_at) VALUES (?, ?, ?, ?)",
+            (email, ip, 1 if success else 0, now),
+        )
+        conn.commit()
+
+
+def count_recent_login_failures(
+    email: str | None = None,
+    ip: str | None = None,
+    window_seconds: int = 900,
+) -> int:
+    """Count failed login attempts within a rolling window, filtered by email and/or IP."""
+    cutoff = datetime.fromtimestamp(
+        datetime.now(timezone.utc).timestamp() - window_seconds, tz=timezone.utc
+    ).isoformat()
+    conditions = ["success = 0", "created_at >= ?"]
+    params: list[str] = [cutoff]
+    if email:
+        conditions.append("lower(email) = lower(?)")
+        params.append(email)
+    if ip:
+        conditions.append("ip = ?")
+        params.append(ip)
+    with get_connection() as conn:
+        row = conn.execute(
+            f"SELECT COUNT(*) AS cnt FROM login_attempts WHERE {' AND '.join(conditions)}",
+            params,
+        ).fetchone()
+        return int(row["cnt"])
+
+
+def clear_login_failures(email: str | None = None, ip: str | None = None) -> None:
+    """Delete recorded login failures for the given email and/or IP."""
+    conditions: list[str] = []
+    params: list[str] = []
+    if email:
+        conditions.append("lower(email) = lower(?)")
+        params.append(email)
+    if ip:
+        conditions.append("ip = ?")
+        params.append(ip)
+    if not conditions:
+        return
+    with get_connection() as conn:
+        conn.execute(
+            f"DELETE FROM login_attempts WHERE success = 0 AND {' AND '.join(conditions)}",
+            params,
+        )
+        conn.commit()
 
 
 def get_user_by_email(email: str) -> sqlite3.Row | None:
