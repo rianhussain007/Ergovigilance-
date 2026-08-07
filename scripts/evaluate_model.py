@@ -8,7 +8,7 @@ import joblib
 from PIL import Image, ImageDraw, ImageFont
 import pandas as pd
 from sklearn.inspection import permutation_importance
-from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.model_selection import train_test_split
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +16,19 @@ sys.path.insert(0, str(ROOT))
 
 from backend.services.features import FEATURE_COLUMNS, RISK_LEVELS
 
+# Same feature-exclusion policy as scripts/train_svm.py and
+# scripts/train_risk_calibration.py (features always NaN on COCO-derived data).
+_ALWAYS_NA_ON_COCO = {"wrist_deviation_angle", "hand_reach_ratio", "finger_spread_ratio", "stance_width_ratio"}
+_TRAIN_FEATURES = [c for c in FEATURE_COLUMNS if c not in _ALWAYS_NA_ON_COCO]
+
+
+def reba_score_to_band(score: float) -> str:
+    """REBA Score C -> LOW/MEDIUM/HIGH (scores 2-3 LOW, 4-7 MEDIUM, 8+ HIGH)."""
+    if score <= 3:
+        return "LOW"
+    if score <= 7:
+        return "MEDIUM"
+    return "HIGH"
 
 def make_model_compatible(model) -> None:
     """if not hasattr(model, "monotonic_cst"):
@@ -26,10 +39,19 @@ def make_model_compatible(model) -> None:
     pass
 
 
+def _derive_labels(df: pd.DataFrame) -> pd.Series:
+    """Derive the LOW/MEDIUM/HIGH target — REBA datasets have no 'label' col."""
+    if "reba_score" in df.columns and "label" not in df.columns:
+        return df["reba_score"].map(reba_score_to_band)
+    return df["label"].str.upper()
+
+
 def evaluate(dataset_path: Path, model_path: Path, output_path: Path) -> dict:
-    df = pd.read_csv(dataset_path).dropna(subset=FEATURE_COLUMNS + ["label"])
-    X = df[FEATURE_COLUMNS]
-    y = df["label"].str.upper()
+    df = pd.read_csv(dataset_path)
+    label_col = "reba_score" if ("reba_score" in df.columns and "label" not in df.columns) else "label"
+    df = df.dropna(subset=_TRAIN_FEATURES + [label_col])
+    X = df[_TRAIN_FEATURES]
+    y = _derive_labels(df)
     stratify = y if y.value_counts().min() >= 2 else None
     _, X_test, _, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=stratify)
 
@@ -40,14 +62,14 @@ def evaluate(dataset_path: Path, model_path: Path, output_path: Path) -> dict:
 
     labels = [label for label in RISK_LEVELS if label in set(y)]
     y_pred = model.predict(X_test)
-    accuracy = float((y_pred == y_test).mean())
+    accuracy = float(accuracy_score(y_test, y_pred))
     cm = confusion_matrix(y_test, y_pred, labels=labels)
     report = classification_report(y_test, y_pred, labels=labels, output_dict=True, zero_division=0)
 
     importance = permutation_importance(model, X_test, y_test, n_repeats=8, random_state=42, scoring="accuracy")
     importance_df = pd.DataFrame(
         {
-            "feature": FEATURE_COLUMNS,
+            "feature": _TRAIN_FEATURES,
             "importance_mean": importance.importances_mean,
             "importance_std": importance.importances_std,
         }
@@ -141,7 +163,7 @@ def evaluate(dataset_path: Path, model_path: Path, output_path: Path) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dataset", type=Path, default=ROOT / "data" / "processed" / "dataset_final.csv")
+    parser.add_argument("--dataset", type=Path, default=ROOT / "data" / "processed" / "reba_features.csv")
     parser.add_argument("--model", type=Path, default=ROOT / "models" / "best_model.pkl")
     parser.add_argument("--output", type=Path, default=ROOT / "results" / "model_evaluation.png")
     args = parser.parse_args()
