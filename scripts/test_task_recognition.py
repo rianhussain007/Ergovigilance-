@@ -98,16 +98,18 @@ check("assembly confidence > 50", r["confidence"] > 50.0, True)
 
 
 # ---------------------------------------------------------------------------
-# 3.  Reaching (wrists forward/closer to camera, trunk lean)
+# 3.  Reaching (arms extended outward from the body, slight trunk lean)
 # ---------------------------------------------------------------------------
 kps = _make_kps(
     nose=(0.5, 0.28, 0.0),
     lsh=(0.42, 0.36, 0.0), rsh=(0.58, 0.36, 0.0),
-    lel=(0.44, 0.34, -0.05), rel=(0.56, 0.34, -0.05),
-    lwr=(0.46, 0.32, -0.10), rwr=(0.54, 0.32, -0.10),
+    lel=(0.40, 0.40, -0.05), rel=(0.60, 0.40, -0.05),
+    lwr=(0.30, 0.52, -0.10), rwr=(0.70, 0.52, -0.10),
     lhip=(0.46, 0.62, 0.0), rhip=(0.54, 0.62, 0.0),
 )
 feats = _make_features(neck=8.0, trunk=15.0)
+# Reaching is scored partly on arm motion — the scorer reads this velocity.
+feats["wrist_movement_velocity"] = 150.0
 t = TaskRecognition()
 r = t.detect_task(kps, feats)
 check("reaching task", r["task"], "Reaching")

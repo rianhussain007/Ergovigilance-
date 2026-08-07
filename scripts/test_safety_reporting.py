@@ -1,52 +1,53 @@
+"""Safety report tests — against backend.services.safety_report.analyze_safety.
+
+The archived ``SafetyReport`` markdown-report class was removed; the current
+module aggregates safety-alert data across sessions into structured JSON.
+This suite covers totals, severity/trigger-rule breakdowns, alert density,
+top sessions, most-frequent issues, and coverage statements.
+"""
+
 from __future__ import annotations
 
-import json
 import sys
-import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from backend.services.safety_reporting import (
-    SafetyReport,
-    _assess_safety,
-    _format_duration,
-    _recommendation_for,
-    _sanitize_text,
-)
+from backend.services.safety_report import SEVERITY_ORDER, analyze_safety
+
+
+def make_alert(severity: str = "HIGH", rule: str = "critical_risk"):
+    return {
+        "id": f"A-{severity}-{rule}",
+        "severity": severity,
+        "trigger_rule": rule,
+        "title": f"{severity} alert",
+        "message": "test alert",
+        "state": "ACTIVE",
+    }
 
 
 def make_session(
-    total_frames=100,
-    duration=3665.0,
-    low_pct=60.0,
-    med_pct=30.0,
-    high_pct=10.0,
-    most_frequent="Shoulder Imbalance",
-    mf_count=40,
+    timestamp="20260710_000000",
+    duration=3600.0,
+    issue="Neck Flexion",
     highest_risk="HIGH",
-    risk_ts="14:30:00",
-    avg_neck=12.3,
-    avg_trunk=18.7,
-    avg_shoulder=4.2,
-    avg_knee=155.0,
-    timestamp="20260622_143005",
+    alerts=None,
 ):
-    return {
+    session = {
         "session_timestamp": timestamp,
         "session_duration_seconds": duration,
-        "total_frames": total_frames,
-        "risk_percentages": {"LOW": low_pct, "MEDIUM": med_pct, "HIGH": high_pct},
-        "most_frequent_issue": most_frequent,
-        "most_frequent_issue_count": mf_count,
+        "total_frames": 100,
+        "risk_percentages": {"LOW": 60.0, "MEDIUM": 30.0, "HIGH": 10.0},
+        "most_frequent_issue": issue,
+        "most_frequent_issue_count": 30,
         "highest_risk_level": highest_risk,
-        "highest_risk_timestamp": risk_ts,
-        "avg_neck_flexion": avg_neck,
-        "avg_trunk_flexion": avg_trunk,
-        "avg_shoulder_symmetry": avg_shoulder,
-        "avg_knee_angle": avg_knee,
+        "highest_risk_timestamp": "14:00:00",
     }
+    if alerts is not None:
+        session["alerts"] = alerts
+    return session
 
 
 results: list[str] = []
@@ -61,190 +62,100 @@ def check(label, got, expected):
         raise SystemExit(1)
 
 
-def contains(text, substring):
-    return substring in text
+# ---------------------------------------------------------------------------
+# 1.  No alert data
+# ---------------------------------------------------------------------------
+r = analyze_safety([make_session(alerts=None)])
+check("no alerts: total with alerts", r["total_sessions_with_alerts"], 0)
+check("no alerts: status", r["status"], "No alert data available")
+check("no alerts: coverage mentions tracking start", "2026-07-06" in r["coverage_statement"], True)
 
 
 # ---------------------------------------------------------------------------
-# 1.  Generate report with all fields
+# 2.  Aggregation across alert-bearing sessions
 # ---------------------------------------------------------------------------
-s = make_session()
-report = SafetyReport(s)
-md = report.generate()
-
-check("report contains A. Session Information", contains(md, "A. Session Information"), True)
-check("report contains B. Risk Summary", contains(md, "B. Risk Summary"), True)
-check("report contains C. Issue Analysis", contains(md, "C. Issue Analysis"), True)
-check("report contains D. Ergonomic Metrics", contains(md, "D. Ergonomic Metrics"), True)
-check("report contains E. Safety Assessment", contains(md, "E. Safety Assessment"), True)
-check("report contains F. Recommendations", contains(md, "F. Recommendations"), True)
-check("date rendered", contains(md, "2026-06-22 14:30:05"), True)
-check("duration rendered", contains(md, "1h 1m 5s"), True)
-check("risk percentages rendered", contains(md, "**LOW Risk:** 60.0%"), True)
-check("contains MEDIUM", contains(md, "**MEDIUM Risk:** 30.0%"), True)
-check("contains HIGH", contains(md, "**HIGH Risk:** 10.0%"), True)
-check("most frequent issue", contains(md, "Shoulder Imbalance"), True)
-check("highest risk level", contains(md, "HIGH"), True)
-check("risk timestamp", contains(md, "14:30:00"), True)
-check("avg neck", contains(md, "12.3 deg"), True)
-check("avg trunk", contains(md, "18.7 deg"), True)
-check("avg shoulder", contains(md, "4.2 %"), True)
-check("avg knee", contains(md, "155.0 deg"), True)
-check("worker recommendation", contains(md, "**Worker:**"), True)
-check("supervisor recommendation", contains(md, "**Supervisor:**"), True)
-
-# --- Executive Summary ---
-check("exec summary section header", contains(md, "## Executive Summary"), True)
-check("exec summary before section A",
-      md.index("## Executive Summary") < md.index("## A. Session Information"), True)
-check("exec summary mentions assessment", contains(md, "Moderate Risk"), True)
-check("exec summary mentions risk %", contains(md, "60.0%"), True)
-check("exec summary mentions issue", contains(md, "Shoulder Imbalance"), True)
-
-# Sentence counts per assessment level
-for label, cfg, expected_text in [
-    ("Excellent summary", make_session(high_pct=0.0, med_pct=0.0), "was excellent"),
-    ("Good summary", make_session(high_pct=5.0, med_pct=10.0), "was good"),
-    ("Moderate Risk summary", make_session(high_pct=10.0, med_pct=10.0), "was acceptable"),
-    ("High Risk summary", make_session(high_pct=20.0, med_pct=0.0), "Immediate ergonomic"),
-]:
-    summary_md = SafetyReport(cfg).generate()
-    check(f"{label} text match", contains(summary_md, expected_text), True)
-    summary_section = summary_md.split("## Executive Summary")[1].split("## A.")[0]
-    flat = summary_section.replace("\n", " ")
-    sentence_count = len([s for s in flat.split(". ") if s.strip()])
-    check(f"{label} sentence count ({sentence_count})",
-          3 <= sentence_count <= 5, True)
-
-# Executive summary without most frequent issue
-no_issue = SafetyReport(make_session(most_frequent=None))
-no_issue_md = no_issue.generate()
-summary_no_issue = no_issue_md.split("## Executive Summary")[1].split("## A.")[0]
-check("no-issue summary omits issue line", contains(summary_no_issue, "most frequently observed"), False)
+s1 = make_session(
+    timestamp="20260710_000000",
+    alerts=[make_alert("HIGH", "critical_risk"), make_alert("MEDIUM", "neck_flexion")],
+)
+s2 = make_session(
+    timestamp="20260711_000000",
+    alerts=[make_alert("CRITICAL", "critical_risk")],
+)
+s3 = make_session(timestamp="20260712_000000", alerts=None)  # excluded
+r = analyze_safety([s1, s2, s3])
+check("total sessions with alerts", r["total_sessions_with_alerts"], 2)
+check("total all sessions", r["total_all_sessions"], 3)
+check("total alerts", r["total_alerts"], 3)
+check("high severity total", r["high_severity_total"], 2)  # CRITICAL + HIGH
+check("medium severity total", r["medium_severity_total"], 1)
+check("low severity total", r["low_severity_total"], 0)
+check("severity breakdown HIGH", r["severity_breakdown"].get("HIGH"), 1)
+check("severity breakdown CRITICAL", r["severity_breakdown"].get("CRITICAL"), 1)
+check("severity breakdown MEDIUM", r["severity_breakdown"].get("MEDIUM"), 1)
+check("earliest session", r["earliest_session"], "20260710_000000")
+check("latest session", r["latest_session"], "20260711_000000")
 
 
 # ---------------------------------------------------------------------------
-# 2.  Safety assessment levels
+# 3.  Trigger rule breakdown with percentages
 # ---------------------------------------------------------------------------
-check("Excellent: high=0 med=0",
-      _assess_safety(make_session(high_pct=0.0, med_pct=0.0)),
-      "Excellent")
-check("Excellent: high=0 med=5",
-      _assess_safety(make_session(high_pct=0.0, med_pct=5.0)),
-      "Excellent")
-check("Good: high=5 med=10",
-      _assess_safety(make_session(high_pct=5.0, med_pct=10.0)),
-      "Good")
-check("Moderate: high=10 med=10",
-      _assess_safety(make_session(high_pct=10.0, med_pct=10.0)),
-      "Moderate Risk")
-check("Moderate: high=5 med=30",
-      _assess_safety(make_session(high_pct=5.0, med_pct=30.0)),
-      "Moderate Risk")
-check("High Risk: high=20 med=0",
-      _assess_safety(make_session(high_pct=20.0, med_pct=0.0)),
-      "High Risk")
-check("High Risk: high=0 med=50",
-      _assess_safety(make_session(high_pct=0.0, med_pct=50.0)),
-      "High Risk")
-check("High Risk: high=25 med=25",
-      _assess_safety(make_session(high_pct=25.0, med_pct=25.0)),
-      "High Risk")
+rules = {item["rule"]: item["count"] for item in r["trigger_rule_breakdown"]}
+check("critical_risk count", rules.get("critical_risk"), 2)
+check("neck_flexion count", rules.get("neck_flexion"), 1)
+pct_by_rule = {item["rule"]: item["pct"] for item in r["trigger_rule_breakdown"]}
+check("critical_risk pct", pct_by_rule.get("critical_risk"), 66.7)
+check("neck_flexion pct", pct_by_rule.get("neck_flexion"), 33.3)
 
 
 # ---------------------------------------------------------------------------
-# 3.  Duration formatting
+# 4.  Alert density
 # ---------------------------------------------------------------------------
-check("0 seconds", _format_duration(0), "0m 0s")
-check("30 seconds", _format_duration(30), "0m 30s")
-check("1 minute", _format_duration(60), "1m 0s")
-check("90 seconds", _format_duration(90), "1m 30s")
-check("1 hour", _format_duration(3600), "1h 0m 0s")
-check("1h 5m 30s", _format_duration(3930), "1h 5m 30s")
-
-
-# ---------------------------------------------------------------------------
-# 4.  Recommendation lookup
-# ---------------------------------------------------------------------------
-check("Neck Flexion recommendation",
-      _recommendation_for("Excessive Neck Flexion") is not None, True)
-check("Shoulder Imbalance recommendation",
-      _recommendation_for("Shoulder Imbalance") is not None, True)
-check("Unknown issue returns None",
-      _recommendation_for("Unknown Issue"), None)
-check("None issue returns None",
-      _recommendation_for(None), None)
+density = r["alert_density"]
+check("avg per session", density["avg_per_session"], 1.5)
+check("min per session", density["min_alerts_per_session"], 1)
+check("max per session", density["max_alerts_per_session"], 2)
+check("total monitored hours", density["total_monitored_hours"], 2.0)
+check("avg session duration", density["avg_session_duration_seconds"], 3600)
 
 
 # ---------------------------------------------------------------------------
-# 5.  No most frequent issue
+# 5.  Top sessions sorted by alert count (desc)
 # ---------------------------------------------------------------------------
-s_no_issue = make_session(most_frequent=None)
-md2 = SafetyReport(s_no_issue).generate()
-check("no issue renders None detected", contains(md2, "None detected"), True)
-check("no issue has no recommendation", contains(md2, "No specific recommendations available."), True)
-
-
-# ---------------------------------------------------------------------------
-# 6.  Save to file
-# ---------------------------------------------------------------------------
-with tempfile.TemporaryDirectory() as tmp:
-    out = Path(tmp) / "reports" / "session_report.md"
-    r = SafetyReport(make_session())
-    saved = r.save(out)
-    check("save returns correct path", saved, str(out))
-    check("file exists", out.exists(), True)
-    content = out.read_text()
-    check("saved file contains header", contains(content, "# Session Safety Report"), True)
-    check("saved file contains assessment", contains(content, "Moderate Risk"), True)
+top = r["top_sessions_by_alerts"]
+check("top session first", top[0]["session_timestamp"], "20260710_000000")
+check("top session alert count", top[0]["alert_count"], 2)
+check("top session second", top[1]["session_timestamp"], "20260711_000000")
 
 
 # ---------------------------------------------------------------------------
-# 7.  Load from JSON
+# 6.  Most frequent issues among alert sessions
 # ---------------------------------------------------------------------------
-with tempfile.TemporaryDirectory() as tmp:
-    json_path = Path(tmp) / "test_session.json"
-    sd = make_session()
-    with open(json_path, "w") as f:
-        json.dump(sd, f)
-    r = SafetyReport.from_json(json_path)
-    md3 = r.generate()
-    check("from_json works", contains(md3, "60.0%"), True)
+r = analyze_safety([
+    make_session(timestamp="20260710_000000", issue="Neck Flexion", alerts=[make_alert()]),
+    make_session(timestamp="20260711_000000", issue="Neck Flexion", alerts=[make_alert()]),
+    make_session(timestamp="20260712_000000", issue="Shoulder Imbalance", alerts=[make_alert()]),
+])
+issues = {item["issue"]: item["count"] for item in r["most_frequent_issues"]}
+check("most frequent issue", issues.get("Neck Flexion"), 2)
+check("second issue", issues.get("Shoulder Imbalance"), 1)
 
 
 # ---------------------------------------------------------------------------
-# 8.  Unicode sanitization
+# 7.  Coverage statement excludes sessions without alert data
 # ---------------------------------------------------------------------------
-check("sanitize em dash", _sanitize_text("word\u2014word"), "word - word")
-check("sanitize en dash", _sanitize_text("a\u2013b"), "a-b")
-check("sanitize curly double quotes", _sanitize_text("\u201chello\u201d"), '"hello"')
-check("sanitize curly single quotes", _sanitize_text("\u2018hi\u2019"), "'hi'")
-check("sanitize bullet", _sanitize_text("\u2022 item"), "* item")
-check("sanitize ellipsis", _sanitize_text("wait\u2026"), "wait...")
-check("sanitize plain ASCII unchanged", _sanitize_text("hello world"), "hello world")
-check("sanitize numbers unchanged", _sanitize_text("12.3 deg"), "12.3 deg")
+r = analyze_safety([make_session(timestamp="20260710_000000", alerts=[make_alert()]),
+                    make_session(timestamp="20260711_000000", alerts=None)])
+check("coverage mentions excluded count", "1 session(s) without alert data" in r["coverage_statement"], True)
+check("coverage n", "Based on 1 sessions with alert tracking" in r["coverage_statement"], True)
 
-# Verify full report is ASCII-safe (no char > 127)
-s = make_session()
-md4 = SafetyReport(s).generate()
-non_ascii = [c for c in md4 if ord(c) > 127]
-check("full report ASCII-safe", len(non_ascii), 0)
 
-# Create a session with recommendations containing em dashes
-from backend.services.recommendation_engine import _RECOMMENDATIONS
-neck_rec = _RECOMMENDATIONS.get("Excessive Neck Flexion", {})
-worker_action = neck_rec.get("worker_actions", [""])[0]
-supervisor_action = neck_rec.get("supervisor_actions", [""])[0]
-check("recommendation worker em dash sanitized", "\u2014" not in _sanitize_text(worker_action), True)
-check("recommendation supervisor em dash sanitized", "\u2014" not in _sanitize_text(supervisor_action), True)
-
-# Verify actual report output from real recommendations
-neck_session = make_session(most_frequent="Excessive Neck Flexion")
-neck_report = SafetyReport(neck_session).generate()
-check("real report worker line ASCII-safe",
-      "\u2014" not in neck_report, True)
-check("real report contains hyphen instead",
-      "- " in neck_report, True)
+# ---------------------------------------------------------------------------
+# 8.  SEVERITY_ORDER sanity
+# ---------------------------------------------------------------------------
+check("CRITICAL ranked 0", SEVERITY_ORDER["CRITICAL"], 0)
+check("HIGH ranked 1", SEVERITY_ORDER["HIGH"], 1)
+check("LOW ranked 4", SEVERITY_ORDER["LOW"], 4)
 
 
 # ---------------------------------------------------------------------------

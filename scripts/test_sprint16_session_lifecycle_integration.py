@@ -6,14 +6,27 @@ Validates:
   - Error handling
   - Session start/stop API calls
 """
-import subprocess, sys, time, json
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
 
 RESULTS = []
+
 
 def record(name, passed, detail=""):
     RESULTS.append({"test": name, "passed": passed, "detail": detail})
     mark = "PASS" if passed else "FAIL"
     print(f"  [{mark}] {name}" + (f" — {detail}" if detail else ""))
+
+
+def read(rel: str) -> str | None:
+    """Read a repo-relative file, returning None when missing."""
+    path = ROOT / rel
+    if not path.exists():
+        return None
+    return path.read_text(encoding="utf-8")
+
 
 def run_tests():
     print("=" * 70)
@@ -25,25 +38,13 @@ def run_tests():
     # ------------------------------------------------------------------
     print("\n[1] useSessionLifecycle hook")
 
-    try:
-        r = subprocess.run(
-            ["python", "-c", "import ast, sys; ast.parse(open(sys.argv[1]).read()); print('OK')",
-             r"C:\GGS_intership\posture_analysis\ui_posture\src\hooks\useSessionLifecycle.ts"],
-            capture_output=True, text=True, timeout=10
-        )
-        # TypeScript needs tsc, but syntax check via ast won't work for TS
-        # Just check file exists and has expected exports
-    except Exception:
-        pass
-
-    # Check file exists and has expected content
-    try:
-        with open(r"C:\GGS_intership\posture_analysis\ui_posture\src\hooks\useSessionLifecycle.ts", "r") as f:
-            content = f.read()
-
+    content = read("ui_posture/src/hooks/useSessionLifecycle.ts")
+    if content is None:
+        record("useSessionLifecycle.ts file exists", False, "File not found")
+    else:
         checks = [
             ("useSessionLifecycle function exported", "export function useSessionLifecycle" in content or "export default function useSessionLifecycle" in content),
-            ("SessionStatus type defined", "SessionStatus" in content and ("idle" in content) and ("starting" in content) and ("monitoring" in content) and ("stopping" in content)),
+            ("SessionStatus type defined", "SessionStatus" in content and all(s in content for s in ("idle", "starting", "monitoring", "stopping"))),
             ("startSession function defined", "startSession" in content),
             ("stopSession function defined", "stopSession" in content),
             ("POST /api/session/start call", "/api/session/start" in content),
@@ -53,22 +54,18 @@ def run_tests():
             ("Mounted ref for cleanup", "mountedRef" in content),
             ("Status polling implemented", "setInterval" in content or "pollStatus" in content),
         ]
-
         for name, result in checks:
             record(name, result)
-
-    except FileNotFoundError:
-        record("useSessionLifecycle.ts file exists", False, "File not found")
 
     # ------------------------------------------------------------------
     # 2. DemoControls integration
     # ------------------------------------------------------------------
     print("\n[2] DemoControls integration")
 
-    try:
-        with open(r"C:\GGS_intership\posture_analysis\ui_posture\src\components\demo\DemoControls.tsx", "r") as f:
-            content = f.read()
-
+    content = read("ui_posture/src/components/demo/DemoControls.tsx")
+    if content is None:
+        record("DemoControls.tsx file exists", False, "File not found")
+    else:
         checks = [
             ("Imports useSessionLifecycle", "useSessionLifecycle" in content),
             ("Uses session status for button state", "status" in content and ("idle" in content or "monitoring" in content)),
@@ -83,22 +80,18 @@ def run_tests():
             ("Live indicator shown when monitoring", "Live" in content),
             ("Demo button preserved for mock mode", "Demo" in content),
         ]
-
         for name, result in checks:
             record(name, result)
-
-    except FileNotFoundError:
-        record("DemoControls.tsx file exists", False, "File not found")
 
     # ------------------------------------------------------------------
     # 3. Backend session lifecycle endpoints exist
     # ------------------------------------------------------------------
     print("\n[3] Backend session lifecycle endpoints")
 
-    try:
-        with open(r"C:\GGS_intership\posture_analysis\backend_api\app\api\session_lifecycle.py", "r") as f:
-            content = f.read()
-
+    content = read("backend_api/app/api/session_lifecycle.py")
+    if content is None:
+        record("session_lifecycle.py file exists", False, "File not found")
+    else:
         checks = [
             ("POST /api/session/start endpoint", "@router.post" in content and "start" in content.lower()),
             ("POST /api/session/stop endpoint", "stop" in content.lower()),
@@ -106,77 +99,61 @@ def run_tests():
             ("Camera index parameter", "camera_index" in content),
             ("Error response for camera unavailable", "camera" in content.lower() and ("not found" in content.lower() or "unavailable" in content.lower() or "error" in content.lower() or "detail" in content)),
         ]
-
         for name, result in checks:
             record(name, result)
-
-    except FileNotFoundError:
-        record("session_lifecycle.py file exists", False, "File not found")
 
     # ------------------------------------------------------------------
     # 4. Router includes session_lifecycle_router
     # ------------------------------------------------------------------
     print("\n[4] Router configuration")
 
-    try:
-        with open(r"C:\GGS_intership\posture_analysis\backend_api\app\api\router.py", "r") as f:
-            content = f.read()
-
+    content = read("backend_api/app/api/router.py")
+    if content is None:
+        record("router.py file exists", False, "File not found")
+    else:
         checks = [
             ("session_lifecycle_router imported", "session_lifecycle_router" in content),
             ("Router includes session lifecycle", "session_lifecycle_router" in content),
         ]
-
         for name, result in checks:
             record(name, result)
-
-    except FileNotFoundError:
-        record("router.py file exists", False, "File not found")
 
     # ------------------------------------------------------------------
     # 5. LiveMonitoringService start/stop methods exist
     # ------------------------------------------------------------------
     print("\n[5] LiveMonitoringService start/stop methods")
 
-    try:
-        with open(r"C:\GGS_intership\posture_analysis\backend_api\app\services\live_monitor.py", "r") as f:
-            content = f.read()
-
+    content = read("backend_api/app/services/live_monitor.py")
+    if content is None:
+        record("live_monitor.py file exists", False, "File not found")
+    else:
         checks = [
             ("start_session method exists", "def start_session" in content),
             ("stop_session method exists", "def stop_session" in content),
             ("is_running method exists", "def is_running" in content),
             ("session_active flag tracked", "session_active" in content),
         ]
-
         for name, result in checks:
             record(name, result)
 
-    except FileNotFoundError:
-        record("live_monitor.py file exists", False, "File not found")
-
     # ------------------------------------------------------------------
-    # 6. deps.get_repository switching logic
+    # 6. deps.get_repository switching logic (fail-closed design)
     # ------------------------------------------------------------------
     print("\n[6] Repository switching logic")
 
-    try:
-        with open(r"C:\GGS_intership\posture_analysis\backend_api\app\core\deps.py", "r") as f:
-            content = f.read()
-
+    content = read("backend_api/app/core/deps.py")
+    if content is None:
+        record("deps.py file exists", False, "File not found")
+    else:
         checks = [
             ("get_repository function defined", "def get_repository" in content),
             ("Checks USE_MOCK_REPOSITORY", "USE_MOCK_REPOSITORY" in content),
-            ("Checks is_running", "is_running" in content),
-            ("Falls back to MockRepository", "MockRepository" in content),
-            ("Returns LiveRepository when live", "LiveRepository" in content),
+            ("Returns MockRepository in mock mode", "return MockRepository()" in content),
+            ("Returns LiveRepository in live mode", "return LiveRepository()" in content),
+            ("Fails closed (503) when live service unavailable", "503" in content and "get_live_service" in content),
         ]
-
         for name, result in checks:
             record(name, result)
-
-    except FileNotFoundError:
-        record("deps.py file exists", False, "File not found")
 
     # ------------------------------------------------------------------
     # Summary

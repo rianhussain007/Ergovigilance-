@@ -1,18 +1,24 @@
+"""Trend analysis tests — against the current backend.services.trend_analysis.
+
+Covers ``analyze_risk_trend`` (structured JSON output), ``_compute_trend``
+thresholds, inverted-metric flipping, and the metrics array. The archived
+``TrendAnalysis`` markdown-report class was removed from the codebase; the
+module now returns structured JSON consumed by the risk-trend API endpoint.
+"""
+
 from __future__ import annotations
 
-import json
 import sys
-import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from backend.services.trend_analysis import (
-    TrendAnalysis,
-    _compute_trend,
     METRIC_NAMES,
     _INVERTED_METRICS,
+    _compute_trend,
+    analyze_risk_trend,
 )
 
 
@@ -39,12 +45,6 @@ def make_session(
     }
 
 
-def write_session(tmp, session):
-    p = Path(tmp) / f"session_{session['session_timestamp']}.json"
-    with open(p, "w") as f:
-        json.dump(session, f)
-
-
 results: list[str] = []
 
 
@@ -57,115 +57,102 @@ def check(label, got, expected):
         raise SystemExit(1)
 
 
-def contains(text, substring):
-    return substring in text
+def metric_trend(report, metric: str) -> str:
+    """Trend value for a named metric from an analyze_risk_trend() report."""
+    for m in report["metrics"]:
+        if m["name"] == metric:
+            return m["trend"]
+    raise KeyError(metric)
 
 
 # ---------------------------------------------------------------------------
 # 1.  No sessions
 # ---------------------------------------------------------------------------
-with tempfile.TemporaryDirectory() as tmp:
-    ta = TrendAnalysis(tmp)
-    check("no sessions count", ta.session_count, 0)
-    r = ta.analyze()
-    check("no sessions status", r.get("status"), "No sessions found")
+r = analyze_risk_trend([])
+check("no sessions total", r["total_sessions"], 0)
+check("no sessions status", r["status"], "No sessions found")
 
 
 # ---------------------------------------------------------------------------
 # 2.  Single session
 # ---------------------------------------------------------------------------
-with tempfile.TemporaryDirectory() as tmp:
-    write_session(tmp, make_session())
-    ta = TrendAnalysis(tmp)
-    check("single session count", ta.session_count, 1)
-    r = ta.analyze()
-    check("single session avg low", r["average_low_pct"], 60.0)
-    check("single session avg high", r["average_high_pct"], 10.0)
-    check("single session neck trend", r["trend_neck_flexion"], "Stable")
-    check("single session overall trend", r["overall_ergonomic_trend"], "Stable")
+r = analyze_risk_trend([make_session()])
+check("single session count", r["total_sessions"], 1)
+check("single session avg low", r["risk_distribution"]["low_pct"], 60.0)
+check("single session avg high", r["risk_distribution"]["high_pct"], 10.0)
+check("single session neck trend", metric_trend(r, "avg_neck_flexion"), "Stable")
+check("single session overall trend", r["overall_trend"], "Stable")
 
 
 # ---------------------------------------------------------------------------
 # 3.  Multiple sessions — averages
 # ---------------------------------------------------------------------------
-with tempfile.TemporaryDirectory() as tmp:
-    write_session(tmp, make_session("20260601_000000", low=50, med=30, high=20))
-    write_session(tmp, make_session("20260602_000000", low=60, med=30, high=10))
-    write_session(tmp, make_session("20260603_000000", low=70, med=20, high=10))
-    ta = TrendAnalysis(tmp)
-    r = ta.analyze()
-    check("multi avg low", r["average_low_pct"], 60.0)
-    check("multi avg med", r["average_medium_pct"], 26.7)
-    check("multi avg high", r["average_high_pct"], 13.3)
-    check("multi total sessions", r["total_sessions"], 3)
+r = analyze_risk_trend([
+    make_session("20260601_000000", low=50, med=30, high=20),
+    make_session("20260602_000000", low=60, med=30, high=10),
+    make_session("20260603_000000", low=70, med=20, high=10),
+])
+check("multi avg low", r["risk_distribution"]["low_pct"], 60.0)
+check("multi avg med", r["risk_distribution"]["medium_pct"], 26.7)
+check("multi avg high", r["risk_distribution"]["high_pct"], 13.3)
+check("multi total sessions", r["total_sessions"], 3)
 
 
 # ---------------------------------------------------------------------------
 # 4.  Most common issue across sessions
 # ---------------------------------------------------------------------------
-with tempfile.TemporaryDirectory() as tmp:
-    write_session(tmp, make_session("20260601_000000", issue="Neck Flexion"))
-    write_session(tmp, make_session("20260602_000000", issue="Neck Flexion"))
-    write_session(tmp, make_session("20260603_000000", issue="Shoulder Imbalance"))
-    write_session(tmp, make_session("20260604_000000", issue="Neck Flexion"))
-    ta = TrendAnalysis(tmp)
-    r = ta.analyze()
-    check("most common issue", r["most_common_issue"], "Neck Flexion")
-    check("most common issue count", r["most_common_issue_count"], 3)
+r = analyze_risk_trend([
+    make_session("20260601_000000", issue="Neck Flexion"),
+    make_session("20260602_000000", issue="Neck Flexion"),
+    make_session("20260603_000000", issue="Shoulder Imbalance"),
+    make_session("20260604_000000", issue="Neck Flexion"),
+])
+check("most common issue", r["most_common_issue"], "Neck Flexion")
+check("most common issue count", r["most_common_issue_count"], 3)
 
 
 # ---------------------------------------------------------------------------
 # 5.  Most common highest risk
 # ---------------------------------------------------------------------------
-with tempfile.TemporaryDirectory() as tmp:
-    write_session(tmp, make_session("20260601_000000", highest_risk="HIGH"))
-    write_session(tmp, make_session("20260602_000000", highest_risk="MEDIUM"))
-    write_session(tmp, make_session("20260603_000000", highest_risk="HIGH"))
-    ta = TrendAnalysis(tmp)
-    r = ta.analyze()
-    check("most common highest risk", r["most_common_highest_risk"], "HIGH")
+r = analyze_risk_trend([
+    make_session("20260601_000000", highest_risk="HIGH"),
+    make_session("20260602_000000", highest_risk="MEDIUM"),
+    make_session("20260603_000000", highest_risk="HIGH"),
+])
+check("most common highest risk", r["most_common_highest_risk"], "HIGH")
 
 
 # ---------------------------------------------------------------------------
-# 6.  Improving trend (neck decreasing)
+# 6.  Improving trend (neck decreasing — inverted metric)
 # ---------------------------------------------------------------------------
-with tempfile.TemporaryDirectory() as tmp:
-    for i in range(6):
-        neck_val = 25.0 - i * 3.0
-        write_session(tmp, make_session(f"2026060{i+1}_000000", neck=neck_val))
-    ta = TrendAnalysis(tmp)
-    r = ta.analyze()
-    check("improving neck trend", r["trend_neck_flexion"], "Improving")
-    check("improving overall", r["overall_ergonomic_trend"], "Improving")
+r = analyze_risk_trend([
+    make_session(f"2026060{i + 1}_000000", neck=25.0 - i * 3.0) for i in range(6)
+])
+check("improving neck trend", metric_trend(r, "avg_neck_flexion"), "Improving")
+check("improving overall", r["overall_trend"], "Improving")
 
 
 # ---------------------------------------------------------------------------
-# 7.  Deteriorating trend (neck increasing)
+# 7.  Deteriorating trend (neck increasing — inverted metric)
 # ---------------------------------------------------------------------------
-with tempfile.TemporaryDirectory() as tmp:
-    for i in range(6):
-        neck_val = 10.0 + i * 3.0
-        write_session(tmp, make_session(f"2026060{i+1}_000000", neck=neck_val))
-    ta = TrendAnalysis(tmp)
-    r = ta.analyze()
-    check("deteriorating neck trend", r["trend_neck_flexion"], "Deteriorating")
-    check("deteriorating overall", r["overall_ergonomic_trend"], "Deteriorating")
+r = analyze_risk_trend([
+    make_session(f"2026060{i + 1}_000000", neck=10.0 + i * 3.0) for i in range(6)
+])
+check("deteriorating neck trend", metric_trend(r, "avg_neck_flexion"), "Deteriorating")
+check("deteriorating overall", r["overall_trend"], "Deteriorating")
 
 
 # ---------------------------------------------------------------------------
-# 8.  Knee angle improving (increasing = better)
+# 8.  Knee angle improving (increasing = better, not inverted)
 # ---------------------------------------------------------------------------
-with tempfile.TemporaryDirectory() as tmp:
-    for i in range(6):
-        knee_val = 140.0 + i * 4.0
-        write_session(tmp, make_session(f"2026060{i+1}_000000", knee=knee_val))
-    ta = TrendAnalysis(tmp)
-    r = ta.analyze()
-    check("improving knee trend", r["trend_knee_angle"], "Improving")
+r = analyze_risk_trend([
+    make_session(f"2026060{i + 1}_000000", knee=140.0 + i * 4.0) for i in range(6)
+])
+check("improving knee trend", metric_trend(r, "avg_knee_angle"), "Improving")
 
 
 # ---------------------------------------------------------------------------
-# 9.  Trend with < 4 sessions is Stable
+# 9.  _compute_trend thresholds (< 4 values is Stable)
 # ---------------------------------------------------------------------------
 check("trend 1 session", _compute_trend([10.0]), "Stable")
 check("trend 2 sessions", _compute_trend([10.0, 20.0]), "Stable")
@@ -173,60 +160,39 @@ check("trend 3 sessions", _compute_trend([10.0, 20.0, 30.0]), "Stable")
 check("trend raw decreasing", _compute_trend([20.0, 18.0, 16.0, 14.0]), "Deteriorating")
 check("trend raw increasing", _compute_trend([10.0, 12.0, 14.0, 16.0]), "Improving")
 check("trend flat stable", _compute_trend([15.0, 15.0, 15.0, 15.0]), "Stable")
-# Full pipeline tests (tests 6,7) already verify inverted metric flipping
 
 
 # ---------------------------------------------------------------------------
 # 10.  Earliest and latest timestamps
 # ---------------------------------------------------------------------------
-with tempfile.TemporaryDirectory() as tmp:
-    write_session(tmp, make_session("20260610_000000"))
-    write_session(tmp, make_session("20260601_000000"))
-    write_session(tmp, make_session("20260605_000000"))
-    ta = TrendAnalysis(tmp)
-    r = ta.analyze()
-    check("earliest session", r["earliest_session"], "20260601_000000")
-    check("latest session", r["latest_session"], "20260610_000000")
+r = analyze_risk_trend([
+    make_session("20260610_000000"),
+    make_session("20260601_000000"),
+    make_session("20260605_000000"),
+])
+check("earliest session", r["earliest_session"], "20260601_000000")
+check("latest session", r["latest_session"], "20260610_000000")
 
 
 # ---------------------------------------------------------------------------
-# 11.  Report generation
+# 11.  Metrics structure (replaces the removed markdown report tests)
 # ---------------------------------------------------------------------------
-with tempfile.TemporaryDirectory() as tmp:
-    for i in range(4):
-        write_session(tmp, make_session(f"2026060{i+1}_000000"))
-    ta = TrendAnalysis(tmp)
-    report = ta.generate_report()
-    check("report contains Executive Summary", contains(report, "Executive Summary"), True)
-    check("report contains Sessions Analysed", contains(report, "Sessions Analysed"), True)
-    check("report contains Trend Analysis", contains(report, "Trend Analysis"), True)
-    check("report contains Common Issues", contains(report, "Common Issues"), True)
-    check("report contains Risk Distribution", contains(report, "Risk Distribution"), True)
-    check("report contains Long-Term", contains(report, "Long-Term Recommendations"), True)
-    check("report contains Conclusion", contains(report, "Conclusion"), True)
+r = analyze_risk_trend([make_session(f"2026060{i + 1}_000000") for i in range(4)])
+check("metrics count", len(r["metrics"]), 4)
+check("metrics names match METRIC_NAMES", [m["name"] for m in r["metrics"]], METRIC_NAMES)
+check("metric keys complete", all(
+    all(k in m for k in ("name", "label", "unit", "average", "trend"))
+    for m in r["metrics"]
+), True)
+check("knee metric label", r["metrics"][3]["label"], "Knee Angle")
+check("knee metric unit", r["metrics"][3]["unit"], "deg")
+check("knee metric average", r["metrics"][3]["average"], 150.0)
 
 
 # ---------------------------------------------------------------------------
-# 12.  Save report to file
+# 12.  Inverted metric logic
 # ---------------------------------------------------------------------------
-with tempfile.TemporaryDirectory() as tmp:
-    for i in range(4):
-        write_session(tmp, make_session(f"2026060{i+1}_000000"))
-    ta = TrendAnalysis(tmp)
-    out = Path(tmp) / "output" / "trend_report.md"
-    saved = ta.save_report(out)
-    check("save returns path", saved, str(out))
-    check("save file exists", out.exists(), True)
-    content = out.read_text()
-    check("saved file has content", len(content) > 100, True)
-
-
-# ---------------------------------------------------------------------------
-# 13.  Ensure inverse metric logic is correct
-# ---------------------------------------------------------------------------
-# For inverted metrics (neck, trunk, shoulder): lower is better
-# For non-inverted (knee): higher is better
-check("necl lower better inverted", "avg_neck_flexion" in _INVERTED_METRICS, True)
+check("neck lower better inverted", "avg_neck_flexion" in _INVERTED_METRICS, True)
 check("trunk lower better inverted", "avg_trunk_flexion" in _INVERTED_METRICS, True)
 check("shoulder lower better inverted", "avg_shoulder_symmetry" in _INVERTED_METRICS, True)
 check("knee NOT inverted", "avg_knee_angle" not in _INVERTED_METRICS, True)

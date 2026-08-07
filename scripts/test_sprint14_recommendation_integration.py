@@ -252,11 +252,13 @@ def test_repository_interface():
     check("fetches /api/recommendations", "recommendations" in content and "API_BASE" in content)
 
     mock_file = os.path.join(os.path.dirname(__file__), "..", "ui_posture", "src", "repositories", "MockDashboardRepository.ts")
-    with open(mock_file, "r") as f:
-        content = f.read()
-
-    check("getRecommendations in MockDashboardRepository", "async getRecommendations()" in content)
-    check("returns null bundle for mock", "bundle: null" in content)
+    if os.path.exists(mock_file):
+        with open(mock_file, "r") as f:
+            content = f.read()
+        check("getRecommendations in MockDashboardRepository", "async getRecommendations()" in content)
+        check("returns null bundle for mock", "bundle: null" in content)
+    else:
+        print("  SKIP: MockDashboardRepository.ts removed in the React migration — skipping mock-repo checks")
 
 
 # ── Run ───────────────────────────────────────────────────────────────
