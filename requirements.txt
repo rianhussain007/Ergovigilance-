@@ -1,15 +1,8 @@
-fastapi==0.104.1
-uvicorn==0.24.0
-mediapipe==0.10.5
-opencv-python==4.8.1.78
-numpy==1.24.3
-pandas==2.1.3
-scikit-learn==1.3.2
-torch==2.1.1
-torchvision==0.16.1
-jupyter==1.0.0
-streamlit==1.29.0
-pillow==10.1.0
-requests==2.31.0
-python-multipart==0.0.9
-protobuf>=4.0.0
+# NOTE: The historic root requirements.txt pinned the legacy Streamlit-era
+# stack (streamlit, jupyter, torch, …) and is NOT what the product runs on.
+# The product backend lives in backend_api/ — this file now redirects there so
+# tooling that auto-reads a root requirements.txt installs the correct deps.
+#
+#   pip install -r requirements.txt        # == backend_api/requirements.txt
+#   pip install -r backend_api/requirements-dev.txt   # + pytest, pip-audit
+-r backend_api/requirements.txt

@@ -41,10 +41,10 @@ ErgoVigilance is split into three layers, deliberately decoupled:
 | `backend/` | AI core — pose engine, 9-feature extraction, context intelligence, alerts, events, history, recommendations, fatigue/exposure, task recognition, AI assistant |
 | `backend_api/` | FastAPI service — `app/main.py` entry point, `app/api/*.py` endpoint modules, `app/core/` (config, auth, database), `app/repositories/`, `app/services/live_monitor.py`, WebSockets |
 | `ui_posture/` | React 19 + Vite 6 + Tailwind 4 single-page app (17 pages) |
-| `models/` | `pose_landmarker_lite.task` (MediaPipe pose model), `best_model.pkl` (Random Forest risk classifier), `svm_model.pkl` |
+| `models/` | `pose_landmarker_lite.task` (MediaPipe pose model — the runtime model), `best_model.pkl` (archived classifier), `svm_model.pkl` (training-only), plus `MANIFEST.json` with SHA-256 checksums (verified in CI) |
 | `knowledge/` | Markdown corpus for the AI Assistant (RULA/REBA reference, thresholds, FAQ, alert rules) |
-| `docs/` | `CURRENT_STATE.md` (authoritative — what is built & verified), `VISION_AND_ROADMAP.md`, module HLDs & reports |
-| `scripts/` | Training, evaluation, and test scripts |
+| `docs/` | `CURRENT_STATE.md` (authoritative — what is built & verified), `PRIVACY.md` (data handling & deletion), `VISION_AND_ROADMAP.md`, module HLDs & reports |
+| `scripts/` | Training, evaluation, test scripts, and `verify_models.py` (model governance) |
 | `outputs/`, `recordings/`, `results/` | Runtime data — sessions, recordings, analysis results (gitignored where appropriate) |
 
 ### Key design facts
@@ -88,7 +88,7 @@ The backend runs with `USE_MOCK_REPOSITORY=true` by default (mock data, no camer
 ```bash
 cd backend_api
 python -m venv .venv                     # optional but recommended
-pip install -r requirements.txt
+pip install -r requirements-dev.txt      # production deps + pytest/pip-audit
 # PDF export needs the Playwright browser (one-time):
 playwright install chromium
 ```
@@ -197,6 +197,7 @@ Interactive docs: **http://localhost:8000/docs** (Swagger) / `/redoc`.
 | Reports | risk trend, safety report, session report (PDF/CSV/JSON) |
 | Analytics | session analytics, worker trends, live timeline, audit log |
 | Retention (admin) | `GET /api/retention/stats`, `POST /api/retention/run` — storage usage + manual retention pass |
+| Privacy (admin) | `POST /api/privacy/delete-worker-data/{worker_id}` — per-worker right-to-erasure (recordings + alerts) |
 | WebSockets | `/ws/dashboard`, `/ws/alerts`, `/ws/camera` |
 
 ---
@@ -205,6 +206,15 @@ Interactive docs: **http://localhost:8000/docs** (Swagger) / `/redoc`.
 
 - **AI Assistant** — RAG over the `knowledge/` corpus using a local **Ollama** instance. The API auto-starts Ollama if it's installed at the default location. Without Ollama the assistant endpoint is unavailable (the rest of the system is unaffected).
 - **PDF export** — requires `playwright install chromium` (backend venv). Export failures are non-fatal and degrade gracefully.
+
+---
+
+## Security, TLS & privacy
+
+- **TLS**: the Docker stack serves plain HTTP on :8080 (frontend) with the API on loopback only. For production, terminate TLS at the nginx proxy — see `ui_posture/nginx.tls.conf.example` (mount certs + config, map :443). The base `nginx.conf` sets `client_max_body_size 200m` (the 1 MB default would reject the API's 200 MB video uploads), security headers, and proxy timeouts.
+- **Network**: the backend port binds to `127.0.0.1` in docker-compose; nginx reaches it over the internal Docker network. Never publish :8000 publicly.
+- **Model governance**: `models/MANIFEST.json` records SHA-256 + provenance for every artifact; `python scripts/verify_models.py` verifies them (also runs in CI), so a corrupted or unapproved model swap fails the build. Replace a model → update the manifest in the same commit.
+- **Privacy**: see `docs/PRIVACY.md` — offline-first (no cloud uploads; the AI Assistant uses a local Ollama), age + disk-cap retention, admin-only per-worker data deletion, and operational recommendations (notice/consent, DPIA) for workplace rollout.
 
 ---
 
@@ -236,7 +246,7 @@ Frontend validation (in `ui_posture/`): `npm run lint` (TypeScript) and `npm run
 **GitHub Actions** (`.github/workflows/ci.yml`) runs on every push/PR:
 
 - **Frontend job**: `npm ci` → `npm run lint` → `npm run build` → `npm audit --omit=dev` (fails on known vulnerabilities).
-- **Backend job**: install `backend_api/requirements.txt` → `pytest backend_api/tests -q` → 10 legacy unit scripts → `pip-audit -r backend_api/requirements.txt` (fails on known vulnerabilities).
+- **Backend job**: install `backend_api/requirements-dev.txt` → `python scripts/verify_models.py` (model checksums) → `pytest backend_api/tests -q` → 10 legacy unit scripts → `pip-audit -r backend_api/requirements.txt` (fails on known vulnerabilities).
 
 **Known-stale legacy scripts** (not in CI, tracked in git): `test_task_recognition`, `test_trend_analysis`, `test_safety_reporting`, `test_session_persistence` (module path drift), the sprint 12–16 integration scripts (reference a removed frontend mock file), and `test_ai_assistant_live` (needs a live Ollama). Fixing those is tracked as follow-up cleanup.
 
@@ -258,3 +268,4 @@ Frontend validation (in `ui_posture/`): `npm run lint` (TypeScript) and `npm run
 - Single-person tracking only (`num_poses=1`), CPU-only inference (~15–20 FPS at 640×480).
 - Risk thresholds are open-source defaults, not clinically validated; the RULA-informed score is a lower-bound estimate (wrist angle/twist, force/load and muscle-use adjustments are defaulted).
 - The whole pipeline has so far been validated by one person in one room/camera setup — see `docs/CURRENT_STATE.md` for the full, honest list of gaps and next steps.
+- Legacy Streamlit-era artifacts (`frontend/app.py`, `packages.txt`, old root `requirements.txt`) are no longer part of the product; the root `requirements.txt` now simply redirects to `backend_api/requirements.txt`. They are kept in git history for reference.
