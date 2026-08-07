@@ -42,7 +42,30 @@ trained models for task & risk classification.
   VideoReviewPage maps + LiveMonitoring N/A hints extended; unavailable features now
   report status `"unavailable"` instead of `"good"`.
 
-### ⏳ Phase D — ML models (blocked on your decision)
+### ✅ Phase D — ML models, Tier-1 public data (shipped 2026-08-07)
+
+- **Data (Tier 1):** downloaded the `umic-iitm/rebapose` annotation subtree
+  (150,816 COCO-derived 2D keypoint JSONs; `data/raw/rebapose`, gitignored) and built
+  **30,698 REBA-labeled samples** (`scripts/build_reba_dataset.py`, parallelized) by
+  mapping its 18-key skeleton into the pipeline's COCO-17 layout and scoring with a
+  vendored standard-REBA implementation (`backend/services/reba_scoring.py` — 2D-projection
+  approximation of Hignett & McAtamney 2000; REBA_Dataset/H3.6M skipped: registration-gated;
+  ME-WARD skipped: paper-only).
+- **Risk-calibration model** (`models/risk_calibration_model.pkl`): HistGradientBoosting →
+  REBA band, **91.8% holdout** (after the missing-joint table-clamp fix); advisory overlay
+  via `backend/services/risk_calibration.py`
+  (`predict_risk_band`, lazy, fail-open). Report at `reports/risk_calibration_report.md`:
+  **rule-vs-REBA band agreement only 36.1% (κ=0.08) — the rule system flags 80% of everyday
+  poses HIGH vs REBA's 22%** → over-alarm confirmed, thresholds deserve a tuning pass.
+- **Task classifier v2** (`models/task_model_v2.pkl`): HistGradientBoosting over the 17
+  features + the two motion signals, trained on synthetic poses validated against the
+  Gaussian scorer (`scripts/train_task_model_v2.py`, 20k samples, 100% holdout on the
+  synthetic distribution). Runtime: **model-primary, confidence-gated (≥0.6), Gaussian
+  fallback** in `backend/services/task_recognition.py`; missing/corrupt model never raises.
+- `models/MANIFEST.json` + `verify_models.py` updated for both artifacts; 15 new tests.
+- **Not done (needs you):** Tier-2 workplace capture would replace the synthetic task
+  substrate with real data; dashboard surfacing of the calibrated-risk hint is a small
+  follow-up (schema + UI field).
 
 ---
 
