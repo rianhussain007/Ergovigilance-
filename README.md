@@ -101,10 +101,9 @@ python -m uvicorn app.main:app --reload --port 8000
 ```
 
 On startup the backend:
-1. Creates the local SQLite database (users, workers, alerts, audit log, settings, pilot requests).
-2. **Seeds the four role accounts and two demo workers** (see [Authentication](#authentication--seed-credentials)).
-3. Writes `backend_api/SEED_CREDENTIALS.local.txt` (gitignored) with those credentials on first run.
-4. Loads the AI Assistant corpus, initializes the live monitoring service (if `models/pose_landmarker_lite.task` exists), and launches Playwright for PDF export — all failures here are non-fatal.
+1. Applies **versioned schema migrations** (`backend_api/app/core/migrations/*.sql`, tracked via SQLite `PRAGMA user_version`) and **seeds the four role accounts and two demo workers** (see [Authentication](#authentication--seed-credentials)).
+2. Writes `backend_api/SEED_CREDENTIALS.local.txt` (gitignored) with those credentials on first run.
+3. Initializes the live monitoring service (if `models/pose_landmarker_lite.task` exists) and starts the retention loop. The AI corpus and Ollama probe run in the background, and the Playwright browser is launched **lazily on first PDF export** — startup never blocks on optional components.
 
 > Convenience script: `python start_backend.py` from the repo root starts the same server detached and writes `backend.pid`.
 
@@ -171,7 +170,7 @@ Authentication is **local SQLite + bcrypt + JWT**. On first backend startup the 
 
 Demo workers seeded: `worker-001 / Asha Patel / Assembly / Day` and `worker-002 / Rohan Mehta / Inspection / Evening`.
 
-- Log in via `POST /api/auth/login` → returns a JWT bearer token (8-hour TTL).
+- Log in via `POST /api/auth/login` → returns a JWT bearer token (8-hour TTL, configurable via `AUTH_JWT_TTL_SECONDS`) with `expires_in`/`expires_at`. The frontend drops expired tokens immediately on reload instead of waiting for a 401.
 - Send it as `Authorization: Bearer <token>` on all subsequent requests.
 - Permissions (operator / supervisor / safety_mgr / admin) are enforced server-side; unauthorized calls return 403.
 - Passwords are bcrypt-hashed; the plaintext list is written only to `backend_api/SEED_CREDENTIALS.local.txt`, which is **gitignored — never commit it**.
@@ -188,6 +187,7 @@ Interactive docs: **http://localhost:8000/docs** (Swagger) / `/redoc`.
 | Area | Example endpoints |
 |---|---|
 | Auth | `POST /api/auth/login`, users, settings |
+| Operations | `GET /healthz` (liveness), `GET /readyz` (readiness), `GET /metrics` (Prometheus), `GET /health` — root-level, no auth |
 | Live monitoring | `GET /api/dashboard`, `POST /api/session/start` / `end`, `GET /api/session/latest`, `/video/feed` (MJPEG) |
 | Context intelligence | `GET /api/context/snapshot`, recommendations |
 | Alerts | `GET /api/alerts` (active + history), acknowledge/resolve |
@@ -222,19 +222,23 @@ Admins can inspect current usage and trigger a pass on demand via `GET /api/rete
 
 ## Testing & CI
 
-Backend module tests live in `scripts/test_*.py` (engine-level: context, alerts, history, recommendations, task recognition, sessions, safety reporting…) and `backend_api/tests/` (live monitor, multi-camera, retention). With `pytest` installed in the backend venv:
+The pytest suite in `backend_api/tests/` is the primary suite (live monitor, retention, migrations, and an API smoke layer that regression-tests auth, lockout, and the fail-closed 503 path). It is fully isolated — tests run against a temp SQLite DB and temp retention dirs, never your real data:
 
 ```bash
-cd backend_api && pytest tests -q
-python scripts/test_context_engine.py
+cd backend_api && pytest          # 23 tests, ~25 s
+pytest -m hardware                # opt-in hardware tests (real cameras, 30 s FPS benchmark)
 ```
+
+Hardware-gated tests (physical cameras / pose model) are marked `hardware` and excluded by default. The legacy engine-level scripts in `scripts/test_*.py` (context, alerts, history, recommendations, …) run standalone with `python scripts/test_<name>.py`; the 10 self-contained ones run in CI.
 
 Frontend validation (in `ui_posture/`): `npm run lint` (TypeScript) and `npm run build` (production bundle).
 
 **GitHub Actions** (`.github/workflows/ci.yml`) runs on every push/PR:
 
 - **Frontend job**: `npm ci` → `npm run lint` → `npm run build` → `npm audit --omit=dev` (fails on known vulnerabilities).
-- **Backend job**: install `backend_api/requirements.txt` → `pytest backend_api/tests -q` → `pip-audit -r backend_api/requirements.txt` (fails on known vulnerabilities).
+- **Backend job**: install `backend_api/requirements.txt` → `pytest backend_api/tests -q` → 10 legacy unit scripts → `pip-audit -r backend_api/requirements.txt` (fails on known vulnerabilities).
+
+**Known-stale legacy scripts** (not in CI, tracked in git): `test_task_recognition`, `test_trend_analysis`, `test_safety_reporting`, `test_session_persistence` (module path drift), the sprint 12–16 integration scripts (reference a removed frontend mock file), and `test_ai_assistant_live` (needs a live Ollama). Fixing those is tracked as follow-up cleanup.
 
 ---
 

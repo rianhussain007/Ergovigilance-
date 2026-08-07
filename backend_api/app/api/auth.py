@@ -1,5 +1,6 @@
 """Authentication endpoints."""
 
+import time
 import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException, Request, status
@@ -12,7 +13,13 @@ from app.core.database import (
     insert_audit_log,
     record_login_attempt,
 )
-from app.core.security import AuthenticatedUser, DUMMY_PASSWORD_HASH, create_access_token, verify_password
+from app.core.security import (
+    AuthenticatedUser,
+    DUMMY_PASSWORD_HASH,
+    JWT_TTL_SECONDS,
+    create_access_token,
+    verify_password,
+)
 from app.core.config import settings
 
 router = APIRouter()
@@ -38,6 +45,8 @@ class LoginUser(BaseModel):
 class LoginResponse(BaseModel):
     token: str
     token_type: str = "bearer"
+    expires_in: int
+    expires_at: str
     user: LoginUser
 
 
@@ -118,7 +127,10 @@ async def login(request: Request, body: LoginRequest):
         details=None,
     )
 
+    now = int(time.time())
     return LoginResponse(
         token=create_access_token(user),
+        expires_in=JWT_TTL_SECONDS,
+        expires_at=datetime.fromtimestamp(now + JWT_TTL_SECONDS, tz=timezone.utc).isoformat(),
         user=LoginUser(id=user.id, email=user.email, role=user.role),
     )

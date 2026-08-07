@@ -24,17 +24,34 @@ const STORAGE_KEY = 'ergovigilance_auth';
 export const AUTH_INVALID_EVENT = 'ergovigilance-auth-invalid';
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+/** Decode a JWT's `exp` claim (epoch ms). Returns null when unreadable. */
+export function getTokenExpiry(token: string): number | null {
+  try {
+    const payloadPart = token.split('.')[1];
+    if (!payloadPart) return null;
+    const normalized = payloadPart.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized + '='.repeat((4 - (normalized.length % 4)) % 4);
+    const payload = JSON.parse(atob(padded)) as { exp?: number };
+    return typeof payload.exp === 'number' ? payload.exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+
 function loadStoredAuth(): AuthState | null {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as AuthState;
-    if (
-      typeof parsed?.token !== 'string'
-      || parsed.token.length === 0
-      || typeof parsed?.user?.email !== 'string'
-      || typeof parsed?.user?.role !== 'string'
-    ) {
+    const valid =
+      typeof parsed?.token === 'string'
+      && parsed.token.length > 0
+      && typeof parsed?.user?.email === 'string'
+      && typeof parsed?.user?.role === 'string';
+    // Drop tokens that already expired so a stale session never survives a reload.
+    const expiry = typeof parsed?.token === 'string' ? getTokenExpiry(parsed.token) : null;
+    const expired = expiry !== null && expiry <= Date.now();
+    if (!valid || expired) {
       localStorage.removeItem(STORAGE_KEY);
       return null;
     }
