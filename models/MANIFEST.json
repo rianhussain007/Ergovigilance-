@@ -19,33 +19,33 @@
     },
     {
       "filename": "svm_model.pkl",
-      "sha256": "665273dad3adf3e4722a61c36ed6a574827cce692c55a408a5e189c8f023d6d0",
-      "size_bytes": 82390,
-      "format": "scikit-learn pickle (SVM)",
-      "purpose": "Task/activity recognition classifier (training + evaluation pipeline)",
+      "sha256": "97e8d25ec2effdda37882c701f96b0e4d82bd28569d6efbc0b8bc662390f3388",
+      "size_bytes": 994286,
+      "format": "scikit-learn pickle (HistGradientBoosting)",
+      "purpose": "Risk-level classifier — HistGradientBoosting primary (training pipeline artifact; legacy filename kept for compatibility)",
       "loaded_by": [
         "scripts/train_svm.py",
         "scripts/evaluate_model.py"
       ],
-      "source": "Trained in-repo (scripts/train_svm.py on the Kaggletask keypoint dataset)",
-      "version": "legacy training artifact",
+      "source": "Trained in-repo (scripts/train_svm.py) on 30,698 REBA-labeled real-world poses (rebapose/COCO-derived); labels derived from REBA score (2-3 LOW, 4-7 MEDIUM, 8+ HIGH)",
+      "version": "v2 (2026-08-07, gradient-boosting migration)",
       "runtime": "training-only — NOT loaded by the running API",
-      "notes": "Not referenced by backend_api/app or backend/services at runtime; kept for the training/eval pipeline."
+      "notes": "HGB replaces the legacy RBF-SVM. Same 13-feature set as best_model.pkl; holdout accuracy 76.9%. SVM removed because angle features need no scaling and ~15% NaN rows require native NaN support."
     },
     {
       "filename": "best_model.pkl",
-      "sha256": "5db3766f2a4dd5da443832155fbe3b73598fe125d9a12f845b8a643ad579386a",
-      "size_bytes": 3282163,
-      "format": "scikit-learn pickle (Gradient Boosting / Random Forest risk classifier)",
-      "purpose": "Legacy image-classification risk model from the pre-MediaPipe pipeline",
+      "sha256": "d7d0ae687ca1c2c5aadc8397879619da25c18f72e6943171e58a555ec6e11492",
+      "size_bytes": 994545,
+      "format": "scikit-learn pickle (HistGradientBoosting)",
+      "purpose": "Risk-level classifier (LOW/MEDIUM/HIGH) — best of HGB vs RandomForest on REBA-labeled data",
       "loaded_by": [
-        "backend/_archive/main.py",
-        "backend/_archive/services/pose.py"
+        "scripts/evaluate_model.py",
+        "backend/_archive/main.py"
       ],
-      "source": "Trained in-repo (legacy scripts) on the Kaggle posture dataset",
-      "version": "archived — superseded by rule-based feature scoring in backend/services/features.py",
+      "source": "Trained in-repo (scripts/train_svm.py) on 30,698 REBA-labeled real-world poses (rebapose/COCO-derived)",
+      "version": "v2 (2026-08-07, gradient-boosting migration)",
       "runtime": "archived — NOT loaded by the running API",
-      "notes": "Kept for provenance and A/B comparison; the live pipeline scores risk from biomechanical features, not this classifier."
+      "notes": "HGB beat RandomForest 76.9% vs 76.4% holdout accuracy on the REBA-derived 3-class target. Runtime risk stays rule-based (backend/services/features.py); this classifier is for the training/eval pipeline and provenance."
     },
     {
       "filename": "task_model_v2.pkl",
