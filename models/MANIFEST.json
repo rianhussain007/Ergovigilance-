@@ -1,0 +1,56 @@
+{
+  "$schema_note": "Model governance manifest. Every artifact ships with a SHA-256 so CI and operators can detect corruption or unapproved swaps. Run `python scripts/verify_models.py` to verify (also runs in CI). If you replace a model, update this file in the same commit.",
+  "models": [
+    {
+      "filename": "pose_landmarker_lite.task",
+      "sha256": "59929e1d1ee95287735ddd833b19cf4ac46d29bc7afddbbf6753c459690d574a",
+      "size_bytes": 5777746,
+      "format": "MediaPipe Tasks model (TFLite FlatBuffer)",
+      "purpose": "Real-time 33-keypoint pose detection for the live monitoring pipeline and video analysis",
+      "loaded_by": [
+        "backend/services/pose_engine.py (PoseEngine(model_path) → BaseOptions(model_asset_path))",
+        "backend_api/app/api/video_analysis.py",
+        "backend_api/app/main.py via POSE_MODEL_PATH"
+      ],
+      "source": "Google MediaPipe — pose_landmarker_lite (official task file)",
+      "version": "pose_landmarker_lite (lite variant)",
+      "runtime": "production",
+      "notes": "Runtime-critical. Absence disables live mode (API fails closed with 503 in live mode)."
+    },
+    {
+      "filename": "svm_model.pkl",
+      "sha256": "665273dad3adf3e4722a61c36ed6a574827cce692c55a408a5e189c8f023d6d0",
+      "size_bytes": 82390,
+      "format": "scikit-learn pickle (SVM)",
+      "purpose": "Task/activity recognition classifier (training + evaluation pipeline)",
+      "loaded_by": [
+        "scripts/train_svm.py",
+        "scripts/evaluate_model.py"
+      ],
+      "source": "Trained in-repo (scripts/train_svm.py on the Kaggletask keypoint dataset)",
+      "version": "legacy training artifact",
+      "runtime": "training-only — NOT loaded by the running API",
+      "notes": "Not referenced by backend_api/app or backend/services at runtime; kept for the training/eval pipeline."
+    },
+    {
+      "filename": "best_model.pkl",
+      "sha256": "5db3766f2a4dd5da443832155fbe3b73598fe125d9a12f845b8a643ad579386a",
+      "size_bytes": 3282163,
+      "format": "scikit-learn pickle (Gradient Boosting / Random Forest risk classifier)",
+      "purpose": "Legacy image-classification risk model from the pre-MediaPipe pipeline",
+      "loaded_by": [
+        "backend/_archive/main.py",
+        "backend/_archive/services/pose.py"
+      ],
+      "source": "Trained in-repo (legacy scripts) on the Kaggle posture dataset",
+      "version": "archived — superseded by rule-based feature scoring in backend/services/features.py",
+      "runtime": "archived — NOT loaded by the running API",
+      "notes": "Kept for provenance and A/B comparison; the live pipeline scores risk from biomechanical features, not this classifier."
+    }
+  ],
+  "policy": {
+    "replace_model_workflow": "Commit the new binary AND update its sha256/size_bytes in this file in the same commit — CI verify_models.py fails otherwise.",
+    "large_artifacts": "These binaries are git-tracked (~9 MB total). If models grow past ~50 MB, migrate to Git LFS.",
+    "verification": "python scripts/verify_models.py  (checksum + size; CI runs this on every push)"
+  }
+}

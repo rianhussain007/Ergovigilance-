@@ -46,8 +46,10 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install -r backend_api/requirements.txt
-          pip install pytest pip-audit
+          pip install -r backend_api/requirements-dev.txt
+
+      - name: Verify model artifacts (MANIFEST checksums)
+        run: python scripts/verify_models.py
 
       - name: Run backend test suite
         run: pytest backend_api/tests -q

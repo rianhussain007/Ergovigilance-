@@ -1,0 +1,5 @@
+# Development / CI tooling on top of the production requirements.
+-r requirements.txt
+
+pytest>=8.0.0,<9.0.0
+pip-audit>=2.7.0,<3.0.0
