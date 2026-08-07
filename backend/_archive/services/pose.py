@@ -11,7 +11,6 @@ from backend.services.features import (
     RISK_COLORS_BGR,
     extract_features_from_keypoints,
     mediapipe_landmarks_to_keypoints,
-    unavailable_features_from_keypoints,
 )
 
 
@@ -61,11 +60,10 @@ def detect_pose_from_bgr(image: np.ndarray) -> Dict[str, Any]:
     height, width = image.shape[:2]
     keypoints = mediapipe_landmarks_to_keypoints(result["landmarks"], width, height)
     features = extract_features_from_keypoints(keypoints)
-    unavailable = unavailable_features_from_keypoints(keypoints)
     return {
         "keypoints": keypoints,
         "features": {name: features[name] for name in FEATURE_COLUMNS},
-        "unavailable_features": unavailable,
+        "unavailable_features": [],
     }
 
 

@@ -1,0 +1,14 @@
+version: "3.9"
+
+services:
+  api:
+    build: .
+    container_name: ergovigilance-api
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=true
+      - USE_MOCK_REPOSITORY=true
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+      - LOG_LEVEL=INFO
+    restart: unless-stopped
