@@ -4,6 +4,7 @@ Run:  uvicorn app.main:app --reload
 Docs: http://localhost:8000/docs
 """
 
+import asyncio
 import json
 import logging
 import math
@@ -25,6 +26,7 @@ from app.core.health import health_status
 from app.api.router import api_router
 from app.api.websocket import router as ws_router
 from app.services.live_monitor import init_live_service
+from app.services.retention import run_retention
 from app.core.database import init_local_database
 from backend.services.assistant import load_corpus
 
@@ -71,10 +73,33 @@ def _ensure_ollama_running():
         logger.warning("Failed to start Ollama: %s", exc)
 
 
+RETENTION_INTERVAL_HOURS = float(os.getenv("RETENTION_INTERVAL_HOURS", "6"))
+
+
+async def _retention_loop():
+    """Periodically enforce the data-retention policy (runs in the event loop)."""
+    while True:
+        try:
+            stats = await asyncio.to_thread(run_retention)
+            logger.info("Retention pass complete: %s", stats)
+        except Exception as exc:  # never take the service down over cleanup
+            logger.exception("Retention pass failed: %s", exc)
+        await asyncio.sleep(RETENTION_INTERVAL_HOURS * 3600)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting %s v%s", settings.APP_NAME, settings.APP_VERSION)
     init_local_database()
+
+    retention_task = asyncio.create_task(_retention_loop())
+    logger.info(
+        "Data retention active (session_days=%.0f recording_days=%.0f cap=%.0f GB, interval=%.1fh)",
+        float(os.getenv("SESSION_RETENTION_DAYS", "30")),
+        float(os.getenv("RECORDING_RETENTION_DAYS", "30")),
+        float(os.getenv("RECORDINGS_MAX_GB", "20")),
+        RETENTION_INTERVAL_HOURS,
+    )
 
     _ensure_ollama_running()
 
@@ -99,6 +124,12 @@ async def lifespan(app: FastAPI):
         logger.warning("Playwright browser init failed (PDF export unavailable): %s", exc)
 
     yield
+
+    retention_task.cancel()
+    try:
+        await retention_task
+    except asyncio.CancelledError:
+        pass
 
     try:
         from backend.services.report_pdf import close_browser

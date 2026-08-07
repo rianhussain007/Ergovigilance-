@@ -143,7 +143,11 @@ Visit **http://localhost:3000** and log in with one of the seeded accounts below
 | `TRUST_PROXY_HEADERS` | `false` | Set `true` only behind a trusted proxy (e.g. the nginx frontend) so `X-Forwarded-For` is honored for rate limiting; otherwise the socket IP is used to prevent header spoofing |
 | `LOG_LEVEL` | `INFO` | Logging level |
 | `POSE_MODEL_PATH` | `models/pose_landmarker_lite.task` | MediaPipe pose model |
-| `SESSIONS_DIR` | `outputs/sessions` | Where recorded sessions are stored |
+| `SESSIONS_DIR` | `outputs/sessions` | Where recorded session summaries are stored |
+| `SESSION_RETENTION_DAYS` | `30` | Delete session summaries older than this many days (`0` disables) |
+| `RECORDING_RETENTION_DAYS` | `30` | Delete recording session dirs older than this many days (`0` disables) |
+| `RECORDINGS_MAX_GB` | `20` | Hard cap on the recordings tree; oldest sessions evicted first when exceeded (`0` disables) |
+| `RETENTION_INTERVAL_HOURS` | `6` | How often the background retention pass runs |
 | `OLLAMA_HOST` | `http://localhost:11434` | Local LLM endpoint for the AI Assistant |
 
 ### Frontend environment (`ui_posture/.env`)
@@ -192,6 +196,7 @@ Interactive docs: **http://localhost:8000/docs** (Swagger) / `/redoc`.
 | Workers / tasks | `GET/POST/PUT/DELETE /api/workers`, task config |
 | Reports | risk trend, safety report, session report (PDF/CSV/JSON) |
 | Analytics | session analytics, worker trends, live timeline, audit log |
+| Retention (admin) | `GET /api/retention/stats`, `POST /api/retention/run` — storage usage + manual retention pass |
 | WebSockets | `/ws/dashboard`, `/ws/alerts`, `/ws/camera` |
 
 ---
@@ -203,14 +208,33 @@ Interactive docs: **http://localhost:8000/docs** (Swagger) / `/redoc`.
 
 ---
 
-## Testing
+## Data retention
 
-Backend module tests live in `scripts/test_*.py` (engine-level: context, alerts, history, recommendations, task recognition, sessions, safety reporting…) and `backend_api/tests/` (live monitor, multi-camera). With `pytest` installed in the backend venv:
+A background task (every `RETENTION_INTERVAL_HOURS`, plus on startup) enforces the retention policy:
+
+- **Session summaries** — `outputs/sessions/session_*.json` older than `SESSION_RETENTION_DAYS` are deleted.
+- **Recordings** — `recordings/<worker>/<session>` dirs older than `RECORDING_RETENTION_DAYS` are deleted.
+- **Disk guardrail** — if the recordings tree exceeds `RECORDINGS_MAX_GB`, the oldest sessions are evicted until it fits.
+
+Admins can inspect current usage and trigger a pass on demand via `GET /api/retention/stats` and `POST /api/retention/run`. Set any knob to `0` to disable that check. The UI's per-user "Data Retention" selector is a client preference; the server policy is the one that actually enforces cleanup.
+
+---
+
+## Testing & CI
+
+Backend module tests live in `scripts/test_*.py` (engine-level: context, alerts, history, recommendations, task recognition, sessions, safety reporting…) and `backend_api/tests/` (live monitor, multi-camera, retention). With `pytest` installed in the backend venv:
 
 ```bash
 cd backend_api && pytest tests -q
 python scripts/test_context_engine.py
 ```
+
+Frontend validation (in `ui_posture/`): `npm run lint` (TypeScript) and `npm run build` (production bundle).
+
+**GitHub Actions** (`.github/workflows/ci.yml`) runs on every push/PR:
+
+- **Frontend job**: `npm ci` → `npm run lint` → `npm run build` → `npm audit --omit=dev` (fails on known vulnerabilities).
+- **Backend job**: install `backend_api/requirements.txt` → `pytest backend_api/tests -q` → `pip-audit -r backend_api/requirements.txt` (fails on known vulnerabilities).
 
 ---
 
