@@ -1,0 +1,74 @@
+[
+    {
+        "ram_mb":  "205.9",
+        "cpu":  "2520.3",
+        "fps":  "0.19399636349954566",
+        "risk":  "LOW",
+        "minute":  5,
+        "timestamp":  "13:48:08",
+        "frames":  "N/A",
+        "alerts":  "N/A",
+        "active":  "True",
+        "history":  "N/A"
+    },
+    {
+        "ram_mb":  "188.8",
+        "cpu":  "2707.4",
+        "fps":  "10.066791483858365",
+        "risk":  "LOW",
+        "minute":  10,
+        "timestamp":  "13:53:07",
+        "frames":  "N/A",
+        "alerts":  "0",
+        "active":  "True",
+        "history":  "3767"
+    },
+    {
+        "ram_mb":  "173.2",
+        "cpu":  "3137.1",
+        "fps":  "5.221433829178885",
+        "risk":  "LOW",
+        "minute":  15,
+        "timestamp":  "13:58:08",
+        "frames":  "N/A",
+        "alerts":  "0",
+        "active":  "True",
+        "history":  "4118"
+    },
+    {
+        "ram_mb":  "182",
+        "cpu":  "3619.2",
+        "fps":  "7.2338185358410785",
+        "risk":  "MEDIUM",
+        "minute":  20,
+        "timestamp":  "14:03:08",
+        "frames":  "N/A",
+        "alerts":  "0",
+        "active":  "False",
+        "history":  "4483"
+    },
+    {
+        "ram_mb":  "183.3",
+        "cpu":  "3865.6",
+        "fps":  "7.2338185358410785",
+        "risk":  "MEDIUM",
+        "minute":  25,
+        "timestamp":  "14:08:08",
+        "frames":  "N/A",
+        "alerts":  "0",
+        "active":  "False",
+        "history":  "4483"
+    },
+    {
+        "ram_mb":  "133.2",
+        "cpu":  "4221.3",
+        "fps":  "7.2338185358410785",
+        "risk":  "MEDIUM",
+        "minute":  30,
+        "timestamp":  "14:13:07",
+        "frames":  "N/A",
+        "alerts":  "0",
+        "active":  "False",
+        "history":  "4483"
+    }
+]

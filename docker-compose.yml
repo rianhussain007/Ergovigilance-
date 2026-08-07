@@ -1,0 +1,33 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: backend_api/Dockerfile
+    container_name: ergovigilance-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=true
+      - USE_MOCK_REPOSITORY=true
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost
+      - LOG_LEVEL=INFO
+      - AUTH_DB_PATH=/data/local_auth.db
+    volumes:
+      - ergovigilance-db:/data
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: ui_posture/Dockerfile
+    container_name: ergovigilance-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  ergovigilance-db:

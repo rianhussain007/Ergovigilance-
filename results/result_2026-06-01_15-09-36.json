@@ -1,0 +1,18 @@
+{
+  "filename": "result_2026-06-01_15-09-36.jpg",
+  "source_filename": "handsome-man-sitting-floor_144627-9850.jpg",
+  "timestamp": "2026-06-01T15:09:36",
+  "risk_level": "HIGH",
+  "confidence": 99.95,
+  "features": {
+    "neck_flexion": 1.2336,
+    "trunk_flexion": 5.4073,
+    "left_shoulder_elev": 68.6444,
+    "right_shoulder_elev": 62.8541,
+    "shoulder_symmetry": 18.6097,
+    "alignment_deviation": 13.4536
+  },
+  "unavailable_features": [
+    "right_shoulder_elev"
+  ]
+}

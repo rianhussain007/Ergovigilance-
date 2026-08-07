@@ -1,0 +1,133 @@
+{
+  "knee_angle_stats": {
+    "mean": 134.7566377027027,
+    "std": 30.84232147229051,
+    "min": 6.8799,
+    "max": 178.8256,
+    "nan_count": 0
+  },
+  "correlation_with_knee_angle": {
+    "neck_flexion": -0.13818143097420452,
+    "trunk_flexion": -0.1408383836513933,
+    "left_shoulder_elev": -0.21347881800392152,
+    "right_shoulder_elev": -0.21421510065294624,
+    "shoulder_symmetry": -0.12430041110865209,
+    "alignment_deviation": -0.044733344960865756
+  },
+  "six_feature": {
+    "accuracy": 0.9797297297297297,
+    "best_model": "random_forest",
+    "confusion_matrix": [
+      [
+        16,
+        0,
+        21
+      ],
+      [
+        0,
+        321,
+        0
+      ],
+      [
+        3,
+        0,
+        823
+      ]
+    ],
+    "per_class": {
+      "LOW": {
+        "precision": 0.8421052631578947,
+        "recall": 0.43243243243243246,
+        "f1-score": 0.5714285714285714,
+        "support": 37.0
+      },
+      "MEDIUM": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 321.0
+      },
+      "HIGH": {
+        "precision": 0.9751184834123223,
+        "recall": 0.9963680387409201,
+        "f1-score": 0.98562874251497,
+        "support": 826.0
+      }
+    },
+    "permutation_importance": {
+      "neck_flexion": 0.12141047297297294,
+      "trunk_flexion": 0.006017736486486458,
+      "left_shoulder_elev": 0.02407094594594593,
+      "right_shoulder_elev": 0.05057010135135133,
+      "shoulder_symmetry": 0.31830658783783783,
+      "alignment_deviation": 0.0052787162162162005
+    },
+    "rf_intrinsic_importance": {
+      "neck_flexion": 0.21278388943532517,
+      "trunk_flexion": 0.12890824334905696,
+      "left_shoulder_elev": 0.06892182692379974,
+      "right_shoulder_elev": 0.1126043700351784,
+      "shoulder_symmetry": 0.39738187169594097,
+      "alignment_deviation": 0.0793997985606988
+    }
+  },
+  "seven_feature": {
+    "accuracy": 0.9797297297297297,
+    "best_model": "random_forest",
+    "confusion_matrix": [
+      [
+        16,
+        0,
+        21
+      ],
+      [
+        0,
+        321,
+        0
+      ],
+      [
+        3,
+        0,
+        823
+      ]
+    ],
+    "per_class": {
+      "LOW": {
+        "precision": 0.8421052631578947,
+        "recall": 0.43243243243243246,
+        "f1-score": 0.5714285714285714,
+        "support": 37.0
+      },
+      "MEDIUM": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 321.0
+      },
+      "HIGH": {
+        "precision": 0.9751184834123223,
+        "recall": 0.9963680387409201,
+        "f1-score": 0.98562874251497,
+        "support": 826.0
+      }
+    },
+    "permutation_importance": {
+      "neck_flexion": 0.12088260135135133,
+      "trunk_flexion": 0.006334459459459443,
+      "left_shoulder_elev": 0.014358108108108114,
+      "right_shoulder_elev": 0.04032939189189187,
+      "shoulder_symmetry": 0.31608952702702703,
+      "alignment_deviation": 0.0044341216216216145,
+      "knee_angle": 0.004222972972972944
+    },
+    "rf_intrinsic_importance": {
+      "neck_flexion": 0.18293848017812964,
+      "trunk_flexion": 0.1348385834400917,
+      "left_shoulder_elev": 0.06114790611043311,
+      "right_shoulder_elev": 0.0986509725590252,
+      "shoulder_symmetry": 0.39652784008292985,
+      "alignment_deviation": 0.07657293239271536,
+      "knee_angle": 0.04932328523667518
+    }
+  }
+}

@@ -72,7 +72,7 @@ def _multiposture_rows(path: Path) -> Iterable[Dict[str, object]]:
         keypoints = []
         for name in MEDIAPIPE_NAMES:
             keypoints.append([row[f"{name}_x"], row[f"{name}_y"], row.get(f"{name}_z", 0.0)])
-        features = extract_features_from_keypoints(keypoints)
+        features, _unavail = extract_features_from_keypoints(keypoints)
         label_hint = row.get("upperbody_label", "")
         label = _label_from_source(label_hint, features)
         rows.append({"source": "multiposture", "sample_id": f"multiposture_{idx}", **features, "label": label})
@@ -109,7 +109,7 @@ def _office_rows(root: Path) -> Iterable[Dict[str, object]]:
             keypoints = payload[0].get("keypoints", [])
             if len(keypoints) < 17:
                 continue
-            features = extract_features_from_keypoints(keypoints, COCO_17)
+            features, _unavail = extract_features_from_keypoints(keypoints, COCO_17)
             label = _label_from_source(label_hint, features)
             rows.append({"source": "office_posture", "sample_id": sample_stem, **features, "label": label})
     return rows

@@ -1,0 +1,117 @@
+{
+  "affected_samples": 154,
+  "original": {
+    "accuracy": 0.9797297297297297,
+    "best_model": "random_forest",
+    "confusion_matrix": [
+      [
+        16,
+        0,
+        21
+      ],
+      [
+        0,
+        321,
+        0
+      ],
+      [
+        3,
+        0,
+        823
+      ]
+    ],
+    "per_class": {
+      "LOW": {
+        "precision": 0.8421052631578947,
+        "recall": 0.43243243243243246,
+        "f1-score": 0.5714285714285714,
+        "support": 37.0
+      },
+      "MEDIUM": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 321.0
+      },
+      "HIGH": {
+        "precision": 0.9751184834123223,
+        "recall": 0.9963680387409201,
+        "f1-score": 0.98562874251497,
+        "support": 826.0
+      }
+    },
+    "permutation_importance": {
+      "neck_flexion": 0.12141047297297294,
+      "trunk_flexion": 0.006017736486486458,
+      "left_shoulder_elev": 0.02407094594594593,
+      "right_shoulder_elev": 0.05057010135135133,
+      "shoulder_symmetry": 0.31830658783783783,
+      "alignment_deviation": 0.0052787162162162005
+    },
+    "rf_intrinsic_importance": {
+      "neck_flexion": 0.21278388943532517,
+      "trunk_flexion": 0.12890824334905696,
+      "left_shoulder_elev": 0.06892182692379974,
+      "right_shoulder_elev": 0.1126043700351784,
+      "shoulder_symmetry": 0.39738187169594097,
+      "alignment_deviation": 0.0793997985606988
+    }
+  },
+  "fixed": {
+    "accuracy": 0.9991554054054054,
+    "best_model": "random_forest",
+    "confusion_matrix": [
+      [
+        5,
+        1,
+        0
+      ],
+      [
+        0,
+        321,
+        0
+      ],
+      [
+        0,
+        0,
+        857
+      ]
+    ],
+    "per_class": {
+      "LOW": {
+        "precision": 1.0,
+        "recall": 0.8333333333333334,
+        "f1-score": 0.9090909090909091,
+        "support": 6.0
+      },
+      "MEDIUM": {
+        "precision": 0.9968944099378882,
+        "recall": 1.0,
+        "f1-score": 0.9984447900466563,
+        "support": 321.0
+      },
+      "HIGH": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 857.0
+      }
+    },
+    "permutation_importance": {
+      "neck_flexion": 0.12447212837837834,
+      "trunk_flexion": 0.0013724662162161727,
+      "left_shoulder_elev": 0.011190878378378344,
+      "right_shoulder_elev": 0.031461148648648615,
+      "shoulder_symmetry": 0.3153505067567567,
+      "alignment_deviation": 0.0015836148648648157
+    },
+    "rf_intrinsic_importance": {
+      "neck_flexion": 0.16011423291061053,
+      "trunk_flexion": 0.061411084472507954,
+      "left_shoulder_elev": 0.11156676739289835,
+      "right_shoulder_elev": 0.05966018310875297,
+      "shoulder_symmetry": 0.5723382793847974,
+      "alignment_deviation": 0.034909452730432784
+    }
+  }
+}

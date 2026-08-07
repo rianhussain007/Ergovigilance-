@@ -18,11 +18,12 @@ from backend.services.features import FEATURE_COLUMNS, RISK_LEVELS
 
 
 def make_model_compatible(model) -> None:
-    if not hasattr(model, "monotonic_cst"):
+    """if not hasattr(model, "monotonic_cst"):
         model.monotonic_cst = None
     for estimator in getattr(model, "estimators_", []):
         if not hasattr(estimator, "monotonic_cst"):
-            estimator.monotonic_cst = None
+            estimator.monotonic_cst = None"""
+    pass
 
 
 def evaluate(dataset_path: Path, model_path: Path, output_path: Path) -> dict:
