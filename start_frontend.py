@@ -1,7 +1,8 @@
 """Start vite dev server and keep it alive."""
 import subprocess, os, time
+from pathlib import Path
 
-os.chdir("C:/GGS_intership/posture_analysis/ui_posture")
+os.chdir(str(Path(__file__).resolve().parent / "ui_posture"))
 proc = subprocess.Popen(
     ["npx.cmd", "vite", "--host", "0.0.0.0", "--port", "5173"],
     stdout=subprocess.DEVNULL,

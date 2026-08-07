@@ -1,5 +1,11 @@
 # React Migration Plan — Industrial Ergonomics Monitoring System
 
+> **Historical note (2026-08):** this plan predates the pivot and references
+> pre-pivot files that have since been removed (`frontend/app.py`,
+> `streamlit_app.py`, `backend/main.py`). The React migration it describes is
+> complete — the product is now `ui_posture/` + `backend_api/` + `backend/`
+> (see `README.md` and `ROADMAP.md`).
+
 ---
 
 ## Section 1: Current Architecture

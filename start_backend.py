@@ -1,7 +1,8 @@
 """Start uvicorn backend and keep it running in background."""
 import subprocess, sys, time, os
+from pathlib import Path
 
-os.chdir("C:/GGS_intership/posture_analysis/backend_api")
+os.chdir(str(Path(__file__).resolve().parent / "backend_api"))
 proc = subprocess.Popen(
     [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"],
     stdout=subprocess.DEVNULL,

@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 """Inspect ExportsCenter rendered DOM — alignment + JSON export check."""
 import sys, os, json
-sys.path.insert(0, "C:/GGS_intership/posture_analysis/backend_api")
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT / "backend_api"))
 os.environ["PYTHONIOENCODING"] = "utf-8"
 
 from playwright.sync_api import sync_playwright
@@ -40,12 +43,12 @@ with sync_playwright() as p:
             break
     else:
         print("NO EXPORT BUTTON FOUND")
-        page.screenshot(path="C:\\GGS_intership\\posture_analysis\\no_export_btn.png")
+        page.screenshot(path=str(ROOT / "no_export_btn.png"))
         browser.close()
         exit(1)
 
     page.wait_for_timeout(1500)
-    page.screenshot(path="C:\\GGS_intership\\posture_analysis\\exports_modal.png")
+    page.screenshot(path=str(ROOT / "exports_modal.png"))
 
     # ---- Inspect buttons ----
     btns = page.locator(".fixed.inset-0.z-50 button.w-full")

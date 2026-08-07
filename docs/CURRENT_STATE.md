@@ -78,7 +78,7 @@ This is a legitimate architectural choice, not accidental duplication:
  
 > **`backend/` is the product. `backend_api/` is how the product talks to a browser.**
  
-`frontend/app.py` (the Streamlit app) is a separate, third thing — an internal validation tool only, not part of the product architecture, and out of scope for modification per current project rules.
+`frontend/app.py` (the Streamlit app) was a separate, third thing — an internal validation tool only, not part of the product architecture, and out of scope for modification per current project rules. **Removed 2026-08** (it imported deleted pre-pivot modules); retained in git history.
  -------------------------------------------------------------------------------------------------------
 
 ## 1. Camera Acquisition
