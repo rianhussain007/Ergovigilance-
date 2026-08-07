@@ -46,6 +46,34 @@
       "version": "archived — superseded by rule-based feature scoring in backend/services/features.py",
       "runtime": "archived — NOT loaded by the running API",
       "notes": "Kept for provenance and A/B comparison; the live pipeline scores risk from biomechanical features, not this classifier."
+    },
+    {
+      "filename": "task_model_v2.pkl",
+      "sha256": "3db02ffed89f15bed44cb1ddda25e8085c69444d0e705371142cd65bd407ff65",
+      "size_bytes": 663025,
+      "format": "scikit-learn pickle (HistGradientBoosting)",
+      "purpose": "Task/activity classifier v2 — model-primary with Gaussian fallback (confidence-gated)",
+      "loaded_by": [
+        "backend/services/task_recognition.py (TaskRecognition → models/task_model_v2.pkl, lazy)"
+      ],
+      "source": "Trained in-repo (scripts/train_task_model_v2.py) on synthetic poses validated against the Gaussian scorer",
+      "version": "v2 (2026-08-07, Phase D)",
+      "runtime": "production — loaded lazily; missing/corrupt model falls back to the Gaussian scorer",
+      "notes": "19 feature columns (17 biomechanical + movement_velocity + wrist_movement_velocity). Confidence threshold 0.6."
+    },
+    {
+      "filename": "risk_calibration_model.pkl",
+      "sha256": "038e9443689dba37cd0c8ac0c8bc6c9c27b123a0366294743145654c74da5691",
+      "size_bytes": 284744,
+      "format": "scikit-learn pickle (HistGradientBoosting)",
+      "purpose": "REBA-informed risk band cross-check (LOW/MEDIUM/HIGH) — advisory overlay, does NOT replace rule-based risk",
+      "loaded_by": [
+        "backend/services/risk_calibration.py (predict_risk_band, lazy)"
+      ],
+      "source": "Trained in-repo (scripts/train_risk_calibration.py) on 30,698 REBA-labeled real-world poses (rebapose/COCO-derived)",
+      "version": "v1 (2026-08-07, Phase D)",
+      "runtime": "optional — advisory cross-check; rule-based risk_from_features stays authoritative",
+      "notes": "Holdout accuracy 91.8% on REBA band. See reports/risk_calibration_report.md for rule-vs-REBA agreement."
     }
   ],
   "policy": {

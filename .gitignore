@@ -2,6 +2,7 @@
 *.pyc
 .DS_Store
 data/raw/
+data/processed/
 *.jpg
 *.png
 .env
