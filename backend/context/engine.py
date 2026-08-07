@@ -28,6 +28,12 @@ _FEATURE_RULES: dict[str, tuple[float, float, bool]] = {
     "shoulder_symmetry":    (5.0, 15.0, False),
     "alignment_deviation":  (20.0, 50.0, False),
     "knee_angle":           (150.0, 100.0, True),
+    # Phase-A additions (2026-08)
+    "forward_head_posture": (10.0, 20.0, False),
+    "head_tilt_angle":      (10.0, 20.0, False),
+    "wrist_deviation_angle": (5.0, 15.0, False),
+    "stance_stability":     (0.7, 0.5, True),
+    "weight_shift_offset":  (8.0, 15.0, False),
 }
 
 
@@ -287,8 +293,8 @@ class ContextIntelligenceEngine:
         # 1 upper-body: 20.0
         # ≥2: 40.0
         # Group features into lower vs upper body
-        lower_body_features = {"trunk_flexion", "knee_angle"}  # Trunk uses hip landmarks, knee obviously lower
-        upper_body_features = {"neck_flexion", "left_shoulder_elev", "right_shoulder_elev", "shoulder_symmetry", "alignment_deviation"}
+        lower_body_features = {"trunk_flexion", "knee_angle", "stance_stability", "weight_shift_offset"}
+        upper_body_features = {"neck_flexion", "left_shoulder_elev", "right_shoulder_elev", "shoulder_symmetry", "alignment_deviation", "forward_head_posture", "head_tilt_angle", "wrist_deviation_angle"}
         unavailable_lower = len(all_unavailable & lower_body_features)
         unavailable_upper = len(all_unavailable & upper_body_features)
         total_unavailable = len(all_unavailable)

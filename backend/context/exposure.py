@@ -18,10 +18,16 @@ _EXPOSURE_THRESHOLDS = {
     "shoulder_symmetry": 5.0,
     "alignment_deviation": 10.0,
     "knee_angle": 150.0,  # inverted: below 150 is risky
+    # Phase-A additions (2026-08): head / wrist / stance exposure
+    "forward_head_posture": 10.0,
+    "head_tilt_angle": 10.0,
+    "wrist_deviation_angle": 5.0,
+    "stance_stability": 0.7,  # inverted: below 0.7 is risky
+    "weight_shift_offset": 8.0,
 }
 
 # Features where LOWER value means higher risk.
-_INVERTED_FEATURES = {"knee_angle"}
+_INVERTED_FEATURES = {"knee_angle", "stance_stability"}
 
 
 @dataclass
@@ -32,6 +38,11 @@ class ExposureVector:
     shoulder_elevation_seconds: float = 0.0
     knee_angle_seconds: float = 0.0
     alignment_seconds: float = 0.0
+    forward_head_seconds: float = 0.0
+    head_tilt_seconds: float = 0.0
+    wrist_deviation_seconds: float = 0.0
+    stance_seconds: float = 0.0
+    weight_shift_seconds: float = 0.0
     total_high_risk_seconds: float = 0.0
     peak_neck_flexion: float = 0.0
     peak_trunk_flexion: float = 0.0
@@ -69,6 +80,11 @@ class ExposureTracker:
         shoulder_sym = features.get("shoulder_symmetry", 0.0)
         alignment = features.get("alignment_deviation", 0.0)
         knee = features.get("knee_angle", 180.0)
+        fhp = features.get("forward_head_posture", 0.0)
+        head_tilt = features.get("head_tilt_angle", 0.0)
+        wrist_dev = features.get("wrist_deviation_angle", 0.0)
+        stance = features.get("stance_stability", 1.0)
+        weight_shift = features.get("weight_shift_offset", 0.0)
 
         # Track peaks
         if neck > self._exposure.peak_neck_flexion:
@@ -89,13 +105,25 @@ class ExposureTracker:
             self._exposure.knee_angle_seconds += delta_seconds
         if alignment > _EXPOSURE_THRESHOLDS["alignment_deviation"]:
             self._exposure.alignment_seconds += delta_seconds
+        # Phase-A exposure accumulation (NaN comparisons are False -> skipped)
+        if fhp > _EXPOSURE_THRESHOLDS["forward_head_posture"]:
+            self._exposure.forward_head_seconds += delta_seconds
+        if head_tilt > _EXPOSURE_THRESHOLDS["head_tilt_angle"]:
+            self._exposure.head_tilt_seconds += delta_seconds
+        if wrist_dev > _EXPOSURE_THRESHOLDS["wrist_deviation_angle"]:
+            self._exposure.wrist_deviation_seconds += delta_seconds
+        if stance < _EXPOSURE_THRESHOLDS["stance_stability"]:
+            self._exposure.stance_seconds += delta_seconds
+        if weight_shift > _EXPOSURE_THRESHOLDS["weight_shift_offset"]:
+            self._exposure.weight_shift_seconds += delta_seconds
 
         # Track total time with ANY high-risk feature
         has_high_risk = (
             neck > 30.0 or trunk > 60.0 or
             left_shoulder > 60.0 or right_shoulder > 60.0 or
             shoulder_sym > 15.0 or alignment > 25.0 or
-            knee < 100.0
+            knee < 100.0 or fhp > 20.0 or head_tilt > 20.0 or
+            wrist_dev > 15.0 or stance < 0.5 or weight_shift > 15.0
         )
         if has_high_risk:
             self._exposure.total_high_risk_seconds += delta_seconds
@@ -126,7 +154,12 @@ class ExposureTracker:
             self._exposure.trunk_flexion_seconds * 1.3 +
             self._exposure.shoulder_elevation_seconds * 1.2 +
             self._exposure.knee_angle_seconds * 1.0 +
-            self._exposure.alignment_seconds * 1.1
+            self._exposure.alignment_seconds * 1.1 +
+            self._exposure.forward_head_seconds * 1.0 +
+            self._exposure.head_tilt_seconds * 1.0 +
+            self._exposure.wrist_deviation_seconds * 1.2 +
+            self._exposure.stance_seconds * 1.0 +
+            self._exposure.weight_shift_seconds * 1.0
         )
         # Normalize: 300 seconds of weighted exposure = score 100
         return min(total / 300.0 * 100.0, 100.0)

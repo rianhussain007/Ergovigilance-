@@ -5,32 +5,16 @@ from typing import Dict, Iterable, Mapping, Sequence
 
 import numpy as np
 
-
-FEATURE_COLUMNS = [
-    "neck_flexion",
-    "trunk_flexion",
-    "left_shoulder_elev",
-    "right_shoulder_elev",
-    "shoulder_symmetry",
-    "alignment_deviation",
-    "knee_angle",
-    "elbow_flexion_angle",
-    "upper_arm_angle_from_vertical",
-]
+# Canonical definitions live in backend.core.constants.
+# Re-exported here for backward compatibility.
+from backend.core.constants import (  # noqa: F401
+    COCO_17,
+    FEATURE_COLUMNS,
+    FEATURE_THRESHOLDS,
+    MEDIAPIPE_33,
+)
 
 RISK_LEVELS = ["LOW", "MEDIUM", "HIGH"]
-
-FEATURE_THRESHOLDS = {
-    "neck_flexion": "LOW <= 10 deg, MEDIUM 10-30 deg, HIGH > 30 deg",
-    "trunk_flexion": "LOW <= 20 deg, MEDIUM 20-60 deg, HIGH > 60 deg",
-    "left_shoulder_elev": "LOW <= 30 deg, MEDIUM 30-60 deg, HIGH > 60 deg",
-    "right_shoulder_elev": "LOW <= 30 deg, MEDIUM 30-60 deg, HIGH > 60 deg",
-    "shoulder_symmetry": "LOW <= 5%, MEDIUM 5-15%, HIGH > 15%",
-    "alignment_deviation": "Lower is better; large horizontal ear-to-hip offset suggests alignment risk",
-    "knee_angle": "HIGH < 100 deg, MEDIUM 100-150 deg, LOW >= 150 deg",
-    "elbow_flexion_angle": "LOW >= 90 deg, MEDIUM 45-90 deg, HIGH < 45 deg",
-    "upper_arm_angle_from_vertical": "LOW <= 20 deg, MEDIUM 20-45 deg, HIGH > 45 deg",
-}
 
 FEATURE_DEPENDENCIES = {
     "neck_flexion": ["left_ear", "right_ear", "left_shoulder", "right_shoulder", "left_hip", "right_hip"],
@@ -42,43 +26,15 @@ FEATURE_DEPENDENCIES = {
     "knee_angle": ["left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle"],
     "elbow_flexion_angle": ["left_shoulder", "right_shoulder", "left_elbow", "right_elbow", "left_wrist", "right_wrist"],
     "upper_arm_angle_from_vertical": ["left_shoulder", "right_shoulder", "left_wrist", "right_wrist"],
-}
-
-
-MEDIAPIPE_33 = {
-    "nose": 0,
-    "left_ear": 7,
-    "right_ear": 8,
-    "left_shoulder": 11,
-    "right_shoulder": 12,
-    "left_elbow": 13,
-    "right_elbow": 14,
-    "left_wrist": 15,
-    "right_wrist": 16,
-    "left_hip": 23,
-    "right_hip": 24,
-    "left_knee": 25,
-    "right_knee": 26,
-    "left_ankle": 27,
-    "right_ankle": 28,
-}
-
-COCO_17 = {
-    "nose": 0,
-    "left_ear": 3,
-    "right_ear": 4,
-    "left_shoulder": 5,
-    "right_shoulder": 6,
-    "left_elbow": 7,
-    "right_elbow": 8,
-    "left_wrist": 9,
-    "right_wrist": 10,
-    "left_hip": 11,
-    "right_hip": 12,
-    "left_knee": 13,
-    "right_knee": 14,
-    "left_ankle": 15,
-    "right_ankle": 16,
+    # Phase-A additions (2026-08) — use nose, fingers, heels/feet
+    "forward_head_posture": ["left_ear", "right_ear", "left_shoulder", "right_shoulder", "nose"],
+    "head_tilt_angle": ["left_ear", "right_ear", "nose"],
+    "wrist_deviation_angle": ["left_elbow", "right_elbow", "left_wrist", "right_wrist", "left_index", "right_index"],
+    "stance_stability": ["left_hip", "right_hip", "left_ankle", "right_ankle"],
+    "weight_shift_offset": ["left_hip", "right_hip", "left_ankle", "right_ankle"],
+    "hand_reach_ratio": ["left_shoulder", "right_shoulder", "left_hip", "right_hip", "left_index", "right_index"],
+    "finger_spread_ratio": ["left_wrist", "right_wrist", "left_index", "right_index", "left_thumb", "right_thumb"],
+    "stance_width_ratio": ["left_hip", "right_hip", "left_ankle", "right_ankle"],
 }
 
 
@@ -115,7 +71,30 @@ def _safe_distance(a: Sequence[float], b: Sequence[float], default: float = 1.0)
 
 
 def _point(kps: np.ndarray, index_map: Mapping[str, int], name: str) -> np.ndarray:
-    return np.array(kps[index_map[name]][:2], dtype=float)
+    """Return the 2D point for a landmark.
+
+    Out-of-range indices (short/corrupt keypoint rows) yield a NaN point
+    instead of crashing; such features are marked unavailable upstream by
+    ``unavailable_features_from_keypoints`` and their NaN flows through as
+    "unknown" rather than a bogus number.
+    """
+    idx = index_map[name]
+    if idx >= len(kps):
+        return np.array([float("nan"), float("nan")])
+    return np.array(kps[idx][:2], dtype=float)
+
+
+def _safe_point(
+    kps: np.ndarray,
+    index_map: Mapping[str, int],
+    name: str,
+) -> np.ndarray | None:
+    """Return a 2D point for a landmark, or ``None`` when the landmark is not
+    in the index map (e.g. fingers/feet on COCO_17) or out of range."""
+    idx = index_map.get(name)
+    if idx is None or idx >= len(kps):
+        return None
+    return np.array(kps[idx][:2], dtype=float)
 
 
 def extract_features_from_keypoints(
@@ -199,12 +178,101 @@ def extract_features_from_keypoints(
     right_elbow_angle = angle_between_three_points(right_shoulder, right_elbow, right_wrist_pt)
     elbow_flexion_angle = (left_elbow_angle + right_elbow_angle) / 2.0
 
-    # Upper arm angle from vertical (vertical-up at shoulder, using wrist as arm direction)
+    # Upper arm angle from vertical (angle of the shoulder→wrist line away
+    # from vertical-DOWN — arms hanging at the sides = 0 deg, matching the
+    # RULA Table B upper-arm posture definition).
     vertical_up_left = np.array([left_shoulder[0], left_shoulder[1] - torso_len])
     vertical_up_right = np.array([right_shoulder[0], right_shoulder[1] - torso_len])
-    left_upper_arm = angle_between_three_points(vertical_up_left, left_shoulder, left_wrist_pt)
-    right_upper_arm = angle_between_three_points(vertical_up_right, right_shoulder, right_wrist_pt)
+    left_upper_arm = abs(180.0 - angle_between_three_points(vertical_up_left, left_shoulder, left_wrist_pt))
+    right_upper_arm = abs(180.0 - angle_between_three_points(vertical_up_right, right_shoulder, right_wrist_pt))
     upper_arm_angle_from_vertical = (left_upper_arm + right_upper_arm) / 2.0
+
+    # ── Phase-A additions: head / hand / stance ergonomics ─────────────
+    nose = _safe_point(kps, index_map, "nose")
+    left_index = _safe_point(kps, index_map, "left_index")
+    right_index = _safe_point(kps, index_map, "right_index")
+    left_thumb = _safe_point(kps, index_map, "left_thumb")
+    right_thumb = _safe_point(kps, index_map, "right_thumb")
+    left_ankle_pt = _safe_point(kps, index_map, "left_ankle")
+    right_ankle_pt = _safe_point(kps, index_map, "right_ankle")
+    left_hip_pt = _safe_point(kps, index_map, "left_hip")
+    right_hip_pt = _safe_point(kps, index_map, "right_hip")
+
+    # forward_head_posture: horizontal protrusion of the head (nose + ear-mid
+    # average as a head-centre proxy) ahead of the neck, in % of shoulder width.
+    head_refs = [ear]
+    if nose is not None and np.isfinite(nose).all():
+        head_refs.append(nose)
+    if head_refs:
+        head_centre_x = float(np.mean([p[0] for p in head_refs]))
+        forward_head_posture = abs(head_centre_x - neck[0]) / shoulder_width * 100.0
+    else:
+        forward_head_posture = float("nan")
+
+    # head_tilt_angle: deviation of the ear→nose vector from image vertical.
+    # A level head (nose straight above ear) yields 0 deg; 180-raw converts
+    # the at-ear angle to an off-vertical deviation.
+    if nose is not None and np.isfinite(nose).all() and np.isfinite(ear).all():
+        below = np.array([ear[0], ear[1] + 1.0])
+        raw_tilt = angle_between_three_points(below, ear, nose)
+        head_tilt_angle = abs(180.0 - raw_tilt) if raw_tilt == raw_tilt else float("nan")
+    else:
+        head_tilt_angle = float("nan")
+
+    # wrist_deviation_angle: how far the hand direction deviates from the
+    # forearm line at the wrist (RULA Table B). Straight = 0 deg.
+    def _wrist_dev(elbow_pt, wrist_pt, index_pt):
+        if elbow_pt is None or wrist_pt is None or index_pt is None:
+            return float("nan")
+        angle = angle_between_three_points(elbow_pt, wrist_pt, index_pt)
+        if angle != angle:
+            return float("nan")
+        return abs(180.0 - angle)
+
+    left_wrist_dev = _wrist_dev(left_elbow, left_wrist_pt, left_index)
+    right_wrist_dev = _wrist_dev(right_elbow, right_wrist_pt, right_index)
+    if left_wrist_dev == left_wrist_dev and right_wrist_dev == right_wrist_dev:
+        wrist_deviation_angle = (left_wrist_dev + right_wrist_dev) / 2.0
+    else:
+        wrist_deviation_angle = left_wrist_dev if left_wrist_dev == left_wrist_dev else right_wrist_dev
+
+    # stance features (heels/foot-index would refine these; ankles+hips are robust)
+    if left_ankle_pt is not None and right_ankle_pt is not None \
+            and left_hip_pt is not None and right_hip_pt is not None:
+        ankle_span = _safe_distance(left_ankle_pt, right_ankle_pt)
+        hip_span = _safe_distance(left_hip_pt, right_hip_pt)
+        stance_width_ratio = ankle_span / hip_span
+        stance_stability = min(stance_width_ratio, 1.0 / stance_width_ratio)
+        mid_ankle = _midpoint(left_ankle_pt, right_ankle_pt)
+        weight_shift_offset = abs(mid_ankle[0] - hip[0]) / torso_len * 100.0
+    else:
+        stance_width_ratio = float("nan")
+        stance_stability = float("nan")
+        weight_shift_offset = float("nan")
+
+    # hand_reach_ratio: how far the fingertips reach from the shoulders
+    # (task signal; feeds reaching/tool-use recognition).
+    reach_dists = []
+    if left_index is not None and np.isfinite(left_index).all():
+        reach_dists.append(_safe_distance(left_index, neck))
+    if right_index is not None and np.isfinite(right_index).all():
+        reach_dists.append(_safe_distance(right_index, neck))
+    hand_reach_ratio = float(np.mean(reach_dists)) / torso_len if reach_dists else float("nan")
+
+    # finger_spread_ratio: index-thumb spread relative to wrist-index length
+    # (gripping / tool-use proxy).
+    def _spread(wrist_pt, index_pt, thumb_pt):
+        if wrist_pt is None or index_pt is None or thumb_pt is None:
+            return float("nan")
+        hand_len = _safe_distance(wrist_pt, index_pt)
+        return _safe_distance(index_pt, thumb_pt, default=0.0) / hand_len
+
+    l_spread = _spread(left_wrist_pt, left_index, left_thumb)
+    r_spread = _spread(right_wrist_pt, right_index, right_thumb)
+    if l_spread == l_spread and r_spread == r_spread:
+        finger_spread_ratio = (l_spread + r_spread) / 2.0
+    else:
+        finger_spread_ratio = l_spread if l_spread == l_spread else r_spread
 
     # alignment_deviation should be NaN if any of its required landmarks are unavailable
     raw_alignment_deviation = alignment_deviation
@@ -221,6 +289,14 @@ def extract_features_from_keypoints(
         "knee_angle": knee_angle,
         "elbow_flexion_angle": elbow_flexion_angle,
         "upper_arm_angle_from_vertical": upper_arm_angle_from_vertical,
+        "forward_head_posture": forward_head_posture,
+        "head_tilt_angle": head_tilt_angle,
+        "wrist_deviation_angle": wrist_deviation_angle,
+        "stance_stability": stance_stability,
+        "weight_shift_offset": weight_shift_offset,
+        "hand_reach_ratio": hand_reach_ratio,
+        "finger_spread_ratio": finger_spread_ratio,
+        "stance_width_ratio": stance_width_ratio,
     }
 
     # For unavailable features, use NaN sentinel (not 0.0 which looks like "safe")
@@ -295,6 +371,11 @@ def risk_from_features(
     neck = _get("neck_flexion", 0.0, 10.0)
     trunk = _get("trunk_flexion", 0.0, 20.0)
     sym = _get("shoulder_symmetry", 0.0, 5.0)
+    fhp = _get("forward_head_posture", 0.0, 10.0)
+    head_tilt = _get("head_tilt_angle", 0.0, 10.0)
+    wrist_dev = _get("wrist_deviation_angle", 0.0, 5.0)
+    stance = _get("stance_stability", 1.0, 0.6)
+    weight_shift = _get("weight_shift_offset", 0.0, 5.0)
 
     if (
         neck > 30
@@ -302,6 +383,11 @@ def risk_from_features(
         or shoulder > 60
         or sym > 15
         or knee < 100
+        or fhp > 20
+        or head_tilt > 20
+        or wrist_dev > 15
+        or stance < 0.5
+        or weight_shift > 15
     ):
         return "HIGH"
     if (
@@ -310,13 +396,21 @@ def risk_from_features(
         or shoulder > 30
         or sym > 5
         or knee < 150
+        or fhp > 10
+        or head_tilt > 10
+        or wrist_dev > 5
+        or stance < 0.7
+        or weight_shift > 8
     ):
         return "MEDIUM"
 
     # If ANY lower-body feature was unavailable (NaN or explicitly marked), don't claim LOW —
     # we can't confirm safety without full visibility.
     nan_features = {name for name in FEATURE_COLUMNS if features.get(name, 0.0) != features.get(name, 0.0)}
-    lower_body_missing = (unavailable | nan_features) & {"trunk_flexion", "knee_angle", "neck_flexion"}
+    lower_body_missing = (unavailable | nan_features) & {
+        "trunk_flexion", "knee_angle", "neck_flexion",
+        "stance_stability", "weight_shift_offset",
+    }
     if lower_body_missing:
         return "MEDIUM"
 
@@ -331,6 +425,14 @@ def risk_breakdown(features: Mapping[str, float]) -> Dict[str, RiskBreakdown]:
             breakdown[name] = RiskBreakdown(level="UNKNOWN", color=(128, 128, 128))
             continue
 
+        # Inverted features: LOWER value = HIGHER risk (knee_angle, stance_stability)
+        inverted = name in {"knee_angle", "stance_stability"}
+        # Motion/reference signals are not posture-risk features — show LOW.
+        if name in {"movement_velocity", "wrist_movement_velocity", "hand_reach_ratio",
+                     "finger_spread_ratio", "stance_width_ratio"}:
+            breakdown[name] = RiskBreakdown(level="LOW", color=RISK_COLORS_BGR["LOW"])
+            continue
+
         if name == "shoulder_symmetry":
             high, medium = 15.0, 5.0
         elif "shoulder" in name:
@@ -341,10 +443,20 @@ def risk_breakdown(features: Mapping[str, float]) -> Dict[str, RiskBreakdown]:
             high, medium = 100.0, 150.0
         elif name == "alignment_deviation":
             high, medium = 50.0, 20.0
+        elif name == "forward_head_posture":
+            high, medium = 20.0, 10.0
+        elif name == "head_tilt_angle":
+            high, medium = 20.0, 10.0
+        elif name == "wrist_deviation_angle":
+            high, medium = 15.0, 5.0
+        elif name == "stance_stability":
+            high, medium = 0.5, 0.7
+        elif name == "weight_shift_offset":
+            high, medium = 15.0, 8.0
         else:
             high, medium = 30.0, 10.0
 
-        if name == "knee_angle":
+        if inverted:
             level = "HIGH" if value < high else "MEDIUM" if value < medium else "LOW"
         else:
             level = "HIGH" if value > high else "MEDIUM" if value > medium else "LOW"
@@ -377,6 +489,9 @@ def compute_rula_informed_score(
 
     neck = features.get("neck_flexion", 0.0)
     trunk = features.get("trunk_flexion", 0.0)
+    head_tilt = features.get("head_tilt_angle", 0.0)
+    wrist_dev = features.get("wrist_deviation_angle", 0.0)
+    stance = features.get("stance_stability", 1.0)
 
     # Conservative knee angle default (HIGH risk if knee_angle is unavailable:
     # Assume 90 degrees (which makes legs_b = 3, worst case)
@@ -384,7 +499,16 @@ def compute_rula_informed_score(
     # If knee_angle is NaN or unavailable, use 90 as conservative default:
     knee_val = knee if (knee == knee) else 90.0
 
+    # Newly added features may be NaN/partial — treat as neutral (no penalty)
+    # unless unavailable is explicitly reported, mirroring the wrist-default gap.
     is_partial = "knee_angle" in unavailable or (knee != knee)
+    if wrist_dev != wrist_dev or "wrist_deviation_angle" in unavailable:
+        is_partial = True
+        wrist_dev = 0.0
+    if head_tilt != head_tilt:
+        head_tilt = 0.0
+    if stance != stance:
+        stance = 1.0
 
     shoulder_l = features.get("left_shoulder_elev", 0.0)
     shoulder_r = features.get("right_shoulder_elev", 0.0)
@@ -395,8 +519,16 @@ def compute_rula_informed_score(
 
     # --- Table A: Neck / Trunk / Legs ---
     neck_b = _band(neck, [10, 20, 30])
+    # Head tilt off vertical adds to the neck posture band (looking down).
+    if head_tilt > 20:
+        neck_b = min(neck_b + 1, 4)
+    elif head_tilt > 10:
+        neck_b = min(neck_b + 1, 4) if neck_b >= 3 else neck_b
     trunk_b = _band(trunk, [20, 40, 60])
     legs_b = 1 if knee_val >= 150 else 2 if knee_val >= 100 else 3
+    # Unstable stance (narrow/wide base) adds to the legs posture band.
+    if stance < 0.5:
+        legs_b = min(legs_b + 1, 3)
     score_a_table = [
         [1, 2, 3, 4],
         [2, 3, 4, 5],
@@ -411,13 +543,17 @@ def compute_rula_informed_score(
     elbow_b_l = _band(elbow_l, [45, 90, 150])
     elbow_b_r = _band(elbow_r, [45, 90, 150])
     elbow_b = max(elbow_b_l, elbow_b_r)
+    # RULA Table B wrist deviation: 0 deg = neutral, <=15 deg = +1, >15 deg = +2.
+    wrist_bonus = 1 if wrist_dev > 5 else 0
+    if wrist_dev > 15:
+        wrist_bonus = 2
     score_b_table = [
         [1, 2, 3, 4],
         [2, 3, 4, 5],
         [3, 4, 5, 6],
     ]
     row_b = min(arm_b - 1, 2)
-    col_b = min(elbow_b - 1, 3)
+    col_b = min(elbow_b - 1 + wrist_bonus, 3)
     table_b = score_b_table[row_b][col_b]
 
     # --- Table C: Combined Score ---
@@ -470,6 +606,10 @@ def unavailable_features_from_keypoints(
     unavailable = []
     for feature, landmarks in FEATURE_DEPENDENCIES.items():
         for landmark in landmarks:
+            # Landmark not present in this index map (e.g. fingers/feet on COCO_17)
+            if landmark not in index_map:
+                unavailable.append(feature)
+                break
             idx = index_map[landmark]
             if idx >= len(kps):
                 unavailable.append(feature)

@@ -5,6 +5,7 @@ Extracted from scripts/live_demo.py to be shared by:
 - backend_api/app/services/live_monitor.py (FastAPI server)
 """
 
+import os
 import time
 
 import cv2
@@ -50,6 +51,11 @@ def _compute_lower_body_confidence(keypoints) -> float:
     return float(np.mean(vis_vals)) * 100 if vis_vals else 0.0
 
 
+# Feature keys that are pure motion signals — never smoothed (they ARE the
+# frame-to-frame delta).
+_UNSMOOTHED_FEATURES = {"movement_velocity", "wrist_movement_velocity"}
+
+
 class PoseEngine:
     """Reusable CV pipeline: frame -> MediaPipe -> features -> issues -> recs -> task."""
 
@@ -61,6 +67,14 @@ class PoseEngine:
         self._initialized = False
         self._prev_features: dict | None = None
         self._prev_timestamp: float = 0.0
+        self._smoothed_features: dict | None = None
+        # EMA weight for posture features (new sample share). Lower = smoother.
+        # Configurable via env so deployments can tune jitter vs. responsiveness.
+        try:
+            self._smooth_alpha = float(os.environ.get("ERGOVIGILANCE_FEATURE_SMOOTHING", "0.7"))
+        except (TypeError, ValueError):
+            self._smooth_alpha = 0.7
+        self._smooth_alpha = min(1.0, max(0.1, self._smooth_alpha))
 
     def initialize(self):
         options = vision.PoseLandmarkerOptions(
@@ -149,9 +163,17 @@ class PoseEngine:
             }
             self._prev_timestamp = current_time
 
+            # Phase B: EMA-smooth static posture features (kills jitter ->
+            # fewer false alerts). Motion signals and NaN pass through.
+            features = self._apply_smoothing(features)
+
             risk_level = risk_from_features(features, unavailable)
             confidence = _compute_confidence(landmarks)
             task_info = self.task_recognizer.detect_task(keypoints, features)
+        else:
+            # No person this frame: reset smoothing so a re-detection
+            # starts fresh instead of interpolating against a stale pose.
+            self._smoothed_features = None
 
         if person_detected:
             issues = detect_posture_issues(features)
@@ -172,8 +194,38 @@ class PoseEngine:
             lower_body_confidence=lb_conf,
         )
 
+    def _apply_smoothing(self, features: dict[str, float]) -> dict[str, float]:
+        """Exponentially smooth the static posture features in place.
+
+        Motion features (movement_velocity, wrist_movement_velocity) and NaN
+        (unavailable) values are passed through untouched. Smoothing state is
+        reset whenever a person is not detected, so a re-detection starts fresh
+        instead of interpolating against a stale pose.
+        """
+        if self._smoothed_features is None:
+            self._smoothed_features = dict(features)
+            return self._smoothed_features
+        alpha = self._smooth_alpha
+        for key in FEATURE_COLUMNS:
+            if key in _UNSMOOTHED_FEATURES:
+                continue
+            raw = features.get(key)
+            if raw is None:
+                continue  # missing key -> keep previous
+            if raw != raw:
+                # NaN this frame (landmark unavailable): propagate the NaN so
+                # downstream consumers (issues, task recognition) see the
+                # unavailable state instead of a stale high value that keeps
+                # firing false alerts.
+                self._smoothed_features[key] = float("nan")
+                continue
+            prev = self._smoothed_features.get(key)
+            self._smoothed_features[key] = round(alpha * raw + (1.0 - alpha) * (prev if prev is not None and prev == prev else raw), 4)
+        return self._smoothed_features
+
     def release(self):
         if self.pose_landmarker:
             self.pose_landmarker.close()
             self.pose_landmarker = None
         self._initialized = False
+        self._smoothed_features = None
