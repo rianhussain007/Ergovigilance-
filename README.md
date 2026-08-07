@@ -239,7 +239,7 @@ cd backend_api && pytest          # 23 tests, ~25 s
 pytest -m hardware                # opt-in hardware tests (real cameras, 30 s FPS benchmark)
 ```
 
-Hardware-gated tests (physical cameras / pose model) are marked `hardware` and excluded by default. The legacy engine-level scripts in `scripts/test_*.py` (context, alerts, history, recommendations, …) run standalone with `python scripts/test_<name>.py`; the 10 self-contained ones run in CI.
+Hardware-gated tests (physical cameras / pose model) are marked `hardware` and excluded by default. The engine-level scripts in `scripts/test_*.py` (context, alerts, history, recommendations, trend/safety/persistence, sprint integrations, …) run standalone with `python scripts/test_<name>.py` — the full 22-script suite runs in CI. `test_ai_assistant_live.py` is a browser E2E test that skips itself (exit 0) when the dev stack isn't running.
 
 Frontend validation (in `ui_posture/`): `npm run lint` (TypeScript) and `npm run build` (production bundle).
 
@@ -248,7 +248,7 @@ Frontend validation (in `ui_posture/`): `npm run lint` (TypeScript) and `npm run
 - **Frontend job**: `npm ci` → `npm run lint` → `npm run build` → `npm audit --omit=dev` (fails on known vulnerabilities).
 - **Backend job**: install `backend_api/requirements-dev.txt` → `python scripts/verify_models.py` (model checksums) → `pytest backend_api/tests -q` → 10 legacy unit scripts → `pip-audit -r backend_api/requirements.txt` (fails on known vulnerabilities).
 
-**Known-stale legacy scripts** (not in CI, tracked in git): `test_task_recognition`, `test_trend_analysis`, `test_safety_reporting`, `test_session_persistence` (module path drift), the sprint 12–16 integration scripts (reference a removed frontend mock file), and `test_ai_assistant_live` (needs a live Ollama). Fixing those is tracked as follow-up cleanup.
+All legacy scripts are green — the stale ones were repaired (module-path drift in `test_trend_analysis`/`test_safety_reporting`/`test_session_persistence` was rewritten against the current function APIs; sprint 12–16 now tolerate the removed `MockDashboardRepository.ts` and use repo-relative paths; `test_task_recognition`'s reaching case now feeds the motion signal the scorer uses; `test_ai_assistant_live` self-skips without a running stack).
 
 ---
 
