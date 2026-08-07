@@ -26,6 +26,10 @@ class Settings:
         "MOCK_DATA_DIR", "app/utils/mock_data"
     )
     AUTH_DB_PATH: str = os.getenv("AUTH_DB_PATH", "")
+    POSE_MODEL_PATH: str = os.getenv(
+        "POSE_MODEL_PATH",
+        os.path.join(os.path.dirname(__file__), "..", "..", "..", "models", "pose_landmarker_lite.task"),
+    )
 
 
 settings = Settings()

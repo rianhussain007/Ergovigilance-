@@ -10,6 +10,7 @@ import logging
 import math
 import os
 import subprocess
+import threading
 import time
 from contextlib import asynccontextmanager
 
@@ -24,6 +25,8 @@ from app.core.config import settings
 from app.core.logging import setup_logging
 from app.core.health import health_status
 from app.api.router import api_router
+from app.api.ops import router as ops_router
+from app.api.ops import http_metrics_middleware as metrics_middleware
 from app.api.websocket import router as ws_router
 from app.services.live_monitor import init_live_service
 from app.services.retention import run_retention
@@ -33,10 +36,7 @@ from backend.services.assistant import load_corpus
 setup_logging()
 logger = logging.getLogger(__name__)
 
-MODEL_PATH = os.environ.get(
-    "POSE_MODEL_PATH",
-    os.path.join(os.path.dirname(__file__), "..", "..", "models", "pose_landmarker_lite.task"),
-)
+MODEL_PATH = settings.POSE_MODEL_PATH
 SESSIONS_DIR = os.environ.get(
     "SESSIONS_DIR",
     os.path.join(os.path.dirname(__file__), "..", "..", "outputs", "sessions"),
@@ -101,7 +101,9 @@ async def lifespan(app: FastAPI):
         RETENTION_INTERVAL_HOURS,
     )
 
-    _ensure_ollama_running()
+    # Non-blocking startup: Ollama check has a network timeout and the corpus
+    # load can take seconds — neither should delay first request readiness.
+    threading.Thread(target=_ensure_ollama_running, daemon=True, name="ollama-watchdog").start()
 
     model_path = os.path.abspath(MODEL_PATH)
     if not os.path.exists(model_path):
@@ -110,20 +112,22 @@ async def lifespan(app: FastAPI):
         logger.info("Initializing LiveMonitoringService with model: %s", model_path)
         init_live_service(model_path, sessions_dir=os.path.abspath(SESSIONS_DIR))
 
-    logger.info("Loading AI Assistant knowledge corpus...")
-    try:
-        load_corpus()
-    except Exception as exc:
-        logger.warning("Assistant corpus load failed (non-fatal): %s", exc)
+    async def _load_corpus_async() -> None:
+        try:
+            await asyncio.to_thread(load_corpus)
+            logger.info("AI Assistant knowledge corpus loaded")
+        except Exception as exc:
+            logger.warning("Assistant corpus load failed (non-fatal): %s", exc)
 
-    logger.info("Initializing Playwright browser for PDF export...")
-    try:
-        from backend.services.report_pdf import init_browser
-        await init_browser()
-    except Exception as exc:
-        logger.warning("Playwright browser init failed (PDF export unavailable): %s", exc)
+    corpus_task = asyncio.create_task(_load_corpus_async())
+
+    # Playwright is intentionally NOT launched at startup: the browser is
+    # started lazily on first PDF export (see report_pdf._get_browser), so a
+    # slow/missing Chromium binary never blocks service readiness.
 
     yield
+
+    corpus_task.cancel()
 
     retention_task.cancel()
     try:
@@ -199,6 +203,12 @@ app.add_middleware(
 # --- Routers ---
 app.include_router(api_router)
 app.include_router(ws_router)
+
+# Operational endpoints at the root: /healthz, /readyz, /metrics
+app.include_router(ops_router)
+
+# --- Metrics middleware (counts every HTTP request) ---
+app.middleware("http")(metrics_middleware)
 
 
 # --- Health ---

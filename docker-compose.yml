@@ -21,6 +21,14 @@ services:
     volumes:
       - ergovigilance-db:/data
     restart: unless-stopped
+    # Liveness probe for orchestrators / docker compose ps (python, not curl,
+    # because the image is python:3.12-slim and ships no curl).
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   frontend:
     build:
@@ -30,7 +38,8 @@ services:
     ports:
       - "8080:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:
