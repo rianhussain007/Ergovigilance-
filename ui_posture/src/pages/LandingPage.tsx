@@ -119,7 +119,7 @@ export default function LandingPage() {
               }`}
             >
               <video
-                ref={(el) => (videoRefs.current[index] = el)}
+                ref={(el) => { videoRefs.current[index] = el; }}
                 autoPlay
                 muted
                 loop

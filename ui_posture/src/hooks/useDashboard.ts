@@ -86,7 +86,7 @@ export function useDashboard(): UseDashboardReturn {
         session: prev.session ? {
           ...prev.session,
           id: wsData.session_id ?? prev.session.id,
-          duration: wsData.task_duration_seconds ? String(Math.round(wsData.task_duration_seconds)) : prev.session.duration,
+          duration: wsData.task_duration_seconds ? Math.round(wsData.task_duration_seconds) : prev.session.duration,
           cameraStatus: wsData.camera_status ?? prev.session.cameraStatus,
         } : prev.session,
       };

@@ -71,7 +71,7 @@ export function useAlerts(): UseAlertsReturn {
     if (!wsAlerts) return;
     setAlerts((prev) => ({
       ...prev,
-      active: wsAlerts.alerts as AlertsResponse['active'],
+      active: wsAlerts.alerts as unknown as AlertsResponse['active'],
       summary: {
         ...prev.summary,
         active_count: wsAlerts.active_count,

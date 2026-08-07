@@ -66,7 +66,7 @@ function useWSConnection<T extends WSMessage>(
   const [data, setData] = useState<T['data'] | null>(null);
   const [status, setStatus] = useState<WSStatus>('disconnected');
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout>>();
+  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const retryCount = useRef(0);
   const everConnected = useRef(false);
 

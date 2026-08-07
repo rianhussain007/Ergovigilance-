@@ -195,6 +195,7 @@ export const scenarios: DemoScenario[] = [
         confidence: 96.5,
         currentTask: 'Data entry — Reports',
         workerStatus: 'active',
+        taskDurationSeconds: 45,
       },
       ergonomicFeatures: [
         { id: 'neck_flexion', name: 'Neck Flexion', value: 8, unit: '°', min: 0, max: 50, status: 'good' },
@@ -228,6 +229,7 @@ export const scenarios: DemoScenario[] = [
         { time: '10:30', value: 12 },
       ],
       trendAnalysis: { trend: 'improving', averageRisk: 11.3, sessionsAnalyzed: 42, improving: 28, stable: 12, deteriorating: 2 },
+      unavailableFeatures: [],
     },
     events: [
       { time: 0, description: 'Worker starts with good posture', delta: { contextAwareRisk: { exposureDuration: '0h 00m', fatigueLevel: 12, contextModifier: 5, contextConfidence: 92, finalContextRisk: 'low' } } },
@@ -310,6 +312,7 @@ export const scenarios: DemoScenario[] = [
         confidence: 94.2,
         currentTask: 'Assembly Line B — Component Fitting',
         workerStatus: 'active',
+        taskDurationSeconds: 360,
       },
       ergonomicFeatures: [
         { id: 'neck_flexion', name: 'Neck Flexion', value: 18, unit: '°', min: 0, max: 50, status: 'moderate' },
@@ -346,6 +349,7 @@ export const scenarios: DemoScenario[] = [
         { time: '08:30', value: 42 },
       ],
       trendAnalysis: { trend: 'stable', averageRisk: 34.2, sessionsAnalyzed: 128, improving: 45, stable: 62, deteriorating: 21 },
+      unavailableFeatures: [],
     },
     events: [
       { time: 0, description: 'Worker at moderate risk during assembly', delta: { alertEngine: { currentLevel: 'low', previousLevel: 'none', totalAlertCount: 1, lastAlertTime: 0, lastAlertMessage: 'Moderate neck flexion detected at shift start.', lastAlertExplanation: 'Baseline neck angle at 18° from looking down at assembly components.', notificationTarget: 'worker', history: [makeAlert('AL-AS-00', 0, 'low', 'Moderate neck flexion detected', 'Baseline neck angle at 18° from looking down at assembly components.', 'worker')] } } },
@@ -432,6 +436,7 @@ export const scenarios: DemoScenario[] = [
         confidence: 91.8,
         currentTask: 'Loading Dock — Pallet Stacking',
         workerStatus: 'active',
+        taskDurationSeconds: 150,
       },
       ergonomicFeatures: [
         { id: 'neck_flexion', name: 'Neck Flexion', value: 12, unit: '°', min: 0, max: 50, status: 'low' },
@@ -467,6 +472,7 @@ export const scenarios: DemoScenario[] = [
         { time: '09:00', value: 50 },
       ],
       trendAnalysis: { trend: 'deteriorating', averageRisk: 44.0, sessionsAnalyzed: 56, improving: 12, stable: 18, deteriorating: 26 },
+      unavailableFeatures: [],
     },
     events: [
       { time: 0, description: 'Worker lifting heavy pallets — high trunk flexion', delta: { alertEngine: { currentLevel: 'medium', previousLevel: 'none', totalAlertCount: 1, cooldownRemaining: 120, lastAlertTime: 0, lastAlertMessage: 'Deep trunk flexion (35°) detected during pallet lift.', lastAlertExplanation: 'Trunk flexion at 35° exceeds safe threshold. MEDIUM alert triggered.', notificationTarget: 'worker', history: [makeAlert('AL-WH-00', 0, 'medium', 'Deep trunk flexion detected', 'Trunk flexion at 35° exceeds safe threshold. MEDIUM alert triggered.', 'worker')] } } },
@@ -549,6 +555,7 @@ export const scenarios: DemoScenario[] = [
         confidence: 93.1,
         currentTask: 'CNC Machining — Quality Inspection',
         workerStatus: 'active',
+        taskDurationSeconds: 600,
       },
       ergonomicFeatures: [
         { id: 'neck_flexion', name: 'Neck Flexion', value: 20, unit: '°', min: 0, max: 50, status: 'moderate' },
@@ -582,6 +589,7 @@ export const scenarios: DemoScenario[] = [
         { time: '23:30', value: 34 },
       ],
       trendAnalysis: { trend: 'stable', averageRisk: 31.3, sessionsAnalyzed: 89, improving: 32, stable: 44, deteriorating: 13 },
+      unavailableFeatures: [],
     },
     events: [
       { time: 0, description: 'Operator inspecting machined parts — moderate neck strain', delta: { alertEngine: { currentLevel: 'low', previousLevel: 'none', totalAlertCount: 1, cooldownRemaining: 60, lastAlertTime: 0, lastAlertMessage: 'Sustained neck flexion (20°) detected at CNC machine.', lastAlertExplanation: 'Static standing posture with 20° neck flexion from looking down at control panel.', notificationTarget: 'worker', history: [makeAlert('AL-MC-00', 0, 'low', 'Sustained neck flexion detected', 'Static standing posture with 20° neck flexion from looking down at control panel.', 'worker')] } } },
@@ -662,6 +670,7 @@ export const scenarios: DemoScenario[] = [
         confidence: 95.0,
         currentTask: 'PCB Inspection — Visual Quality Check',
         workerStatus: 'active',
+        taskDurationSeconds: 240,
       },
       ergonomicFeatures: [
         { id: 'neck_flexion', name: 'Neck Flexion', value: 16, unit: '°', min: 0, max: 50, status: 'low' },
@@ -695,6 +704,7 @@ export const scenarios: DemoScenario[] = [
         { time: '09:30', value: 32 },
       ],
       trendAnalysis: { trend: 'stable', averageRisk: 29.0, sessionsAnalyzed: 73, improving: 25, stable: 38, deteriorating: 10 },
+      unavailableFeatures: [],
     },
     events: [
       { time: 0, description: 'Inspector examining PCBs — moderate trunk lean', delta: { alertEngine: { currentLevel: 'low', previousLevel: 'none', totalAlertCount: 1, cooldownRemaining: 60, lastAlertTime: 0, lastAlertMessage: 'Moderate trunk flexion (24°) from leaning over inspection table.', lastAlertExplanation: 'Inspection modifier (+5) applied. Duration penalty will escalate with prolonged exposure.', notificationTarget: 'worker', history: [makeAlert('AL-IN-00', 0, 'low', 'Moderate trunk flexion detected', 'Leaning over inspection table — trunk at 24°. LOW alert.', 'worker')] } } },
