@@ -62,6 +62,44 @@ export default function LiveMonitoring() {
     }
   }, [addToast]);
 
+  const handleLogObservation = useCallback(async (note: string, category: string) => {
+    try {
+      const { apiFetch } = await import('@/src/services/apiClient');
+      const res = await apiFetch('/api/session/observation', {
+        method: 'POST',
+        body: JSON.stringify({ note, category }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        addToast('success', 'Observation logged', `${data.observation_id} recorded to ${data.session_id}`);
+      } else {
+        const err = await res.json().catch(() => ({ detail: 'Failed to log' }));
+        addToast('error', 'Log failed', err.detail || 'Could not record observation.');
+      }
+    } catch {
+      addToast('error', 'Log failed', 'Network error while recording observation.');
+    }
+  }, [addToast]);
+
+  const handleRiskOverride = useCallback(async (level: string, reason: string) => {
+    try {
+      const { apiFetch } = await import('@/src/services/apiClient');
+      const res = await apiFetch('/api/session/override', {
+        method: 'POST',
+        body: JSON.stringify({ risk_level: level, reason }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        addToast('info', 'Risk overridden', `${data.previous_level} → ${data.new_level}`);
+      } else {
+        const err = await res.json().catch(() => ({ detail: 'Failed' }));
+        addToast('error', 'Override failed', err.detail || 'Could not apply override.');
+      }
+    } catch {
+      addToast('error', 'Override failed', 'Network error while applying override.');
+    }
+  }, [addToast]);
+
   useEffect(() => {
     if (liveTimeline.length > 0) {
       setSelectedTime(liveTimeline[liveTimeline.length - 1].timestamp);
@@ -151,7 +189,8 @@ export default function LiveMonitoring() {
             unavailableFeatures={unavailableFeatures}
             approximateFeatures={approximateFeatures}
             onCapture={handleSidebarCapture}
-            onPlaceholder={(label) => addToast('info', `${label} coming soon`, 'This control is a visual placeholder until backend support is connected.')}
+            onLog={handleLogObservation}
+            onOverride={handleRiskOverride}
           />
         </div>
         {liveTimeline.length > 0 && (
@@ -322,7 +361,8 @@ function TelemetrySidebar({
   unavailableFeatures,
   approximateFeatures,
   onCapture,
-  onPlaceholder,
+  onLog,
+  onOverride,
 }: {
   session: SessionInfo;
   liveStatus: LiveStatus;
@@ -332,7 +372,8 @@ function TelemetrySidebar({
   unavailableFeatures: string[];
   approximateFeatures: string[];
   onCapture?: () => void;
-  onPlaceholder: (label: string) => void;
+  onLog?: (note: string, category: string) => void;
+  onOverride?: (level: string, reason: string) => void;
 }) {
   const primaryIssue = issues[0];
   const guidanceText = recommendations.worker || primaryIssue?.detail || 'No active guidance from the live pipeline.';
@@ -371,9 +412,9 @@ function TelemetrySidebar({
       </div>
 
       <div className="grid grid-cols-3 gap-xs">
-        <PlaceholderAction icon={ShieldAlert} label="Override" onClick={() => onPlaceholder('Manual override')} />
+        <OverrideButton onOverride={onOverride} currentLevel={liveStatus.riskLevel} />
         <PlaceholderAction icon={Camera} label="Capture" onClick={onCapture} real />
-        <PlaceholderAction icon={FileText} label="Log" onClick={() => onPlaceholder('Log')} />
+        <LogButton onLog={onLog} workerName={session.workerName} />
       </div>
 
       <div className="grid grid-cols-3 gap-sm pt-sm border-t border-white/10">
@@ -475,6 +516,120 @@ function PlaceholderAction({ icon: Icon, label, onClick, real }: { icon: typeof 
       {label}
       {!real && <span className="absolute -top-1 -right-1 text-[8px] leading-none text-on-surface-variant/60">*</span>}
     </button>
+  );
+}
+
+function LogButton({ onLog, workerName }: { onLog?: (note: string, category: string) => void; workerName: string }) {
+  const [open, setOpen] = useState(false);
+  const [note, setNote] = useState('');
+  const [category, setCategory] = useState('general');
+
+  const handleSubmit = () => {
+    if (!note.trim()) return;
+    onLog?.(note.trim(), category);
+    setNote('');
+    setCategory('general');
+    setOpen(false);
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="relative flex items-center justify-center gap-xs rounded border border-white/10 bg-white/[0.03] px-sm py-sm text-[10px] font-medium text-on-surface-variant hover:border-cyan-400/25 hover:text-cyan-100 transition-colors"
+        title="Log an observation"
+      >
+        <FileText className="h-3.5 w-3.5" />
+        Log
+      </button>
+    );
+  }
+
+  return (
+    <div className="col-span-3 rounded border border-cyan-400/30 bg-black/60 p-sm space-y-xs">
+      <select
+        value={category}
+        onChange={(e) => setCategory(e.target.value)}
+        className="w-full bg-surface-container-high border border-outline-variant rounded px-sm py-1 text-[10px] text-on-surface"
+      >
+        <option value="general">General</option>
+        <option value="safety">Safety</option>
+        <option value="posture">Posture</option>
+        <option value="environment">Environment</option>
+      </select>
+      <textarea
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="Observation note..."
+        rows={2}
+        className="w-full bg-surface-container-high border border-outline-variant rounded px-sm py-1 text-[10px] text-on-surface placeholder:text-on-surface-variant resize-none"
+        autoFocus
+      />
+      <div className="flex gap-xs">
+        <button type="button" onClick={handleSubmit} className="flex-1 rounded bg-cyan-500/20 border border-cyan-400/40 text-cyan-200 text-[10px] py-1 hover:bg-cyan-500/30">
+          Save
+        </button>
+        <button type="button" onClick={() => { setOpen(false); setNote(''); }} className="flex-1 rounded border border-white/10 text-on-surface-variant text-[10px] py-1 hover:text-cyan-100">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function OverrideButton({ onOverride, currentLevel }: { onOverride?: (level: string, reason: string) => void; currentLevel: string }) {
+  const [open, setOpen] = useState(false);
+  const [level, setLevel] = useState(currentLevel.toUpperCase());
+  const [reason, setReason] = useState('');
+
+  const handleSubmit = () => {
+    onOverride?.(level, reason.trim());
+    setReason('');
+    setOpen(false);
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="relative flex items-center justify-center gap-xs rounded border border-white/10 bg-white/[0.03] px-sm py-sm text-[10px] font-medium text-on-surface-variant hover:border-orange-400/40 hover:text-orange-300 transition-colors"
+        title="Manually override risk level"
+      >
+        <ShieldAlert className="h-3.5 w-3.5" />
+        Override
+      </button>
+    );
+  }
+
+  return (
+    <div className="col-span-3 rounded border border-orange-400/30 bg-black/60 p-sm space-y-xs">
+      <select
+        value={level}
+        onChange={(e) => setLevel(e.target.value)}
+        className="w-full bg-surface-container-high border border-outline-variant rounded px-sm py-1 text-[10px] text-on-surface"
+      >
+        <option value="LOW">LOW</option>
+        <option value="MEDIUM">MEDIUM</option>
+        <option value="HIGH">HIGH</option>
+      </select>
+      <input
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        placeholder="Reason (optional)"
+        className="w-full bg-surface-container-high border border-outline-variant rounded px-sm py-1 text-[10px] text-on-surface placeholder:text-on-surface-variant"
+        autoFocus
+      />
+      <div className="flex gap-xs">
+        <button type="button" onClick={handleSubmit} className="flex-1 rounded bg-orange-500/20 border border-orange-400/40 text-orange-300 text-[10px] py-1 hover:bg-orange-500/30">
+          Apply
+        </button>
+        <button type="button" onClick={() => { setOpen(false); setReason(''); }} className="flex-1 rounded border border-white/10 text-on-surface-variant text-[10px] py-1 hover:text-cyan-100">
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }
 

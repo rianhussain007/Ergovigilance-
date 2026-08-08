@@ -349,8 +349,6 @@ function ReportView({ detail, onBack, onPrint, addToast }: { detail: SessionDeta
     URL.revokeObjectURL(url);
   };
 
-  const PLACEHOLDER_MSG = 'This report requires data across multiple sessions — coming in a future update.';
-
   const ts = detail.session_timestamp || '';
   const dateDisplay = (() => {
     if (!ts) return '—';

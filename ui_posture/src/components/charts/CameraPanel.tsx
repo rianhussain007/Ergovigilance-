@@ -16,43 +16,66 @@ export function CameraPanel({ status, workerName, task, onCaptureReady }: Camera
   const [fps, setFps] = useState(29.97);
   const [streamLoading, setStreamLoading] = useState(true);
   const [streamError, setStreamError] = useState(false);
+  const [streamReady, setStreamReady] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
+  const [retryKey, setRetryKey] = useState(0);
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const stallTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const frameCountRef = useRef<number>(0);
   const { addToast } = useToast();
   const isActive = status === 'active';
 
+  // FPS counter (shown while session is active)
   useEffect(() => {
     if (!isActive) return;
     const interval = setInterval(() => setFps(29 + Math.random() * 2), 2000);
     return () => clearInterval(interval);
   }, [isActive]);
 
+  // Reset stream state when session starts/stops or overlay changes.
   useEffect(() => {
     setStreamLoading(true);
     setStreamError(false);
+    setStreamReady(false);
+    frameCountRef.current = 0;
+    setRetryKey((k) => k + 1);
   }, [isActive, showOverlay]);
 
+  // Retry when stream breaks (with exponential back-off, max 5 retries).
   useEffect(() => {
-    if (!isActive || streamError) return;
-    let checkId: ReturnType<typeof setInterval>;
-    let attempts = 0;
-    const check = () => {
-      const img = imgRef.current;
-      attempts++;
-      if (img && (img.naturalWidth > 0 || img.complete)) {
-        setStreamLoading(false);
-        clearInterval(checkId);
-      }
-      if (attempts > 50) {
-        setStreamLoading(false);
-        clearInterval(checkId);
-      }
-    };
-    checkId = setInterval(check, 200);
-    return () => clearInterval(checkId);
-  }, [isActive, streamError]);
+    if (!streamError || !isActive) return;
+    const attempt = retryKey;
+    if (attempt > 5) {
+      addToast('error', 'Camera feed lost', 'Could not reconnect after several attempts. Click the retry button or refresh the page.');
+      return;
+    }
+    const delay = Math.min(1000 * 2 ** Math.min(attempt, 4), 16000);
+    retryTimerRef.current = setTimeout(() => {
+      setStreamError(false);
+      setStreamLoading(true);
+      setRetryKey((k) => k + 1);
+    }, delay);
+    return () => clearTimeout(retryTimerRef.current);
+  }, [streamError, isActive, retryKey]);
+
+  // Stall detection: if the img fires onLoad but no new frames arrive for 4s,
+  // the MJPEG stream has stalled — force a reconnect.
+  useEffect(() => {
+    if (!streamReady || !isActive) {
+      clearTimeout(stallTimerRef.current);
+      return;
+    }
+    stallTimerRef.current = setTimeout(() => {
+      // Stream loaded but hasn't updated in 4 s — treat as stalled.
+      setStreamReady(false);
+      setStreamError(true);
+      setStreamLoading(true);
+    }, 4000);
+    return () => clearTimeout(stallTimerRef.current);
+  }, [streamReady, isActive, retryKey]);
 
   useEffect(() => {
     const onFsChange = () => setFullscreen(!!document.fullscreenElement);
@@ -99,12 +122,20 @@ export function CameraPanel({ status, workerName, task, onCaptureReady }: Camera
   }, [handleCapture, onCaptureReady]);
 
   const showStream = isActive && !streamError;
-  const showPlaceholder = !isActive || streamError || streamLoading;
+  const showPlaceholder = !isActive || streamError || (!streamReady && streamLoading);
+
+  const handleManualRetry = useCallback(() => {
+    setStreamError(false);
+    setStreamLoading(true);
+    setStreamReady(false);
+    frameCountRef.current = 0;
+    setRetryKey((k) => k + 1);
+  }, []);
   const streamToken = getStoredToken();
-  const overlayParam = showOverlay ? '' : '&overlay=false';
+  const overlayParam = showOverlay ? 'overlay=true' : 'overlay=false';
   const streamSrc = streamToken
-    ? `/video/feed?token=${encodeURIComponent(streamToken)}${overlayParam}`
-    : `/video/feed${overlayParam ? '?overlay=false' : ''}`;
+    ? `/video/feed?${overlayParam}&token=${encodeURIComponent(streamToken)}`
+    : `/video/feed?${overlayParam}`;
 
   const toggleOverlay = useCallback(() => {
     setShowOverlay((prev) => !prev);
@@ -159,18 +190,47 @@ export function CameraPanel({ status, workerName, task, onCaptureReady }: Camera
         {showStream && (
           <img
             ref={imgRef}
+            key={retryKey}
             src={streamSrc}
             alt="Live camera feed"
             className="absolute inset-0 w-full h-full object-cover contrast-[1.08] saturate-[0.95]"
-            onError={() => { setStreamError(true); setStreamLoading(false); }}
+            onLoad={() => {
+              frameCountRef.current += 1;
+              setStreamLoading(false);
+              setStreamReady(true);
+              setStreamError(false);
+              // Reset stall timer on each successful load
+              clearTimeout(stallTimerRef.current);
+              stallTimerRef.current = setTimeout(() => {
+                setStreamReady(false);
+                setStreamError(true);
+                setStreamLoading(true);
+              }, 4000);
+            }}
+            onError={() => {
+              // Only set error if this is a real failure (not a stale 503 from
+              // before the session started). The retry logic will handle recovery.
+              setStreamError(true);
+              setStreamLoading(false);
+            }}
           />
         )}
-        <div className="absolute inset-x-0 bottom-0 z-10 h-24 pointer-events-none bg-gradient-to-t from-black/70 via-black/15 to-transparent" />
-        {showPlaceholder && (
+        <div className="absolute inset-x-0 bottom-0 z-10 h-24 pointer-events-none bg-gradient-to-t from-black/70 via-black/15 to-transparent" />          {showPlaceholder && (
           <div className="relative z-10 flex flex-col items-center gap-md text-on-surface-variant">
             <VideoOff className="w-12 h-12 opacity-40" />
             {isActive ? (
-              <span className="text-body-sm">Waiting for camera...</span>
+              <>
+                <span className="text-body-sm">Waiting for camera...</span>
+                {retryKey > 0 && retryKey <= 5 && (
+                  <button
+                    type="button"
+                    onClick={handleManualRetry}
+                    className="text-[11px] text-cyan-300 underline underline-offset-2 hover:text-cyan-100"
+                  >
+                    Retry connection
+                  </button>
+                )}
+              </>
             ) : (
               <span className="text-body-sm">Camera Offline</span>
             )}

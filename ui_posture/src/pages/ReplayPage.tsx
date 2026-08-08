@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router';
-import { AlertTriangle, Sparkles } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { getRecordingSummary, getRecordingTimeline, getRecordingVideoUrl } from '@/src/services/dashboardService';
 import type { RecordingSummary, TimelineEntry } from '@/src/types/api';
 import { EmptyState, ErrorCard, LoadingCard } from '@/src/components/common';
@@ -226,15 +226,46 @@ export default function ReplayPage() {
             </div>
           </section>
 
-          <section className="rounded-lg border border-dashed border-outline-variant bg-surface-container p-md">
-            <div className="flex items-start gap-md">
-              <Sparkles className="mt-0.5 h-5 w-5 shrink-0 text-on-surface-variant" />
-              <div>
-                <p className="font-label-caps text-[10px] text-on-surface-variant">Coming Soon</p>
-                <p className="mt-sm text-body-sm text-on-surface-variant">
-                  Supervisor comments, AI coaching, replay comparison, frame annotation, collaborative review, and clip export.
-                </p>
-              </div>
+          <SessionNotes sessionId={sessionId} />
+
+          <section className="rounded-lg border border-outline-variant bg-surface-container-low p-md">
+            <h3 className="text-body-sm font-bold text-on-surface mb-sm">Quick Export</h3>
+            <div className="space-y-xs">
+              <button
+                onClick={() => {
+                  const data = { summary, timeline };
+                  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `session-${sessionId}-full.json`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="w-full text-left rounded border border-outline-variant/60 bg-surface-container p-sm hover:bg-surface-container-highest transition-colors text-body-sm text-on-surface-variant"
+              >
+                Export session data (JSON)
+              </button>
+              <button
+                onClick={() => {
+                  if (!timeline.length) return;
+                  const csv = ['timestamp,frame,risk_score,risk_level,neck_flexion,trunk_flexion,knee_angle'];
+                  for (const e of timeline) {
+                    csv.push([e.timestamp, e.frame_number, e.risk_score, e.risk_level,
+                      e.features.neck_flexion ?? '', e.features.trunk_flexion ?? '', e.features.knee_angle ?? ''].join(','));
+                  }
+                  const blob = new Blob([csv.join('\n')], { type: 'text/csv' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `session-${sessionId}-timeline.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+                className="w-full text-left rounded border border-outline-variant/60 bg-surface-container p-sm hover:bg-surface-container-highest transition-colors text-body-sm text-on-surface-variant"
+              >
+                Export timeline (CSV)
+              </button>
             </div>
           </section>
         </aside>
@@ -305,4 +336,45 @@ function SessionSummaryCard({ summary }: { summary: RecordingSummary }) {
 
 function riskColor(level: string) {
   return level === 'HIGH' ? '#ef4444' : level === 'MEDIUM' ? '#f59e0b' : '#22c55e';
+}
+
+function SessionNotes({ sessionId }: { sessionId: string }) {
+  const [notes, setNotes] = useState<string[]>([]);
+  const [input, setInput] = useState('');
+
+  const addNote = () => {
+    if (!input.trim()) return;
+    setNotes((prev) => [...prev, input.trim()]);
+    setInput('');
+  };
+
+  return (
+    <section className="rounded-lg border border-outline-variant bg-surface-container-low p-md">
+      <h3 className="text-body-sm font-bold text-on-surface mb-sm">Session Notes</h3>
+      {notes.length > 0 && (
+        <div className="space-y-xs mb-sm max-h-32 overflow-y-auto">
+          {notes.map((n, i) => (
+            <div key={i} className="text-[11px] text-on-surface-variant bg-surface-container rounded px-sm py-1 border border-outline-variant/50">
+              {n}
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="flex gap-xs">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && addNote()}
+          placeholder="Add a note about this session..."
+          className="flex-1 bg-surface-container-high border border-outline-variant rounded px-sm py-1 text-[11px] text-on-surface placeholder:text-on-surface-variant outline-none focus:border-primary/50"
+        />
+        <button
+          onClick={addNote}
+          className="px-sm py-1 rounded bg-primary/10 border border-primary/30 text-primary text-[10px] hover:bg-primary/20"
+        >
+          Add
+        </button>
+      </div>
+    </section>
+  );
 }
