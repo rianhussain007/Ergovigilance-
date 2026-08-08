@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, Eye, EyeOff, FileVideo, Sparkles, UploadCloud } from "lucide-react";
-import { analyzeVideo } from "@/src/services/dashboardService";
+import { startVideoAnalysis, getVideoAnalysisJob } from "@/src/services/dashboardService";
 import type { VideoAnalysisResponse, VideoAnalysisFrame } from "@/src/types/api";
 
 const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
@@ -235,6 +235,8 @@ export default function VideoReviewPage() {
   const [result, setResult] = useState<VideoAnalysisResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "processing" | "complete">("idle");
+  const [progress, setProgress] = useState(0);
+  const analysisCancelledRef = useRef(false);
   const [showOverlay, setShowOverlay] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
@@ -351,6 +353,7 @@ export default function VideoReviewPage() {
   }, [handleTimeUpdate]);
 
   const chooseFile = (file: File | null) => {
+    analysisCancelledRef.current = true;
     setError(null);
     setResult(null);
     setStatus("idle");
@@ -370,16 +373,48 @@ export default function VideoReviewPage() {
     setVideoUrl(URL.createObjectURL(file));
   };
 
+  // Cancel any in-flight analysis when the user picks a new file or the page
+  // unmounts (prevents stale poll loops writing state after unmount).
+  useEffect(() => {
+    return () => { analysisCancelledRef.current = true; };
+  }, []);
+
   const handleAnalyze = async () => {
     if (!selectedFile || status === "processing") return;
+    analysisCancelledRef.current = false;
     setError(null);
     setResult(null);
     setStatus("processing");
+    setProgress(0);
     try {
-      const data = await analyzeVideo(selectedFile);
-      setResult(data);
-      setStatus("complete");
+      const { job_id } = await startVideoAnalysis(selectedFile);
+      // Poll the background job until it completes (the request no longer
+      // blocks for the full pose/context processing).
+      for (let attempt = 0; attempt < 600; attempt++) {
+        await new Promise((r) => setTimeout(r, 1000));
+        if (analysisCancelledRef.current) return;
+        const job = await getVideoAnalysisJob(job_id);
+        if (analysisCancelledRef.current) return;
+        if (job.progress && typeof job.progress.percent === "number") {
+          setProgress(Math.min(99, job.progress.percent));
+        }
+        if (job.status === "complete") {
+          setResult(job.result);
+          setProgress(100);
+          setStatus("complete");
+          return;
+        }
+        if (job.status === "error") {
+          setStatus("idle");
+          setError(job.error || "Video analysis failed");
+          return;
+        }
+      }
+      if (analysisCancelledRef.current) return;
+      setStatus("idle");
+      setError("Analysis timed out. Please try again.");
     } catch (err) {
+      if (analysisCancelledRef.current) return;
       setStatus("idle");
       setError(err instanceof Error ? err.message : "Video analysis failed");
     }
@@ -453,11 +488,20 @@ export default function VideoReviewPage() {
           )}
 
           {status === "processing" && (
-            <div className="mt-lg rounded-lg border border-primary/30 bg-primary/10 p-md">
+            <div className="mt-lg rounded-lg border border-primary/30 bg-primary/10 p-md space-y-sm">
               <div className="flex items-center gap-sm text-body-sm text-primary">
                 <div className="h-4 w-4 animate-pulse rounded-full bg-primary" />
-                Processing sampled frames through PoseEngine + Context Intelligence.
+                Analyzing video in the background — {progress.toFixed(0)}%
               </div>
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-container-higher">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-500"
+                  style={{ width: `${Math.max(4, Math.min(100, progress))}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-on-surface-variant">
+                Sampled frames through PoseEngine + Context Intelligence. You can keep browsing — results appear here when ready.
+              </p>
             </div>
           )}
 

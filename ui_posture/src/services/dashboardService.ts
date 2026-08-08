@@ -1,6 +1,6 @@
 import type { DashboardRepository } from '@/src/repositories/DashboardRepository';
 import { ApiDashboardRepository } from '@/src/repositories/ApiDashboardRepository';
-import type { AdminDashboardSummary, DashboardResponse, SessionRecord, SupervisorDashboardSummary, ContextSnapshot, AlertsResponse, RecommendationsBundleResponse, HistoryResponse, SessionDetail, ReportRecord, VideoAnalysisResponse, RiskTrendResponse, SafetyReportResponse, AnalyticsResponse, AuditEntry, PaginatedSessionsResponse } from '@/src/types/api';
+import type { AdminDashboardSummary, DashboardResponse, SessionRecord, SupervisorDashboardSummary, ContextSnapshot, AlertsResponse, RecommendationsBundleResponse, HistoryResponse, SessionDetail, ReportRecord, RiskTrendResponse, SafetyReportResponse, AnalyticsResponse, AuditEntry, PaginatedSessionsResponse } from '@/src/types/api';
 import { apiFetch } from '@/src/services/apiClient';
 import { getStoredToken } from '@/src/auth/AuthContext';
 
@@ -33,7 +33,7 @@ export async function getAdminDashboardSummary(): Promise<AdminDashboardSummary>
   return res.json();
 }
 
-export async function analyzeVideo(file: File): Promise<VideoAnalysisResponse> {
+export async function startVideoAnalysis(file: File): Promise<import('@/src/types/api').VideoAnalysisJobStart> {
   const body = new FormData();
   body.append('file', file);
   const res = await apiFetch('/api/video/analyze', {
@@ -43,6 +43,18 @@ export async function analyzeVideo(file: File): Promise<VideoAnalysisResponse> {
   if (!res.ok) {
     const payload = await res.json().catch(() => ({ detail: `Video analysis failed: ${res.status}` }));
     throw new Error(payload.detail || `Video analysis failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function getVideoAnalysisJob(jobId: string): Promise<import('@/src/types/api').VideoAnalysisJob> {
+  const res = await apiFetch(`/api/video/analyze/${encodeURIComponent(jobId)}`);
+  if (res.status === 404) {
+    throw new Error('Analysis job expired. Please re-upload the video.');
+  }
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({ detail: `Job fetch failed: ${res.status}` }));
+    throw new Error(payload.detail || `Job fetch failed: ${res.status}`);
   }
   return res.json();
 }

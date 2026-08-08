@@ -1,15 +1,26 @@
-"""Uploaded video analysis endpoints."""
+"""Uploaded video analysis endpoints — background job queue.
+
+``POST /video/analyze`` now accepts the upload, persists it to a temp file,
+queues a background analysis job and returns immediately with a ``job_id``.
+The heavy pose/context work runs in a daemon thread so the HTTP request never
+blocks for minutes. Poll ``GET /video/analyze/{job_id}`` for progress and the
+final result.
+"""
 
 from __future__ import annotations
 
 import os
 import sys
 import tempfile
+import threading
+import time
 from pathlib import Path
+from typing import Optional
 from uuid import uuid4
 
 import cv2
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from pydantic import BaseModel
 
 ROOT = Path(__file__).resolve().parents[3]
 if str(ROOT) not in sys.path:
@@ -28,8 +39,91 @@ MAX_VIDEO_BYTES = 200 * 1024 * 1024
 ALLOWED_EXTENSIONS = {".mp4", ".avi", ".mov", ".m4v"}
 MODEL_PATH = Path(os.environ.get("POSE_MODEL_PATH", ROOT / "models" / "pose_landmarker_lite.task"))
 
+JOB_TTL_SECONDS = 30 * 60  # completed/errored jobs are kept for 30 minutes
 
-@router.post("/video/analyze", response_model=VideoAnalysisResponse)
+
+# ── In-memory job store (single-process; survives for the app lifetime) ─────
+class VideoAnalysisJob(BaseModel):
+    job_id: str
+    status: str  # queued | processing | complete | error
+    progress: dict = {"frames_processed": 0, "total_frames": 0, "percent": 0.0}
+    result: Optional[VideoAnalysisResponse] = None
+    error: Optional[str] = None
+    # Private bookkeeping (never serialized to clients).
+    _finished_at: float = 0.0
+
+    class Config:
+        underscore_attrs_are_private = True
+
+
+class VideoAnalysisJobStart(BaseModel):
+    job_id: str
+    status: str = "queued"
+
+
+_jobs: dict[str, VideoAnalysisJob] = {}
+_jobs_lock = threading.Lock()
+
+
+def _cleanup_expired_jobs() -> None:
+    """Drop finished jobs older than the TTL (called on each new submission)."""
+    now = time.time()
+    stale = [
+        jid
+        for jid, job in list(_jobs.items())
+        if job.status in ("complete", "error") and job._finished_at
+        and now - job._finished_at > JOB_TTL_SECONDS
+    ]
+    for jid in stale:
+        _jobs.pop(jid, None)
+
+
+def _run_job(job_id: str, temp_path: str, filename: str) -> None:
+    """Background worker: analyze the video and update the job record."""
+    try:
+        with _jobs_lock:
+            if job_id in _jobs:
+                _jobs[job_id].status = "processing"
+
+        def progress_cb(processed: int, total: int) -> None:
+            with _jobs_lock:
+                job = _jobs.get(job_id)
+                if job is None:
+                    return
+                job.progress = {
+                    "frames_processed": processed,
+                    "total_frames": total,
+                    "percent": round(processed / total * 100, 1) if total else 0.0,
+                }
+
+        result = _analyze_video_file(temp_path, filename, progress_cb=progress_cb)
+        with _jobs_lock:
+            job = _jobs.get(job_id)
+            if job is not None:
+                job.result = result
+                job.status = "complete"
+                job.progress = {
+                    "frames_processed": len(result.frames),
+                    "total_frames": result.summary.source_frames,
+                    "percent": 100.0,
+                }
+                job._finished_at = time.time()
+    except Exception as exc:  # noqa: BLE001 - surface any failure to the job
+        detail = getattr(exc, "detail", None) or str(exc)
+        with _jobs_lock:
+            job = _jobs.get(job_id)
+            if job is not None:
+                job.status = "error"
+                job.error = str(detail)
+                job._finished_at = time.time()
+    finally:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+
+
+@router.post("/video/analyze", response_model=VideoAnalysisJobStart)
 async def analyze_video(
     file: UploadFile = File(...),
     _: AuthenticatedUser = Depends(get_current_user),
@@ -43,13 +137,45 @@ async def analyze_video(
         )
 
     temp_path = await _save_limited_upload(file, suffix)
+    job_id = f"VIDJOB-{uuid4().hex[:8]}"
     try:
-        return _analyze_video_file(temp_path, filename)
-    finally:
+        with _jobs_lock:
+            _cleanup_expired_jobs()
+            _jobs[job_id] = VideoAnalysisJob(job_id=job_id, status="queued")
+    except Exception:
+        # Never leak the uploaded temp file if job registration fails.
         try:
             os.unlink(temp_path)
         except OSError:
             pass
+        raise
+
+    threading.Thread(
+        target=_run_job,
+        args=(job_id, temp_path, filename),
+        daemon=True,
+        name=f"video-analysis-{job_id}",
+    ).start()
+
+    return VideoAnalysisJobStart(job_id=job_id, status="queued")
+
+
+@router.get("/video/analyze/{job_id}", response_model=VideoAnalysisJob)
+async def get_video_analysis_job(
+    job_id: str,
+    _: AuthenticatedUser = Depends(get_current_user),
+):
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if job is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Analysis job not found (expired after 30 minutes).",
+            )
+        # Snapshot under the lock: the worker thread may keep mutating the
+        # live job (progress/status) — serialize a stable copy, not the same
+        # object the background thread is writing.
+        return job.model_copy(deep=True)
 
 
 async def _save_limited_upload(file: UploadFile, suffix: str) -> str:
@@ -81,7 +207,17 @@ async def _save_limited_upload(file: UploadFile, suffix: str) -> str:
     return temp_path
 
 
-def _analyze_video_file(video_path: str, filename: str, frame_step: int = 10) -> VideoAnalysisResponse:
+def _analyze_video_file(
+    video_path: str,
+    filename: str,
+    frame_step: int = 10,
+    progress_cb=None,
+) -> VideoAnalysisResponse:
+    """Analyze a video file synchronously (runs inside the background job).
+
+    ``progress_cb(processed, total)`` is invoked once per frame read so the
+    job store can surface a live percentage to the polling UI.
+    """
     if not MODEL_PATH.exists():
         raise HTTPException(status_code=500, detail=f"Pose model not found at {MODEL_PATH}")
 
@@ -109,6 +245,9 @@ def _analyze_video_file(video_path: str, filename: str, frame_step: int = 10) ->
             ok, frame = cap.read()
             if not ok:
                 break
+
+            if progress_cb is not None and frame_index % max(frame_step, 10) == 0:
+                progress_cb(frame_index, total_frames)
 
             if frame_index % frame_step == 0:
                 result = engine.process_frame(frame)

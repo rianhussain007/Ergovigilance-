@@ -528,6 +528,23 @@ export interface VideoAnalysisResponse {
   frames: VideoAnalysisFrame[];
 }
 
+export interface VideoAnalysisJob {
+  job_id: string;
+  status: 'queued' | 'processing' | 'complete' | 'error';
+  progress: {
+    frames_processed: number;
+    total_frames: number;
+    percent: number;
+  };
+  result?: VideoAnalysisResponse | null;
+  error?: string | null;
+}
+
+export interface VideoAnalysisJobStart {
+  job_id: string;
+  status: string;
+}
+
 export interface TimelineEntry {
   timestamp: number;
   frame_number: number;
