@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import type { ElementType } from 'react';
-import { Server, Database, Camera, Users, Gauge, Zap } from 'lucide-react';
+import { Server, Database, Camera, Users, Gauge, Zap, BrainCircuit, Activity, AlertTriangle } from 'lucide-react';
 import { getDeployment } from '@/src/services/dashboardService';
 import { getStoredToken } from '@/src/auth/AuthContext';
 import { useDemo } from '@/src/demo/DemoProvider';
@@ -46,6 +46,18 @@ export default function DeploymentCenter() {
         sessionActive: false,
         sessionFps: null,
         sessionInferenceLatencyMs: null,
+        drift: {
+          samples: 1820,
+          window_seconds: 300,
+          model_samples: 1650,
+          gaussian_samples: 170,
+          fallback_rate: 9.3,
+          avg_confidence: 88.4,
+          avg_model_confidence: 91.2,
+          trend: 'stable',
+          trend_delta_pp: 1.2,
+          healthy: true,
+        },
       });
       setLoading(false);
       setError(null);
@@ -189,6 +201,77 @@ export default function DeploymentCenter() {
           </div>
         )}
       </section>
+
+      <section className="bg-surface-container border border-outline-variant rounded-xl p-lg">
+        <div className="flex items-center gap-md mb-md">
+          <BrainCircuit className="w-5 h-5 text-primary" />
+          <div>
+            <h2 className="text-headline-md font-bold text-on-surface">Model Health</h2>
+            <p className="text-[10px] text-on-surface-variant">Task-classifier drift canary — model usage vs Gaussian fallback</p>
+          </div>
+          {metrics.drift ? (
+            <span className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider border ${
+              metrics.drift.healthy
+                ? 'bg-green-500/10 border-green-500/30 text-green-400'
+                : 'bg-amber-500/10 border-amber-500/30 text-amber-400'
+            }`}>
+              {metrics.drift.healthy ? <Activity className="w-3 h-3" /> : <AlertTriangle className="w-3 h-3" />}
+              {metrics.drift.healthy ? 'Healthy' : 'Attention'}
+            </span>
+          ) : (
+            <span className="ml-auto text-[10px] text-on-surface-variant/60">No samples yet — start a session</span>
+          )}
+        </div>
+
+        {metrics.drift && metrics.drift.samples > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-md">
+            <DriftStat label="Fallback Rate" value={`${metrics.drift.fallback_rate.toFixed(1)}%`} sub={`${metrics.drift.gaussian_samples}/${metrics.drift.samples} frames`} tone={metrics.drift.fallback_rate > 50 ? 'danger' : metrics.drift.fallback_rate > 25 ? 'warning' : 'good'} />
+            <DriftStat label="Model Samples" value={String(metrics.drift.model_samples)} sub={`of ${metrics.drift.samples} in window`} />
+            <DriftStat label="Avg Confidence" value={metrics.drift.avg_confidence != null ? `${metrics.drift.avg_confidence.toFixed(1)}%` : '—'} sub={metrics.drift.avg_model_confidence != null ? `model-only: ${metrics.drift.avg_model_confidence.toFixed(1)}%` : ''} />
+            <DriftStat
+              label="Trend (5 min)"
+              value={metrics.drift.trend === 'stable' ? 'Stable' : metrics.drift.trend === 'rising' ? 'Rising' : 'Falling'}
+              sub={`${metrics.drift.trend_delta_pp > 0 ? '+' : ''}${metrics.drift.trend_delta_pp.toFixed(1)}pp`}
+              tone={metrics.drift.trend === 'rising' ? 'danger' : metrics.drift.trend === 'falling' ? 'good' : 'neutral'}
+            />
+            <div className="bg-surface-container-low rounded-lg p-md border border-outline-variant/50 min-h-[96px]">
+              <p className="text-[10px] text-on-surface-variant">Fallback rate trend</p>
+              <div className="mt-sm space-y-xs">
+                {[['Model', metrics.drift.model_samples], ['Fallback', metrics.drift.gaussian_samples]].map(([label, count]) => {
+                  const total = Math.max(metrics.drift.samples, 1);
+                  const pct = (Number(count) / total) * 100;
+                  return (
+                    <div key={String(label)}>
+                      <div className="flex justify-between text-[10px]">
+                        <span className="text-on-surface-variant">{label}</span>
+                        <span className="font-label-mono text-on-surface">{pct.toFixed(0)}%</span>
+                      </div>
+                      <div className="h-1.5 bg-surface-container-higher rounded-full overflow-hidden mt-0.5">
+                        <div className={`h-full rounded-full ${String(label) === 'Model' ? 'bg-green-500' : 'bg-orange-500'}`} style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <p className="text-body-sm text-on-surface-variant">
+            Run a live monitoring session so the canary can measure how often the trained task model is used vs. the Gaussian fallback.
+          </p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function DriftStat({ label, value, sub, tone = 'neutral' }: { label: string; value: string; sub?: string; tone?: 'neutral' | 'good' | 'warning' | 'danger' }) {
+  const color = tone === 'danger' ? 'text-red-400' : tone === 'warning' ? 'text-orange-400' : tone === 'good' ? 'text-green-400' : 'text-on-surface';
+  return (
+    <div className="bg-surface-container-low rounded-lg p-md border border-outline-variant/50 min-h-[96px]">
+      <p className="text-[10px] text-on-surface-variant">{label}</p>
+      <p className={`text-title-lg font-bold mt-1 ${color}`}>{value}</p>
+      {sub && <p className="text-[10px] text-on-surface-variant/70 mt-0.5">{sub}</p>}
     </div>
   );
 }

@@ -597,6 +597,19 @@ export interface RecordingListItem {
   has_timeline: boolean;
 }
 
+export interface ModelDriftMetrics {
+  samples: number;
+  window_seconds: number;
+  model_samples: number;
+  gaussian_samples: number;
+  fallback_rate: number;
+  avg_confidence: number | null;
+  avg_model_confidence: number | null;
+  trend: 'stable' | 'rising' | 'falling';
+  trend_delta_pp: number;
+  healthy: boolean;
+}
+
 export interface DeploymentMetrics {
   backendStatus: string;
   backendVersion: string;
@@ -610,6 +623,7 @@ export interface DeploymentMetrics {
   sessionActive: boolean;
   sessionFps?: number | null;
   sessionInferenceLatencyMs?: number | null;
+  drift?: ModelDriftMetrics | null;
 }
 
 export interface AuditEntry {

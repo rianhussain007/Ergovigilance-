@@ -24,6 +24,7 @@ from backend.services.features import (
 from backend.services.issue_detection import detect_posture_issues
 from backend.services.recommendation_engine import get_recommendations
 from backend.services.task_recognition import TaskRecognition
+from backend.services.drift_monitor import get_drift_monitor
 
 # Canonical definitions live in backend.core.constants and backend.core.types.
 # Re-exported here for backward compatibility.
@@ -170,6 +171,19 @@ class PoseEngine:
             risk_level = risk_from_features(features, unavailable)
             confidence = _compute_confidence(landmarks)
             task_info = self.task_recognizer.detect_task(keypoints, features)
+            # Drift canary: record whether the trained task classifier decided
+            # (model) or the Gaussian fallback did. A rising fallback rate is
+            # the earliest signal of classifier drift. Skip degenerate frames
+            # ("Unknown" task, zero confidence — no real classification ran,
+            # e.g. torso out of frame) so they don't skew the fallback rate.
+            try:
+                if task_info and task_info.get("task") != "Unknown":
+                    get_drift_monitor().record(
+                        source="model" if self.task_recognizer.using_model else "gaussian",
+                        confidence=float(task_info.get("confidence", 0.0)),
+                    )
+            except Exception:  # pragma: no cover - canary must never break the pipeline
+                pass
         else:
             # No person this frame: reset smoothing so a re-detection
             # starts fresh instead of interpolating against a stale pose.

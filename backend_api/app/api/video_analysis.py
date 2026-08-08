@@ -49,11 +49,9 @@ class VideoAnalysisJob(BaseModel):
     progress: dict = {"frames_processed": 0, "total_frames": 0, "percent": 0.0}
     result: Optional[VideoAnalysisResponse] = None
     error: Optional[str] = None
-    # Private bookkeeping (never serialized to clients).
+    # Private bookkeeping (never serialized to clients — underscore attrs are
+    # private in Pydantic v2 by default).
     _finished_at: float = 0.0
-
-    class Config:
-        underscore_attrs_are_private = True
 
 
 class VideoAnalysisJobStart(BaseModel):

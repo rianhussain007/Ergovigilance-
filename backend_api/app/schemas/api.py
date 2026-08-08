@@ -256,6 +256,20 @@ class WorkstationInfo(BaseModel):
     recommendation: str
 
 
+class ModelDriftMetrics(BaseModel):
+    """Task-classifier drift canary — model usage vs Gaussian fallback."""
+    samples: int = 0
+    window_seconds: int = 300
+    model_samples: int = 0
+    gaussian_samples: int = 0
+    fallback_rate: float = 0.0
+    avg_confidence: Optional[float] = None
+    avg_model_confidence: Optional[float] = None
+    trend: str = "stable"  # stable | rising | falling
+    trend_delta_pp: float = 0.0
+    healthy: bool = True
+
+
 class DeploymentMetrics(BaseModel):
     # Backend
     backendStatus: str
@@ -273,6 +287,8 @@ class DeploymentMetrics(BaseModel):
     sessionActive: bool
     sessionFps: float | None = None
     sessionInferenceLatencyMs: float | None = None
+    # Model health (drift canary)
+    drift: Optional[ModelDriftMetrics] = None
 
 
 class WorkerSummary(BaseModel):

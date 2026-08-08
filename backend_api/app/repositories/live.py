@@ -583,6 +583,12 @@ class LiveRepository(DashboardRepository):
             session_fps = None
             session_inference_latency = None
 
+        # Task-classifier drift canary (model vs Gaussian fallback usage).
+        from backend.services.drift_monitor import get_drift_monitor
+        drift_summary = get_drift_monitor().summary()
+        from app.schemas.api import ModelDriftMetrics
+        drift = ModelDriftMetrics(**drift_summary)
+
         return DeploymentMetrics(
             backendStatus="ok",
             backendVersion=settings.APP_VERSION,
@@ -596,6 +602,7 @@ class LiveRepository(DashboardRepository):
             sessionActive=session_active,
             sessionFps=session_fps,
             sessionInferenceLatencyMs=session_inference_latency,
+            drift=drift,
         )
 
     async def get_manager(self) -> ManagerSummary:
