@@ -14,6 +14,17 @@ Output bundle (models/task_model_v2.pkl):
 Runtime: model-primary when predict_proba confidence >= threshold,
 otherwise Gaussian fallback (see backend/services/task_recognition.py).
 
+Generator notes (2026-08-08 fix):
+- Arm geometry: the wrist Y override previously ran after the elbow-flexion
+  arc, producing impossible wrist-above-elbow postures for low raises. The
+  elbow now shifts so the wrist lands exactly at the raise height while
+  preserving the flexion arc.
+- Neutral Standing now spans raise 0.45-1.3 (chest-waist hands through
+  straight-arm arms-at-sides) so a real neutral standing pose is inside the
+  training distribution instead of ambiguous.
+- Generation validates against the pure Gaussian scorer (never the model on
+  disk), removing the retrain feedback loop.
+
 Usage:
     python scripts/train_task_model_v2.py [--out models/task_model_v2.pkl] [--per-class 4000] [--seed 42]
     python scripts/train_task_model_v2.py --data data/processed/task_clips_features.csv
@@ -103,7 +114,9 @@ def _pose(
     - neck_px: forward head protrusion (px).
     - elbow_deg: elbow flexion angle (180 = straight).
     - wrist_raise: wrist height as a fraction of torso below the shoulder
-      (0.5 ~ hip, 0.3 ~ chest, -0.4 ~ face).
+      (0.3 ~ chest, 0.5 ~ waist, 1.0 ~ hands at sides / hip level).
+      The elbow shifts so the wrist always lands below it (no degenerate
+      wrist-above-elbow geometry).
     - knee_deg: knee angle (180 = straight).
     - reach_px: fingertips extended forward from the shoulders.
     - face_hands: wrists raised to face height (inspection).
@@ -148,13 +161,27 @@ def _pose(
             pts[f"{side}_thumb"] = (pts[wr][0] + 10 * (1 if side == "left" else -1), pts[wr][1] + 5)
             pts[f"{side}_pinky"] = (pts[wr][0] + 20 * (1 if side == "left" else -1), pts[wr][1])
     else:
-        # Wrist raise: move wrists vertically relative to neutral hip level.
-        for side, wr in [("left", "left_wrist"), ("right", "right_wrist")]:
-            wx, wy = pts[wr]
-            pts[wr] = (wx, pts["left_shoulder"][1] + wrist_raise * _TORSO)
-            pts[f"{side}_index"] = (pts[wr][0] + 2, pts[wr][1] + 15)
-            pts[f"{side}_thumb"] = (pts[wr][0] + 5, pts[wr][1] + 8)
-            pts[f"{side}_pinky"] = (pts[wr][0] + 3, pts[wr][1] + 17)
+        # Wrist raise: shift the ELBOW so the wrist lands at the target
+        # height, keeping the forearm arc from the flexion step. This keeps
+        # the wrist strictly BELOW the elbow — the old code overrode the
+        # wrist Y after the arc, producing impossible postures (wrist above
+        # elbow, elbow_flexion_angle ~0°) for low raises that poisoned the
+        # trained clusters.
+        for side, sh, el, wr in [("left", "left_shoulder", "left_elbow", "left_wrist"),
+                                 ("right", "right_shoulder", "right_elbow", "right_wrist")]:
+            sx, sy = pts[sh]
+            ex, _ = pts[el]
+            wrist_y = sy + wrist_raise * _TORSO
+            ey = wrist_y - _ARM_LEN * math.cos(rad)
+            # Keep the elbow strictly below the shoulder even at the lowest
+            # raises with near-straight arms (else the upper arm inverts).
+            ey = max(ey, sy + 20.0)
+            wx = ex + _ARM_LEN * math.sin(rad)
+            pts[el] = (ex, ey)
+            pts[wr] = (wx, wrist_y)
+            pts[f"{side}_index"] = (wx + 15 * math.sin(rad), wrist_y + 15 * math.cos(rad))
+            pts[f"{side}_thumb"] = (wx + 8 * math.sin(rad) + 4, wrist_y + 8 * math.cos(rad))
+            pts[f"{side}_pinky"] = (wx + 12 * math.sin(rad) - 3, wrist_y + 12 * math.cos(rad))
 
     # Reach: fingertips extend forward from the shoulders.
     if reach_px:
@@ -190,14 +217,22 @@ def _to_array(pts: Dict[str, Tuple[float, float]]) -> np.ndarray:
 
 
 _CLASS_PARAMS = {
-    "Neutral Standing": dict(trunk=(0, 8), neck=(0, 8), elbow=(155, 180), raise_=(0.45, 0.6),
+    # Neutral spans chest-waist hands (raise ~0.45) through arms fully at the
+    # sides (raise ~1.05+) — the posture real workers actually stand in. The
+    # old range (0.45-0.6) never covered straight-arm hands-at-sides, so the
+    # model was uncertain (0.51 Lifting vs 0.49 Inspection) on a real neutral
+    # standing pose and gated to the Gaussian.
+    "Neutral Standing": dict(trunk=(0, 8), neck=(0, 8), elbow=(155, 180), raise_=(0.45, 1.3),
                              knee=(155, 180), reach=(0, 0), face=False, vel=(0, 15), wvel=(0, 30)),
+    # Only Reaching uses the forward-reach override — giving Assembly/Lifting a
+    # small reach too placed their fingers at shoulder height, colliding with
+    # Reaching's cluster and making the model misclassify Reaching ~65%.
     "Assembly Work": dict(trunk=(0, 12), neck=(4, 18), elbow=(90, 140), raise_=(0.2, 0.45),
-                          knee=(155, 180), reach=(0, 20), face=False, vel=(5, 30), wvel=(20, 70)),
+                          knee=(155, 180), reach=(0, 0), face=False, vel=(5, 30), wvel=(20, 70)),
     "Reaching": dict(trunk=(5, 20), neck=(4, 15), elbow=(150, 175), raise_=(0.15, 0.45),
                      knee=(150, 180), reach=(240, 310), face=False, vel=(30, 90), wvel=(120, 240)),
     "Lifting / Picking": dict(trunk=(20, 50), neck=(4, 18), elbow=(120, 165), raise_=(0.5, 0.8),
-                              knee=(90, 150), reach=(0, 30), face=False, vel=(5, 45), wvel=(20, 90)),
+                              knee=(90, 150), reach=(0, 0), face=False, vel=(5, 45), wvel=(20, 90)),
     "Inspection": dict(trunk=(0, 10), neck=(18, 40), elbow=(60, 110), raise_=(0.0, 0.0),
                        knee=(155, 180), reach=(0, 0), face=True, vel=(0, 20), wvel=(10, 50)),
 }
@@ -223,7 +258,12 @@ def _sample_class(task: str, rng) -> Tuple[np.ndarray, Dict[str, float], str]:
 
 def generate(per_class: int, seed: int) -> Tuple[List[List[float]], List[str], dict]:
     rng = np.random.default_rng(seed)
-    gaussian = TaskRecognition()
+    # Validate against the PURE Gaussian scorer. Passing the default model
+    # path would load whatever task_model_v2.pkl exists on disk and let the
+    # model being trained filter its own training data — a feedback loop that
+    # makes retrains depend on the previous artifact. A nonexistent path
+    # forces TaskRecognition onto the deterministic Gaussian path.
+    gaussian = TaskRecognition(model_path=str(ROOT / "models" / "__gaussian_only__.pkl"))
 
     X: List[List[float]] = []
     y: List[str] = []

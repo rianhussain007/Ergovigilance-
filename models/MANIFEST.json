@@ -49,17 +49,17 @@
     },
     {
       "filename": "task_model_v2.pkl",
-      "sha256": "3db02ffed89f15bed44cb1ddda25e8085c69444d0e705371142cd65bd407ff65",
-      "size_bytes": 663025,
+      "sha256": "99a62666025f98670ebe2cb990e6b5ac4d80a488cef28e1da8de468810d4d753",
+      "size_bytes": 904055,
       "format": "scikit-learn pickle (HistGradientBoosting)",
       "purpose": "Task/activity classifier v2 — model-primary with Gaussian fallback (confidence-gated)",
       "loaded_by": [
         "backend/services/task_recognition.py (TaskRecognition → models/task_model_v2.pkl, lazy)"
       ],
-      "source": "Trained in-repo (scripts/train_task_model_v2.py) on synthetic poses validated against the Gaussian scorer",
-      "version": "v2 (2026-08-07, Phase D)",
+      "source": "Trained in-repo (scripts/train_task_model_v2.py) on synthetic poses validated against the Gaussian scorer (pure Gaussian — no model feedback loop)",
+      "version": "v3 (2026-08-08, generator correction)",
       "runtime": "production — loaded lazily; missing/corrupt model falls back to the Gaussian scorer",
-      "notes": "19 feature columns (17 biomechanical + movement_velocity + wrist_movement_velocity). Confidence threshold 0.6."
+      "notes": "19 feature columns (17 biomechanical + movement_velocity + wrist_movement_velocity). Confidence threshold 0.6. v3 fixes (a) the arm solver so the wrist always lands below the elbow (the old Y-override produced impossible wrist-above-elbow postures), (b) Neutral Standing now spans raise 0.45-1.3 incl. straight-arm hands-at-sides, (c) generation validates against the pure Gaussian instead of whatever model file exists, and (d) the runtime label lookup uses model.classes_ (predict_proba column order) instead of the canonical bundle labels — previously a confident Neutral Standing was read back as 'Lifting / Picking'."
     },
     {
       "filename": "risk_calibration_model.pkl",

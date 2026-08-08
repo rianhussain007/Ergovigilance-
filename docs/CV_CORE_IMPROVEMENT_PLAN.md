@@ -83,12 +83,24 @@ trained models for task & risk classification.
   `data/processed/task_clips_features.csv`, 19 features + label) →
   `scripts/train_task_model_v2.py --data <csv>` (trains on real samples instead of
   synthetic, reports per-class coverage).
-- **Model-quality finding:** the trained task model is *uncertain on real neutral
-  standing* (hands at sides): top prediction Lifting/Picking @ 0.51 vs Inspection @ 0.49,
-  below the 0.6 gate. Cause: the synthetic substrate models "Neutral Standing" with hands
-  at chest-waist height (raise 0.45–0.6), not arms-at-sides. The Gaussian fallback absorbs
-  this (returns Neutral Standing), but it is exactly the synthetic-vs-reality gap that
-  Tier-2 real capture closes.
+- **Model-quality finding (fixed 2026-08-08, v3 retrain):** the trained task model was
+  *uncertain on real neutral standing* (hands at sides). Root cause was threefold:
+  (1) the synthetic generator's wrist Y-override ran after the elbow-flexion arc,
+  producing impossible wrist-above-elbow postures; (2) "Neutral Standing" was only sampled
+  at raise 0.45–0.6 (chest-waist hands), never straight-arm arms-at-sides; and
+  (3) `predict_proba` columns follow `model.classes_` (sorted) while the runtime label
+  lookup used the canonical bundle labels — so a confident Neutral Standing read back as
+  "Lifting / Picking". All three fixed: the arm solver shifts the elbow so the wrist lands
+  at the raise height below the elbow, Neutral spans raise 0.45–1.3, generation validates
+  against the pure Gaussian (no model feedback loop), and both runtime lookups
+  (`task_recognition`, `risk_calibration`) resolve labels via `classes_`. A real neutral
+  standing pose now clears the 0.6 gate at 100% confidence with `using_model=True` and the
+  correct label (regression-tested). The follow-up Reaching collision (the reach override
+  was applied to Lifting/Assembly too, putting their fingers at shoulder height and
+  blending their clusters) is also fixed: only Reaching uses the forward-reach override,
+  and the final model scores a clean 60/60 diagonal on all five classes, including
+  Reaching. Tier-2 real capture remains the path to true generalisation beyond the
+  synthetic distribution.
 - **Not done (needs you):** capture 5–10 s clips per task class (3+ subjects ideally) and
   run the capture → build → train pipeline to replace the synthetic substrate.
 

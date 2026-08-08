@@ -123,22 +123,40 @@ class TestRuntimeIntegration:
         info = recognizer.detect_task(kp, _features(kp))
         assert info["task"] == "Unknown"
 
-    def test_real_model_uncertain_pose_gates_to_gaussian(self, model_available):
-        """Graceful degradation with the real artifact: a hands-at-sides neutral
-        pose sits OUTSIDE the synthetic 'Neutral Standing' training range
-        (which models hands at chest-waist height), so the model's top
-        prediction stays below the 0.6 gate and the Gaussian fallback must
-        still return a sensible decision — never a crash and never an
-        unguarded model guess."""
+    def test_neutral_pose_decides_via_model(self, model_available):
+        """Model-primary on a REAL neutral standing pose (arms at sides,
+        raise ~1.05). Regression for the 2026-08-08 retrain: the synthetic
+        generator now spans hands-at-sides, so a real neutral pose must sit
+        INSIDE the trained Neutral Standing cluster, clear the 0.6 gate and
+        report using_model=True with the correct label — not fall back to the
+        Gaussian and not read back a rotated class name (predict_proba
+        columns follow model.classes_, not bundle labels)."""
         if not model_available:
             pytest.skip("task_model_v2.pkl not present")
         recognizer = TaskRecognition()
         kp = _build_33()
         info = recognizer.detect_task(kp, _features(kp))
+        assert recognizer.using_model is True
+        assert info["task"] == "Neutral Standing"
+        assert info["confidence"] >= 60.0  # cleared the 0.6 gate
+        assert "Trained task classifier" in info["reason"]
+
+    def test_real_model_out_of_distribution_gates_to_gaussian(self, model_available):
+        """Graceful degradation stays intact: a genuinely out-of-distribution
+        pose (arms crossed at the waist — the generator never produces crossed
+        wrists) must route to the Gaussian fallback instead of an unguarded
+        model guess."""
+        if not model_available:
+            pytest.skip("task_model_v2.pkl not present")
+        recognizer = TaskRecognition()
+        overrides = {
+            "left_wrist": (345, 400), "right_wrist": (295, 400),
+            "left_index": (352, 415), "right_index": (288, 415),
+        }
+        kp = _build_33(overrides)
+        info = recognizer.detect_task(kp, _features(kp))
+        assert info["task"] in CLASSES or info["task"] == "Unknown"
         assert recognizer.using_model is False
-        assert info["task"] in CLASSES
-        assert info["confidence"] > 0.0
-        assert "Trained task classifier" not in info["reason"]
 
 
 class DummyModel:

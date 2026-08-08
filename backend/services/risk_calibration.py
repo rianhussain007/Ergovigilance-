@@ -56,10 +56,21 @@ def predict_risk_band(features: Mapping[str, float]) -> Optional[Dict[str, objec
     try:
         cols = bundle["feature_columns"]
         row = [features.get(c, 0.0) for c in cols]
-        proba = bundle["model"].predict_proba([row])[0]
+        model = bundle["model"]
+        proba = model.predict_proba([row])[0]
         best = int(proba.argmax())
+        # Same alignment fix as task_recognition: predict_proba columns follow
+        # model.classes_ (sorted), not bundle["labels"]. For LOW/MEDIUM/HIGH
+        # the sorted order (HIGH, LOW, MEDIUM) differs from the canonical one,
+        # so resolving via classes_ keeps the band correct on every bundle.
+        classes = getattr(model, "classes_", None)
+        if classes is None:
+            classes = bundle.get("labels", [])
+        classes = list(classes)
+        if not classes or best >= len(classes):
+            return None
         return {
-            "band": bundle["labels"][best],
+            "band": str(classes[best]),
             "confidence": round(float(proba[best]), 3),
         }
     except Exception:

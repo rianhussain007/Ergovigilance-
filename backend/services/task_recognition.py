@@ -104,10 +104,23 @@ class TaskRecognition:
         try:
             cols = bundle["feature_columns"]
             row = [features.get(c, 0.0) for c in cols]
-            proba = bundle["model"].predict_proba([row])[0]
+            model = bundle["model"]
+            proba = model.predict_proba([row])[0]
             best = int(np.argmax(proba))
             conf = float(proba[best])
-            task = str(bundle["labels"][best])
+            # sklearn's predict_proba columns follow model.classes_ (sorted),
+            # NOT bundle["labels"] (canonical CLASSES order). Resolving via
+            # classes_ prevents a systematic label misalignment that rotated
+            # every prediction (e.g. a confident Neutral Standing read back as
+            # 'Lifting / Picking'). Fall back to bundle labels for legacy
+            # bundles without classes_ (e.g. test doubles).
+            classes = getattr(model, "classes_", None)
+            if classes is None:
+                classes = bundle.get("labels", [])
+            classes = list(classes)
+            if not classes or best >= len(classes):
+                return None
+            task = str(classes[best])
         except Exception:
             return None
         if conf < self._confidence_threshold:
