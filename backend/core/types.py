@@ -63,4 +63,8 @@ class LiveState:
     unavailable_features: list = field(default_factory=list)
     lower_body_confidence: float = 0.0
 
+    # Monotonic frame counter for the current processed frame — lets stream
+    # consumers (e.g. the MJPEG feed) skip re-encoding identical frames.
+    frame_number: int = 0
+
     context_snapshot: Optional[ContextSnapshot] = None

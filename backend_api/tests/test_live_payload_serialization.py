@@ -30,7 +30,12 @@ sys.path.insert(0, str(ROOT))
 from backend.context.engine import ContextSnapshot  # noqa: E402
 from app.repositories.live import LiveRepository  # noqa: E402
 from app.schemas.api import ContextSnapshotResponse  # noqa: E402
-from app.services.live_monitor import export_recommendations_from_bundle  # noqa: E402
+from app.services.live_monitor import (  # noqa: E402
+    build_ws_payload,
+    clean_feature_values,
+    export_recommendations_from_bundle,
+)
+from backend.core.types import LiveState  # noqa: E402
 from backend.services.features import compute_rula_informed_score  # noqa: E402
 from backend.services.guidance import build_guidance  # noqa: E402
 
@@ -123,6 +128,61 @@ class LivePayloadSerializationTest(unittest.TestCase):
         assert export_recommendations_from_bundle(None) == []
         assert export_recommendations_from_bundle({}) == []
         assert export_recommendations_from_bundle({"bundle": {"recommendations": ["not-a-dict"]}}) == []
+
+    def test_clean_feature_values_json_safe(self):
+        """WebSocket payload features must be JSON-safe (numpy → float, NaN → None)."""
+        cleaned = clean_feature_values({
+            "neck_flexion": np.float64(5.0),
+            "knee_angle": np.float32(170.0),
+            "nan_feat": float("nan"),
+            "plain": 3.0,
+            "bad": object(),
+        })
+        assert cleaned["neck_flexion"] == 5.0
+        assert cleaned["knee_angle"] == 170.0
+        assert cleaned["nan_feat"] is None
+        assert cleaned["plain"] == 3.0
+        assert cleaned["bad"] is None
+        # The cleaned dict must round-trip through JSON without errors
+        import json
+
+        json.dumps(cleaned)
+        # None features input must not raise
+        assert clean_feature_values(None) == {}
+
+    def test_build_ws_payload_json_safe_and_numpy_clean(self):
+        """get_ws_payload must serialize without deep-copying the frame and with
+        numpy scalars coerced to floats (regression guard for WS JSON breaks)."""
+        import json
+
+        state = LiveState(
+            session_active=True,
+            session_id="SESH-1",
+            current_frame=np.zeros((4, 4, 3), dtype=np.uint8),  # must NOT be serialized
+            risk_level="MEDIUM",
+            risk_score=np.float32(12.5),
+            confidence=np.float64(0.87),
+            task_confidence=0.6,
+            fps=np.float32(29.97),
+            inference_latency_ms=18.2,
+            features={
+                "neck_flexion": np.float64(5.0),
+                "knee_angle": np.float32(170.0),
+                "occluded": float("nan"),
+            },
+            issues=["neck_flexion"],
+        )
+        payload = build_ws_payload(state)
+        # Frame must not leak into the wire payload
+        assert "current_frame" not in payload
+        assert payload["risk_score"] == 12.5
+        assert payload["confidence"] == 0.87
+        assert abs(payload["fps"] - 29.97) < 0.01  # float32 precision
+        assert payload["features"]["occluded"] is None
+        assert payload["features"]["knee_angle"] == 170.0
+        assert payload["issues"] == ["neck_flexion"]
+        # Must round-trip through JSON without errors (this broke before)
+        json.dumps(payload)
 
 
 if __name__ == "__main__":

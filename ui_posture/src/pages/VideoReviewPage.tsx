@@ -280,6 +280,17 @@ export default function VideoReviewPage() {
     }
   }, [result, showOverlay, currentFrame]);
 
+  // Redraw the skeleton immediately when the overlay is re-enabled (the canvas
+  // only mounts while the overlay is on, so a fresh frame is needed).
+  useEffect(() => {
+    if (!showOverlay || !currentFrame) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    drawSkeleton(ctx, currentFrame, canvas.width, canvas.height);
+  }, [showOverlay, currentFrame]);
+
   const handleVideoLoadedMetadata = useCallback(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;

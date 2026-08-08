@@ -13,31 +13,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _serialize_state(state) -> dict:
-    """Serialize LiveState to a JSON-safe dict."""
-    return {
-        "session_active": state.session_active,
-        "session_id": state.session_id,
-        "risk_level": state.risk_level,
-        "risk_score": state.risk_score,
-        "confidence": state.confidence,
-        "person_detected": state.person_detected,
-        "task_name": state.task_name,
-        "task_confidence": state.task_confidence,
-        "task_duration_seconds": state.task_duration_seconds,
-        "issues": state.issues,
-        "worker_recommendation": state.worker_recommendation,
-        "supervisor_recommendation": state.supervisor_recommendation,
-        "fps": state.fps,
-        "inference_latency_ms": state.inference_latency_ms,
-        "timestamp": state.timestamp,
-        "camera_status": state.camera_status,
-        "frame_width": state.frame_width,
-        "frame_height": state.frame_height,
-        "features": state.features,
-    }
-
-
 @router.websocket("/ws/dashboard")
 async def ws_dashboard(websocket: WebSocket):
     """Live dashboard updates — risk changes, features, issues."""
@@ -46,10 +21,9 @@ async def ws_dashboard(websocket: WebSocket):
         while True:
             service = get_live_service_or_none()
             if service is not None and service.is_running():
-                state = service.get_state_snapshot()
                 await websocket.send_json({
                     "type": "dashboard_update",
-                    "data": _serialize_state(state),
+                    "data": service.get_ws_payload(),
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 })
             else:
@@ -103,16 +77,16 @@ async def ws_camera(websocket: WebSocket):
         while True:
             service = get_live_service_or_none()
             if service is not None and service.is_running():
-                state = service.get_state_snapshot()
+                payload = service.get_ws_payload()
                 await websocket.send_json({
                     "type": "camera_update",
                     "data": {
-                        "camera_status": state.camera_status,
-                        "fps": state.fps,
-                        "frame_width": state.frame_width,
-                        "frame_height": state.frame_height,
-                        "person_detected": state.person_detected,
-                        "inference_latency_ms": state.inference_latency_ms,
+                        "camera_status": payload["camera_status"],
+                        "fps": payload["fps"],
+                        "frame_width": payload["frame_width"],
+                        "frame_height": payload["frame_height"],
+                        "person_detected": payload["person_detected"],
+                        "inference_latency_ms": payload["inference_latency_ms"],
                     },
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 })
@@ -124,9 +98,6 @@ async def ws_camera(websocket: WebSocket):
                 })
             await asyncio.sleep(2)
     except WebSocketDisconnect:
-        camera_manager.disconnect(websocket)
-    except Exception as e:
-        logger.error("Camera WS error: %s", e)
         camera_manager.disconnect(websocket)
     except Exception as e:
         logger.error("Camera WS error: %s", e)

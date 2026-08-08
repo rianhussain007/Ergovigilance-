@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Monitor, VideoOff } from 'lucide-react';
+import { Camera, Eye, EyeOff, Monitor, VideoOff } from 'lucide-react';
 import { SectionHeader, LoadingCard, ErrorCard, EmptyState } from '@/src/components/common';
 import { getCameras } from '@/src/services/dashboardService';
 import { getStoredToken } from '@/src/auth/AuthContext';
@@ -15,8 +15,10 @@ const DEMO_BANNER = 'SAMPLE DATA — Demo Camera Grid, not live feeds';
 function CameraTile({ cam, demo }: { cam: CameraInfo; demo?: boolean }) {
   const [feedError, setFeedError] = useState(false);
   const [feedLoaded, setFeedLoaded] = useState(false);
+  const [showOverlay, setShowOverlay] = useState(true);
   const token = getStoredToken();
-  const feedSrc = `/video/feed?camera_id=${encodeURIComponent(cam.id)}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+  const overlayParam = showOverlay ? '' : '&overlay=false';
+  const feedSrc = `/video/feed?camera_id=${encodeURIComponent(cam.id)}${token ? `&token=${encodeURIComponent(token)}` : ''}${overlayParam}`;
 
   // Only attempt live feed for streaming cameras (not available/idle)
   const isStreaming = cam.status === 'streaming';
@@ -75,7 +77,20 @@ function CameraTile({ cam, demo }: { cam: CameraInfo; demo?: boolean }) {
             {cam.recording && <div className="flex items-center gap-1 bg-red-500/20 px-1.5 py-0.5 rounded"><div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /><span className="text-[8px] font-bold text-red-400">REC</span></div>}
             {cam.status === 'available' && <div className="flex items-center gap-1 bg-surface-container-highest/80 px-1.5 py-0.5 rounded"><span className="text-[8px] font-bold text-on-surface-variant uppercase tracking-widest">Idle</span></div>}
           </div>
-          <span className="text-[8px] font-label-mono text-white/40 bg-black/40 px-1 py-0.5 rounded">{cam.fps} FPS</span>
+          <div className="flex items-center gap-1.5">
+            {showFeed && (
+              <button
+                type="button"
+                onClick={() => setShowOverlay((prev) => !prev)}
+                className="pointer-events-auto flex items-center gap-1 rounded border border-white/10 bg-black/50 px-1.5 py-0.5 backdrop-blur-sm text-white/70 transition-colors hover:border-cyan-400/30 hover:text-cyan-200"
+                title={showOverlay ? 'Hide skeleton overlay' : 'Show skeleton overlay'}
+              >
+                {showOverlay ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                <span className="text-[8px] font-bold uppercase tracking-wider">{showOverlay ? 'Skel' : 'Raw'}</span>
+              </button>
+            )}
+            <span className="text-[8px] font-label-mono text-white/40 bg-black/40 px-1 py-0.5 rounded">{cam.fps} FPS</span>
+          </div>
         </div>
 
         {/* Bottom overlay */}

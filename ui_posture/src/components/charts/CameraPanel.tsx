@@ -29,7 +29,7 @@ export function CameraPanel({ status, workerName, task }: CameraPanelProps) {
   useEffect(() => {
     setStreamLoading(true);
     setStreamError(false);
-  }, [isActive]);
+  }, [isActive, showOverlay]);
 
   useEffect(() => {
     if (!isActive || streamError) return;
@@ -97,6 +97,10 @@ export function CameraPanel({ status, workerName, task }: CameraPanelProps) {
   const streamSrc = streamToken
     ? `/video/feed?token=${encodeURIComponent(streamToken)}${overlayParam}`
     : `/video/feed${overlayParam ? '?overlay=false' : ''}`;
+
+  const toggleOverlay = useCallback(() => {
+    setShowOverlay((prev) => !prev);
+  }, []);
   const showComingSoon = (label: string) => {
     addToast('info', `${label} coming soon`, 'This control is a visual placeholder until backend support is connected.');
   };
@@ -131,7 +135,6 @@ export function CameraPanel({ status, workerName, task }: CameraPanelProps) {
         {showStream && (
           <img
             ref={imgRef}
-            key={showOverlay ? 'overlay-on' : 'overlay-off'}
             src={streamSrc}
             alt="Live camera feed"
             className="absolute inset-0 w-full h-full object-cover contrast-[1.08] saturate-[0.95]"
@@ -157,7 +160,19 @@ export function CameraPanel({ status, workerName, task }: CameraPanelProps) {
           <span className="hidden sm:inline text-[10px] text-on-surface-variant/60 truncate">{showOverlay ? 'Pose skeleton from live camera landmarks' : 'Raw video without overlay'}</span>
         </div>
         <div className="flex items-center gap-xs">
-          <ActionButton title={showOverlay ? 'Hide Overlay' : 'Show Overlay'} onClick={() => setShowOverlay(!showOverlay)} icon={showOverlay ? EyeOff : Eye} />
+          <button
+            type="button"
+            onClick={toggleOverlay}
+            className={`flex items-center gap-xs px-md py-sm rounded border text-[10px] font-medium uppercase tracking-wider transition-colors ${
+              showOverlay
+                ? 'border-cyan-400/40 bg-cyan-400/10 text-cyan-200'
+                : 'border-white/10 bg-white/[0.03] text-on-surface-variant hover:text-cyan-100 hover:border-cyan-400/25'
+            }`}
+            title={showOverlay ? 'Hide skeleton overlay' : 'Show skeleton overlay'}
+          >
+            {showOverlay ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+            {showOverlay ? 'Skeleton' : 'Raw'}
+          </button>
           <ActionButton title="Capture" onClick={handleCapture} icon={Snapshot} />
           <PlaceholderButton title="Log" onClick={() => showComingSoon('Log')} icon={FileText} />
           <ActionButton title={fullscreen ? 'Exit Fullscreen' : 'Fullscreen'} onClick={toggleFullscreen} icon={fullscreen ? Minimize : Maximize} />

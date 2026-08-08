@@ -31,6 +31,10 @@ POSE_CONNECTIONS = [
     (9, 10),  # Mouth
 ]
 
+# Cap the MJPEG stream at ~30 fps. Without throttling the generator re-encodes
+# the latest frame as fast as the client drains it, pegging a CPU core.
+FRAME_INTERVAL_S = 1.0 / 30.0
+
 # Label positions: (feature_name, short_label, landmark_index, (dx, dy))
 LABEL_CONFIG = [
     ("neck_flexion", "N", 0, (-20, -30)),
@@ -139,23 +143,43 @@ def _draw_skeleton(frame, keypoints, risk_level, features=None, feature_scores=N
 
 
 def _generate_mjpeg(overlay: bool = True):
-    """Generate multipart MJPEG frames from the live service with optional pose overlay."""
+    """Generate multipart MJPEG frames from the live service with optional pose overlay.
+
+    - Sleeps properly while no frame is ready (previously a never-awaited
+      ``asyncio.sleep`` made this loop busy-spin at 100% CPU until the first
+      frame — the cause of the startup hang).
+    - Skips re-encoding frames the client already received.
+    - Throttles to ~30 fps so JPEG encoding can't saturate a core.
+    """
     import cv2
+    import time
 
     service = get_live_service()
+    last_frame_number = None
     while True:
-        frame = service.get_frame()
-        if frame is None:
-            import asyncio
-            asyncio.sleep(0.05)
+        frame_number = service.get_frame_number()
+        if frame_number is None:
+            time.sleep(0.05)
+            continue
+        if last_frame_number is not None and frame_number == last_frame_number:
+            # Already served this frame — wait for a new one before copying/encoding.
+            time.sleep(FRAME_INTERVAL_S)
             continue
 
+        frame = service.get_frame()
+        if frame is None:
+            time.sleep(0.05)
+            continue
+        last_frame_number = frame_number
+
         if overlay:
-            state = service.get_state_snapshot()
-            keypoints = state.keypoints if hasattr(state, 'keypoints') else []
-            risk_level = state.risk_level
-            features = state.features if hasattr(state, 'features') else {}
-            frame = _draw_skeleton(frame.copy(), keypoints, risk_level, features)
+            payload = service.get_overlay_payload()
+            frame = _draw_skeleton(
+                frame,
+                payload["keypoints"],
+                payload["risk_level"],
+                payload["features"],
+            )
 
         ret, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
         if not ret:
@@ -167,6 +191,7 @@ def _generate_mjpeg(overlay: bool = True):
             jpeg.tobytes() +
             b'\r\n'
         )
+        time.sleep(FRAME_INTERVAL_S)
 
 
 @router.get("/video/feed")

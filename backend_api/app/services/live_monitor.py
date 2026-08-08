@@ -52,6 +52,58 @@ RECORDINGS_DIR = os.environ.get(
 )
 
 
+def clean_feature_values(features: dict) -> dict:
+    """Return a JSON-safe copy of a feature dict.
+
+    Coerces numpy scalars to plain floats (``float32``/``float64`` are not
+    JSON-serializable in all cases) and maps NaN to ``None`` so WebSocket
+    pushes / API payloads never break JSON serialization.
+    """
+    out = {}
+    for key, value in (features or {}).items():
+        try:
+            out[key] = None if (value is None or value != value) else float(value)
+        except (TypeError, ValueError):
+            out[key] = None
+    return out
+
+
+def build_ws_payload(state) -> dict:
+    """Serialize ``LiveState`` into a JSON-safe dashboard payload (no frame).
+
+    All scalar fields are coerced to plain floats and feature values to
+    float/None so WebSocket pushes can never break JSON serialization with
+    numpy scalars or NaN.
+    """
+    def _f(value, default=0.0):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
+    return {
+        "session_active": bool(state.session_active),
+        "session_id": state.session_id,
+        "risk_level": state.risk_level,
+        "risk_score": _f(state.risk_score),
+        "confidence": _f(state.confidence),
+        "person_detected": bool(state.person_detected),
+        "task_name": state.task_name,
+        "task_confidence": _f(state.task_confidence),
+        "task_duration_seconds": _f(state.task_duration_seconds),
+        "issues": list(state.issues),
+        "worker_recommendation": state.worker_recommendation,
+        "supervisor_recommendation": state.supervisor_recommendation,
+        "fps": _f(state.fps),
+        "inference_latency_ms": _f(state.inference_latency_ms),
+        "timestamp": state.timestamp,
+        "camera_status": state.camera_status,
+        "frame_width": state.frame_width,
+        "frame_height": state.frame_height,
+        "features": clean_feature_values(state.features),
+    }
+
+
 def export_recommendations_from_bundle(rec_bundle) -> list[dict]:
     """Flatten RecommendationEngine.export()'s dict-shaped bundle into timeline rows.
 
@@ -548,6 +600,7 @@ class LiveMonitoringService:
 
             with self._lock:
                 self.state.current_frame = frame
+                self.state.frame_number = self._frame_counter
                 self.state.features = dict(result.features)
                 self.state.risk_level = context_snapshot.risk_level
                 self.state.risk_score = round(context_snapshot.final_risk, 2)
@@ -572,6 +625,31 @@ class LiveMonitoringService:
     def get_frame(self) -> Optional[np.ndarray]:
         with self._lock:
             return self.state.current_frame.copy() if self.state.current_frame is not None else None
+
+    def get_frame_number(self) -> Optional[int]:
+        """Return the current frame's counter, or ``None`` before the first frame.
+
+        Lets stream consumers check for a new frame WITHOUT copying the frame
+        (the copy only happens once a new frame is detected).
+        """
+        with self._lock:
+            if self.state.current_frame is None:
+                return None
+            return self.state.frame_number
+
+    def get_overlay_payload(self) -> dict:
+        """Lightweight overlay data — avoids deep-copying the full state (incl. frame)."""
+        with self._lock:
+            return {
+                "keypoints": list(self.state.keypoints),
+                "risk_level": self.state.risk_level,
+                "features": dict(self.state.features),
+            }
+
+    def get_ws_payload(self) -> dict:
+        """JSON-safe dashboard payload for WebSocket pushes — no full-frame deepcopy."""
+        with self._lock:
+            return build_ws_payload(self.state)
 
     def get_state_snapshot(self) -> LiveState:
         import copy
