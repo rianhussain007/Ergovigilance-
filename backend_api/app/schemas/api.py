@@ -299,6 +299,9 @@ class ManagerSummary(BaseModel):
     mostCommonIssue: str = ""
     workers: List[WorkerSummary] = []
     departmentHeatmap: List[DepartmentHeatmapEntry] = []
+    weeklyImprovement: Optional[float] = None
+    averageCompliance: Optional[float] = None
+    healthScore: Optional[float] = None
 
 
 AlertSeverity = Literal["critical", "warning", "info", "resolved", "low", "moderate", "high"]

@@ -90,6 +90,21 @@ export interface ManagerSummary {
   mostCommonIssue: string;
   workers: WorkerSummary[];
   departmentHeatmap: DepartmentHeatmapEntry[];
+  weeklyImprovement?: number | null;
+  averageCompliance?: number | null;
+  healthScore?: number | null;
+}
+
+export interface RetentionPolicy {
+  session_retention_days: number;
+  recording_retention_days: number;
+  recordings_max_gb: number;
+}
+
+export interface RetentionStats {
+  policy: RetentionPolicy;
+  sessions: { dir: string; file_count: number; bytes: number };
+  recordings: { dir: string; session_count: number; bytes: number };
 }
 
 export interface Recommendations {

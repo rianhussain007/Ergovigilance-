@@ -62,6 +62,9 @@ export default function ManagerDashboard() {
           todayAlerts: 8,
           sessionsCompleted: 42,
           mostCommonIssue: 'Neck Flexion',
+          weeklyImprovement: 12.4,
+          averageCompliance: 84.6,
+          healthScore: 78.2,
           workers: DEMO_WORKERS,
           departmentHeatmap: [
             { department: 'Assembly Line A', averageRisk: 33.5, workerCount: 2, highRiskCount: 0, level: 'moderate' },
@@ -133,23 +136,32 @@ export default function ManagerDashboard() {
       <div className="bg-surface-container border border-outline-variant rounded-xl p-lg">
         <SectionHeader title="Cross-Session Metrics" />
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-md mt-md">
-          <div className="bg-surface-container-low rounded-lg p-md border border-outline-variant/50 text-center opacity-60">
-            <TrendingUp className="w-5 h-5 mx-auto text-on-surface-variant mb-xs" />
-            <p className="text-title-lg font-bold text-on-surface">—</p>
+          <div className="bg-surface-container-low rounded-lg p-md border border-outline-variant/50 text-center">
+            <TrendingUp className={`w-5 h-5 mx-auto mb-xs ${data.manager.weeklyImprovement !== null && data.manager.weeklyImprovement !== undefined && data.manager.weeklyImprovement < 0 ? 'text-red-400' : 'text-green-400'}`} />
+            <p className={`text-title-lg font-bold ${data.manager.weeklyImprovement === null || data.manager.weeklyImprovement === undefined ? 'text-on-surface-variant' : data.manager.weeklyImprovement < 0 ? 'text-red-400' : 'text-green-400'}`}>
+              {data.manager.weeklyImprovement === null || data.manager.weeklyImprovement === undefined
+                ? '—'
+                : `${data.manager.weeklyImprovement > 0 ? '+' : ''}${data.manager.weeklyImprovement.toFixed(1)}%`}
+            </p>
             <p className="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant mt-1">Weekly Improvement</p>
-            <p className="text-[8px] text-on-surface-variant/60 mt-1">Coming soon</p>
+            <p className="text-[8px] text-on-surface-variant/60 mt-1">Avg risk vs prior 7 days</p>
           </div>
-          <div className="bg-surface-container-low rounded-lg p-md border border-outline-variant/50 text-center opacity-60">
-            <Activity className="w-5 h-5 mx-auto text-on-surface-variant mb-xs" />
-            <p className="text-title-lg font-bold text-on-surface">—</p>
+          <div className="bg-surface-container-low rounded-lg p-md border border-outline-variant/50 text-center">
+            <Activity className="w-5 h-5 mx-auto text-primary mb-xs" />
+            <p className="text-title-lg font-bold text-on-surface">
+              {data.manager.averageCompliance === null || data.manager.averageCompliance === undefined ? '—' : `${data.manager.averageCompliance.toFixed(0)}%`}
+            </p>
             <p className="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant mt-1">Average Compliance</p>
-            <p className="text-[8px] text-on-surface-variant/60 mt-1">Coming soon</p>
+            <p className="text-[8px] text-on-surface-variant/60 mt-1">100 − avg risk across sessions</p>
           </div>
-          <div className="bg-surface-container-low rounded-lg p-md border border-outline-variant/50 text-center opacity-60">
-            <Users className="w-5 h-5 mx-auto text-on-surface-variant mb-xs" />
-            <p className="text-title-lg font-bold text-on-surface">—</p>
+          <div className="bg-surface-container-low rounded-lg p-md border border-outline-variant/50 text-center">
+            <Users className="w-5 h-5 mx-auto text-primary mb-xs" />
+            <p className="text-title-lg font-bold text-on-surface">
+              {data.manager.healthScore === null || data.manager.healthScore === undefined ? '—' : data.manager.healthScore.toFixed(0)}
+              <span className="text-[10px] font-normal text-on-surface-variant">/100</span>
+            </p>
             <p className="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant mt-1">Health Score</p>
-            <p className="text-[8px] text-on-surface-variant/60 mt-1">Coming soon</p>
+            <p className="text-[8px] text-on-surface-variant/60 mt-1">Recency-weighted risk composite</p>
           </div>
         </div>
       </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { FeatureCard, AnalyticCard } from '@/src/components/cards';
 import { RiskHistoryChart, CameraPanel } from '@/src/components/charts';
 import { SectionHeader, StatusBadge, LoadingCard, ErrorCard, EmptyState, WorkerProfile, AIInsights, DigitalTwin, HealthScore, ShiftSummary, ExportsCenter, LiveAlerts, ContextAwareRiskCard, AlertManagementCard, SystemPerformanceCard, RecommendationsCard } from '@/src/components/common';
@@ -9,6 +9,7 @@ import { useLiveTimeline } from '@/src/hooks/useLiveTimeline';
 import { useContextSnapshot } from '@/src/hooks/useContextSnapshot';
 import { useRecommendations } from '@/src/hooks/useRecommendations';
 import { useToast } from '@/src/hooks/useToast';
+import { useSettings } from '@/src/hooks/useSettings';
 import { useDemo } from '@/src/demo/DemoProvider';
 import { CameraPlayback } from '@/src/components/demo';
 import { AlertTriangle, Camera, Clock3, FileDown, FileText, Radio, ShieldAlert } from 'lucide-react';
@@ -17,6 +18,7 @@ import type { StatusType, Issue, ErgonomicFeature, LiveStatus, Recommendations, 
 export default function LiveMonitoring() {
   const { dashboard, sessions, loading, error, refetch } = useDashboardWithDemo();
   const { state } = useDemo();
+  const { settings } = useSettings();
   const history = useHistory();
   const { timeline: liveTimeline } = useLiveTimeline();
   const { snapshot: contextSnapshot } = useContextSnapshot();
@@ -24,6 +26,7 @@ export default function LiveMonitoring() {
   const { addToast } = useToast();
   const [showExports, setShowExports] = useState(false);
   const [showAlerts, setShowAlerts] = useState(false);
+  const captureRef = useRef<(() => void) | null>(null);
   const [selectedFeature, setSelectedFeature] = useState('neck_flexion');
   const [selectedTime, setSelectedTime] = useState(0);
 
@@ -44,6 +47,20 @@ export default function LiveMonitoring() {
   const seekTo = useCallback((t: number) => {
     setSelectedTime(t);
   }, []);
+
+  // CameraPanel registers its screenshot handler here; stable callback so the
+  // registration effect in CameraPanel doesn't re-run on every parent render.
+  const registerCapture = useCallback((fn: () => void) => {
+    captureRef.current = fn;
+  }, []);
+
+  const handleSidebarCapture = useCallback(() => {
+    if (captureRef.current) {
+      captureRef.current();
+    } else {
+      addToast('warning', 'No camera feed', 'Start a live monitoring session to capture a frame.');
+    }
+  }, [addToast]);
 
   useEffect(() => {
     if (liveTimeline.length > 0) {
@@ -93,6 +110,13 @@ export default function LiveMonitoring() {
   const { liveStatus, ergonomicFeatures, issues, recommendations, sessionAnalytics, riskHistory, trendAnalysis, session, unavailableFeatures = [] } = dashboard;
   const approximateFeatures = contextSnapshot?.approximate_features ?? [];
 
+  // Filter displayed issues by the user's alert threshold (low | moderate | high).
+  const filteredIssues = issues.filter((i) => {
+    const rank: Record<string, number> = { low: 0, moderate: 1, high: 2 };
+    const minRank = rank[settings.alertThreshold] ?? 0;
+    return (rank[i.severity] ?? 0) >= minRank;
+  });
+
   return (
     <div className="p-lg space-y-lg pb-32">
       <section className="rounded-lg border border-cyan-400/15 bg-[#080d13] p-md shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
@@ -111,7 +135,12 @@ export default function LiveMonitoring() {
           {state.active ? (
             <CameraPlayback workerName={session.workerName} />
           ) : (
-            <CameraPanel status={session.cameraStatus} workerName={session.workerName} task={liveStatus.currentTask} />
+            <CameraPanel
+              status={session.cameraStatus}
+              workerName={session.workerName}
+              task={liveStatus.currentTask}
+              onCaptureReady={registerCapture}
+            />
           )}
           <TelemetrySidebar
             session={session}
@@ -121,6 +150,7 @@ export default function LiveMonitoring() {
             recommendations={recommendations}
             unavailableFeatures={unavailableFeatures}
             approximateFeatures={approximateFeatures}
+            onCapture={handleSidebarCapture}
             onPlaceholder={(label) => addToast('info', `${label} coming soon`, 'This control is a visual placeholder until backend support is connected.')}
           />
         </div>
@@ -223,6 +253,7 @@ export default function LiveMonitoring() {
             <span className="text-[9px] bg-red-500/15 text-red-400 px-1.5 py-0.5 rounded-full font-bold">{issues.filter((i) => i.severity === 'high').length}</span>
           )}
         </button>
+        <span className="text-[10px] text-on-surface-variant">Alert level: {settings.alertThreshold}</span>
       </div>
 
       <section>
@@ -274,7 +305,7 @@ export default function LiveMonitoring() {
       {showAlerts && (
         <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setShowAlerts(false)}>
           <div className="w-full max-w-sm bg-surface-container border-l border-outline-variant shadow-2xl h-full" onClick={(e) => e.stopPropagation()}>
-            <LiveAlerts issues={issues as Issue[]} onClose={() => setShowAlerts(false)} />
+            <LiveAlerts issues={filteredIssues as Issue[]} onClose={() => setShowAlerts(false)} />
           </div>
         </div>
       )}
@@ -290,6 +321,7 @@ function TelemetrySidebar({
   recommendations,
   unavailableFeatures,
   approximateFeatures,
+  onCapture,
   onPlaceholder,
 }: {
   session: SessionInfo;
@@ -299,6 +331,7 @@ function TelemetrySidebar({
   recommendations: Recommendations;
   unavailableFeatures: string[];
   approximateFeatures: string[];
+  onCapture?: () => void;
   onPlaceholder: (label: string) => void;
 }) {
   const primaryIssue = issues[0];
@@ -339,7 +372,7 @@ function TelemetrySidebar({
 
       <div className="grid grid-cols-3 gap-xs">
         <PlaceholderAction icon={ShieldAlert} label="Override" onClick={() => onPlaceholder('Manual override')} />
-        <PlaceholderAction icon={Camera} label="Capture" onClick={() => onPlaceholder('Capture')} />
+        <PlaceholderAction icon={Camera} label="Capture" onClick={onCapture} real />
         <PlaceholderAction icon={FileText} label="Log" onClick={() => onPlaceholder('Log')} />
       </div>
 
@@ -426,17 +459,21 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PlaceholderAction({ icon: Icon, label, onClick }: { icon: typeof Camera; label: string; onClick: () => void }) {
+function PlaceholderAction({ icon: Icon, label, onClick, real }: { icon: typeof Camera; label: string; onClick?: () => void; real?: boolean }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="relative flex items-center justify-center gap-xs rounded border border-white/10 bg-white/[0.03] px-sm py-sm text-[10px] font-medium text-on-surface-variant hover:border-cyan-400/25 hover:text-cyan-100 transition-colors"
-      title={`${label} - coming soon`}
+      className={`relative flex items-center justify-center gap-xs rounded border px-sm py-sm text-[10px] font-medium transition-colors ${
+        real
+          ? 'border-cyan-400/40 bg-cyan-400/10 text-cyan-200 hover:bg-cyan-400/20'
+          : 'border-white/10 bg-white/[0.03] text-on-surface-variant hover:border-cyan-400/25 hover:text-cyan-100'
+      }`}
+      title={real ? `${label} current frame` : `${label} - coming soon`}
     >
       <Icon className="h-3.5 w-3.5" />
       {label}
-      <span className="absolute -top-1 -right-1 text-[8px] leading-none text-on-surface-variant/60">*</span>
+      {!real && <span className="absolute -top-1 -right-1 text-[8px] leading-none text-on-surface-variant/60">*</span>}
     </button>
   );
 }

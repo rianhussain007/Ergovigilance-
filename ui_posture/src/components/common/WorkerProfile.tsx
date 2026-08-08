@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Hash, Building2, Clock, Shield, Target, Award, TrendingUp } from 'lucide-react';
+import { User, Hash, Building2, Clock, Shield } from 'lucide-react';
 import type { SessionInfo, LiveStatus, WorkerRecord } from '@/src/types/api';
 import { apiFetch } from '@/src/services/apiClient';
 
@@ -47,10 +47,9 @@ export function WorkerProfile({ session, liveStatus }: WorkerProfileProps) {
       </div>
 
       <div className="space-y-sm">
-        <Row icon={Building2} label="Department" value={worker?.department || 'N/A'} placeholder={!worker?.department} />
-        <Row icon={Clock} label="Shift" value={worker?.shift || 'N/A'} placeholder={!worker?.shift} />
-        <Row icon={Target} label="Workstation" value="N/A" placeholder />
-        <Row icon={Award} label="Experience" value="N/A" placeholder />
+        <Row icon={Hash} label="Employee ID" value={worker?.employee_id || 'N/A'} placeholder={!worker} />
+        <Row icon={Building2} label="Department" value={worker?.department || 'N/A'} placeholder={!worker} />
+        <Row icon={Clock} label="Shift" value={worker?.shift || 'N/A'} placeholder={!worker} />
         <Row icon={Shield} label="Current Task" value={liveStatus?.currentTask || 'N/A'} />
       </div>
 
@@ -67,7 +66,11 @@ export function WorkerProfile({ session, liveStatus }: WorkerProfileProps) {
           <span className="text-body-sm text-on-surface-variant">Monitored Today</span>
           <span className="font-label-mono font-bold text-on-surface">{session.duration ? `${Math.floor(session.duration / 3600)}h ${Math.floor((session.duration % 3600) / 60)}m` : '—'}</span>
         </div>
-        {!hasWorkerData && <p className="text-[10px] text-on-surface-variant/50 pt-xs">* Placeholder — no worker database connected</p>}
+        {!hasWorkerData && (
+          <p className="text-[10px] text-on-surface-variant/50 pt-xs">
+            * No worker record matches this session — add the worker in the Workers page to link their profile.
+          </p>
+        )}
       </div>
     </div>
   );

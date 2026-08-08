@@ -216,6 +216,9 @@ MANAGER = {
     "todayAlerts": 8,
     "sessionsCompleted": 42,
     "mostCommonIssue": "Neck Flexion",
+    "weeklyImprovement": 12.4,
+    "averageCompliance": 84.6,
+    "healthScore": 78.2,
     "workers": [
         {"id": "WA-4092", "name": "Marcus Thorne", "status": "moderate", "task": "Assembly Line B", "risk": 42.0},
         {"id": "WA-2104", "name": "Elena Rodriguez", "status": "low", "task": "Loading Dock", "risk": 18.0},

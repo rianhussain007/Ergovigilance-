@@ -35,6 +35,52 @@ _DEFAULT_RECORDINGS_DIR = os.path.abspath(
 
 _SECONDS_PER_DAY = 24 * 60 * 60
 
+# Admin-tunable overrides are persisted here so the Settings UI can change the
+# policy at runtime (env vars alone can't be edited from a running process).
+_OVERRIDE_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "config",
+    "retention.json",
+)
+
+
+def _load_overrides() -> dict:
+    """Read persisted admin overrides ({} when missing/corrupt)."""
+    try:
+        if os.path.exists(_OVERRIDE_PATH):
+            with open(_OVERRIDE_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        pass
+    return {}
+
+
+def set_retention_config(config: dict) -> tuple[dict, bool]:
+    """Persist admin-tunable retention policy to the override file.
+
+    Accepts a partial dict (``{session_retention_days: 60}``); unspecified
+    keys keep their current effective value. Returns ``(merged_policy,
+    persisted)`` — persisted is False when the override file could not be
+    written (e.g. read-only filesystem), so callers can surface the failure
+    instead of silently reporting success.
+    """
+    current = retention_config()
+    merged = {
+        "session_retention_days": int(config.get("session_retention_days", current["session_retention_days"])),
+        "recording_retention_days": int(config.get("recording_retention_days", current["recording_retention_days"])),
+        "recordings_max_gb": float(config.get("recordings_max_gb", current["recordings_max_gb"])),
+    }
+    persisted = False
+    try:
+        os.makedirs(os.path.dirname(_OVERRIDE_PATH), exist_ok=True)
+        with open(_OVERRIDE_PATH, "w", encoding="utf-8") as f:
+            json.dump(merged, f, indent=2)
+        persisted = True
+    except OSError as exc:
+        logger.warning("Failed to persist retention overrides: %s", exc)
+    return merged, persisted
+
 
 def _resolve_dir(explicit: str | Path | None, env_name: str, default: str) -> Path:
     """Resolve a directory: explicit argument wins, then env, then default.
@@ -58,12 +104,18 @@ def _env_int(name: str, default: int) -> int:
 
 
 def retention_config() -> dict:
-    """Read the retention policy from environment variables (0 = disabled)."""
-    return {
+    """Read the retention policy — env defaults, overridden by the persisted
+    admin config file (0 = disabled)."""
+    overrides = _load_overrides()
+    policy = {
         "session_retention_days": _env_int("SESSION_RETENTION_DAYS", 30),
         "recording_retention_days": _env_int("RECORDING_RETENTION_DAYS", 30),
         "recordings_max_gb": _env_int("RECORDINGS_MAX_GB", 20),
     }
+    for key in policy:
+        if key in overrides:
+            policy[key] = overrides[key]
+    return policy
 
 
 def dir_size(path: Path) -> int:

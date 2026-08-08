@@ -712,6 +712,9 @@ class LiveRepository(DashboardRepository):
                 level=level,
             ))
 
+        from app.services.manager_metrics import compute_manager_metrics
+        metrics = compute_manager_metrics(cached)
+
         result = ManagerSummary(
             registeredWorkers=len(all_workers),
             highRiskWorkers=high_risk_count,
@@ -720,6 +723,9 @@ class LiveRepository(DashboardRepository):
             mostCommonIssue=most_common_issue,
             workers=workers_summary,
             departmentHeatmap=dept_heatmap,
+            weeklyImprovement=metrics["weeklyImprovement"],
+            averageCompliance=metrics["averageCompliance"],
+            healthScore=metrics["healthScore"],
         )
         _manager_cache = result
         _manager_cache_time = now

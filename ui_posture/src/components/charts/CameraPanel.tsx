@@ -7,9 +7,12 @@ interface CameraPanelProps {
   status: string;
   workerName: string;
   task?: string;
+  /** Register the internal frame-capture handler so sibling controls (e.g. the
+   *  Live Monitoring telemetry sidebar) can trigger a screenshot. */
+  onCaptureReady?: (fn: () => void) => void;
 }
 
-export function CameraPanel({ status, workerName, task }: CameraPanelProps) {
+export function CameraPanel({ status, workerName, task, onCaptureReady }: CameraPanelProps) {
   const [fps, setFps] = useState(29.97);
   const [streamLoading, setStreamLoading] = useState(true);
   const [streamError, setStreamError] = useState(false);
@@ -89,6 +92,11 @@ export function CameraPanel({ status, workerName, task }: CameraPanelProps) {
       addToast('success', 'Screenshot captured', `Frame saved as capture-${Date.now()}.png`);
     }, 'image/png');
   }, [addToast]);
+
+  // Publish the capture handler to parent (sidebar Capture button).
+  useEffect(() => {
+    onCaptureReady?.(handleCapture);
+  }, [handleCapture, onCaptureReady]);
 
   const showStream = isActive && !streamError;
   const showPlaceholder = !isActive || streamError || streamLoading;

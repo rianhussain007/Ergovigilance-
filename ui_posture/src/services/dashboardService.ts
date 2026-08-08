@@ -136,6 +136,27 @@ export async function getDeployment(): Promise<import('@/src/types/api').Deploym
   return getRepository().getDeployment();
 }
 
+export async function getRetentionStats(): Promise<import('@/src/types/api').RetentionStats> {
+  const res = await apiFetch('/api/retention/stats');
+  if (!res.ok) throw new Error(`Failed to fetch retention stats: ${res.status}`);
+  return res.json();
+}
+
+export async function updateRetentionConfig(
+  cfg: Partial<import('@/src/types/api').RetentionPolicy>
+): Promise<{ status: string; policy: import('@/src/types/api').RetentionPolicy }> {
+  const res = await apiFetch('/api/retention/config', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cfg),
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({ detail: `Retention update failed: ${res.status}` }));
+    throw new Error(payload.detail || `Retention update failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 export async function detectCameras(): Promise<import('@/src/types/api').DetectedCamera[]> {
   const res = await apiFetch('/api/cameras/detect');
   if (!res.ok) throw new Error(`Camera detection failed: ${res.status}`);

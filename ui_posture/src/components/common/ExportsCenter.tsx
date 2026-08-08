@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { FileJson, FileSpreadsheet, FileDown, Mail, Share2, Check, X } from 'lucide-react';
 import { useToast } from '@/src/hooks/useToast';
+import { apiFetch } from '@/src/services/apiClient';
 import type { TimelineEntry, DashboardResponse } from '@/src/types/api';
 
 interface ExportsCenterProps {
@@ -55,8 +56,33 @@ export function ExportsCenter({ onClose, timeline, dashboard }: ExportsCenterPro
     addToast('success', 'JSON exported', `${timeline.length} entries`);
   };
 
-  const exportPDF = () => {
-    addToast('info', 'PDF coming soon', 'Full report export will be available in a future update.');
+  const exportPDF = async () => {
+    const sessionId = dashboard?.session?.id;
+    if (!sessionId) {
+      addToast('warning', 'No session to export', 'Start a monitoring session first.');
+      return;
+    }
+    try {
+      const res = await apiFetch(`/api/reports/session/${encodeURIComponent(sessionId)}/pdf`);
+      if (res.status === 404) {
+        addToast('warning', 'Report not ready', 'The session report is generated once the session is saved. Open the Reports page to export it.');
+        return;
+      }
+      if (!res.ok) {
+        addToast('error', 'PDF export failed', `Server responded with ${res.status}`);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `session-report-${sessionId}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      addToast('success', 'PDF exported', `Report saved as session-report-${sessionId}.pdf`);
+    } catch {
+      addToast('error', 'PDF export failed', 'Could not reach the report service.');
+    }
   };
 
   const handleExport = async (format: string, label: string) => {
@@ -64,7 +90,7 @@ export function ExportsCenter({ onClose, timeline, dashboard }: ExportsCenterPro
     try {
       if (format === 'CSV') exportCSV();
       else if (format === 'JSON') exportJSON();
-      else if (format === 'PDF') exportPDF();
+      else if (format === 'PDF') await exportPDF();
       else {
         addToast('info', `${label} coming soon`, 'This feature requires backend infrastructure not yet available.');
       }
@@ -87,11 +113,10 @@ export function ExportsCenter({ onClose, timeline, dashboard }: ExportsCenterPro
         <ExportButton
           icon={FileDown}
           label="Export as PDF"
-          desc="Full report including charts"
+          desc="Session report (saved sessions)"
           format="PDF"
           exporting={exporting}
           onClick={() => handleExport('PDF', 'Export as PDF')}
-          placeholder
         />
         <ExportButton
           icon={FileSpreadsheet}
