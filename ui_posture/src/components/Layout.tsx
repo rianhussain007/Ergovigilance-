@@ -39,6 +39,7 @@ export default function Layout() {
   const { state: demoState } = useDemo();
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const location = useLocation();
 
   useAlertToasts(() => setNotifOpen(true));
@@ -64,8 +65,8 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-surface text-on-surface">
-      <Sidebar role={role} rolePaths={rolePaths} />
-      <div className="flex flex-col flex-1 ml-64 min-w-0 transition-[margin] duration-300 ease-out">
+      <Sidebar role={role} rolePaths={rolePaths} collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
+      <div className={`flex flex-col flex-1 min-w-0 transition-[margin] duration-300 ease-out ${sidebarCollapsed ? 'ml-16' : 'ml-64'}`}>
         <Header
           session={dashboard?.session || null}
         />

@@ -22,10 +22,21 @@ const allNavItems = [
 interface SidebarProps {
   role?: string;
   rolePaths?: Record<string, string[]>;
+  /** Controlled collapsed state (lifted to the layout so content reflows). */
+  collapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
 }
 
-export default function Sidebar({ role = 'administrator', rolePaths }: SidebarProps) {
-  const [collapsed, setCollapsed] = useState(false);
+export default function Sidebar({ role = 'administrator', rolePaths, collapsed: collapsedProp, onCollapsedChange }: SidebarProps) {
+  // Internal fallback keeps Sidebar usable standalone; when `collapsed` is
+  // provided by the parent, the parent owns the state.
+  const [collapsedState, setCollapsedState] = useState(false);
+  const collapsed = collapsedProp ?? collapsedState;
+  const toggleCollapsed = () => {
+    const next = !collapsed;
+    setCollapsedState(next);
+    onCollapsedChange?.(next);
+  };
 
   const navItems = useMemo(() => {
     return allNavItems.filter((item) => item.roles.includes(role));
@@ -81,7 +92,7 @@ export default function Sidebar({ role = 'administrator', rolePaths }: SidebarPr
 
       <div className="px-sm pt-md border-t border-outline-variant mt-auto">
         <button
-          onClick={() => setCollapsed(!collapsed)}
+          onClick={toggleCollapsed}
           className="w-full flex items-center justify-center px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface transition-all duration-150 gap-md"
         >
           {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}

@@ -53,6 +53,57 @@ _camera_cache: list["CameraInfo"] = []
 _camera_cache_time: float = 0
 _camera_cache_ttl = 300  # seconds (5 min — cameras rarely change)
 
+
+def _ensure_camera_cache(force: bool = False) -> None:
+    """Probe physical cameras and populate the module-level cache if stale.
+
+    Probing opens camera devices, which takes several seconds on Windows, so
+    it is cached (5 min TTL) and can be prewarmed at startup via
+    ``warm_camera_cache()``.
+    """
+    global _camera_cache, _camera_cache_time  # noqa: PLW0603
+    from backend.services.camera_manager import detect_cameras
+
+    now = time.time()
+    if not force and _camera_cache and (now - _camera_cache_time) <= _camera_cache_ttl:
+        return
+
+    try:
+        detected = detect_cameras(fast=True, max_index=5)
+    except Exception as exc:
+        # Back off retries for the full TTL on failure so a broken probe can't
+        # be hammered per request; a camera plugged in afterwards is picked up
+        # at the next TTL expiry. (The previous code surfaced probe errors as
+        # 500s, so this is strictly friendlier.)
+        logger.warning("Camera probe failed (retrying in %ds): %s", _camera_cache_ttl, exc)
+        _camera_cache_time = now
+        return
+
+    _camera_cache = [
+        CameraInfo(
+            id=f"cam-{cam.index}",
+            name=cam.name or f"Camera {cam.index}",
+            worker="",
+            fps=0,
+            risk="low",
+            recording=False,
+            uptime="",
+            status="available",
+        )
+        for cam in detected
+    ]
+    _camera_cache_time = now
+    logger.info("Camera probe complete — %d camera(s) detected", len(_camera_cache))
+
+
+def warm_camera_cache() -> None:
+    """Pre-probe cameras so the first /api/cameras and /api/deployment calls
+    don't block on a multi-second device probe (call from a background thread)."""
+    try:
+        _ensure_camera_cache(force=True)
+    except Exception as exc:  # pragma: no cover - defensive
+        logger.warning("Camera cache prewarm failed (will probe lazily): %s", exc)
+
 # ── Module-level manager summary cache ──────────────────────────────
 _manager_cache: dict | None = None
 _manager_cache_time: float = 0
@@ -453,42 +504,10 @@ class LiveRepository(DashboardRepository):
         service = get_live_service()
         is_running = service.is_running()
 
-        from backend.services.camera_manager import detect_cameras
-
-        # Module-level cache (survives per-request instances)
-        global _camera_cache, _camera_cache_time  # noqa: PLW0603
-
-        active_index: Optional[int] = getattr(service, "current_camera_index", None) if is_running else None
-
-        # Re-probe only when cache is expired or empty.
-        # This preserves the LED-flicker fix while still allowing the idle UI
-        # to show detected cameras as "Available" once they are discovered.
-        now = time.time()
-        if not _camera_cache or (now - _camera_cache_time) > _camera_cache_ttl:
-            age = now - _camera_cache_time if _camera_cache_time else float("inf")
-            if is_running:
-                logger.info("[get_cameras] cache expired (age=%.1fs) — probing physical devices", age)
-            else:
-                logger.info("[get_cameras] idle cache miss (age=%.1fs) — probing physical devices once", age)
-            detected = detect_cameras(fast=True, max_index=5)
-            fresh: list[CameraInfo] = []
-            for cam in detected:
-                fresh.append(CameraInfo(
-                    id=f"cam-{cam.index}",
-                    name=cam.name or f"Camera {cam.index}",
-                    worker="",
-                    fps=0,
-                    risk="low",
-                    recording=False,
-                    uptime="",
-                    status="available",
-                ))
-            _camera_cache = fresh
-            _camera_cache_time = now
-            logger.info("[get_cameras] probed %d camera(s), next probe in %ds", len(fresh), _camera_cache_ttl)
-        else:
-            age = now - _camera_cache_time
-            logger.info("[get_cameras] cache hit (age=%.1fs); reusing cached %d camera(s)", age, len(_camera_cache))
+        # Module-level cache (survives per-request instances). Re-probe only
+        # when the cache is expired or empty; prewarmed at startup by
+        # warm_camera_cache() so the first page load is fast.
+        _ensure_camera_cache()
 
         if not _camera_cache:
             return []
@@ -548,23 +567,7 @@ class LiveRepository(DashboardRepository):
 
         # Camera count — reuse the same cache as get_cameras() to avoid
         # probing physical devices on every deployment poll (frontend polls every 30s).
-        global _camera_cache, _camera_cache_time  # noqa: PLW0603
-        now = time.time()
-        if not _camera_cache or (now - _camera_cache_time) > _camera_cache_ttl:
-            _camera_cache_time = now
-            try:
-                detected = detect_cameras(fast=True, max_index=5)
-                _camera_cache = [
-                    CameraInfo(
-                        id=f"cam-{cam.index}",
-                        name=cam.name or f"Camera {cam.index}",
-                        worker="", fps=0, risk="low",
-                        recording=False, uptime="", status="available",
-                    )
-                    for cam in detected
-                ]
-            except Exception as exc:
-                logger.warning("get_deployment camera probe failed: %s", exc)
+        _ensure_camera_cache()
         camera_count = len(_camera_cache) if _camera_cache else 0
 
         # Session info

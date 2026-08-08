@@ -22,7 +22,10 @@ SESSIONS_DIR = os.path.join(
 
 _session_cache: list[dict[str, Any]] | None = None
 _session_cache_time: float = 0
-SESSION_CACHE_TTL: float = 30.0  # seconds
+# Sessions only change when a session ends (invalidate_session_cache() is
+# called on stop), so 5 minutes is plenty — a 30s TTL made every sessions
+# poll re-scan + re-parse all session JSON files on disk (~3s for 66 files).
+SESSION_CACHE_TTL: float = 300.0  # seconds
 
 
 def _scan_session_files() -> list[dict[str, Any]]:
@@ -56,6 +59,22 @@ def get_all_sessions() -> list[dict[str, Any]]:
     _session_cache_time = now
     logger.debug("Session cache refreshed — %d sessions loaded", len(_session_cache))
     return _session_cache
+
+
+def prewarm_session_cache() -> None:
+    """Build the session cache once, eagerly (call from a background thread).
+
+    The first ``get_all_sessions()`` call scans and parses every session JSON
+    file on disk, which takes seconds with many files — prewarming moves that
+    cost to startup so the first API request is served from cache.
+    """
+    global _session_cache, _session_cache_time
+    try:
+        _session_cache = _scan_session_files()
+        _session_cache_time = time.time()
+        logger.info("Session cache prewarmed — %d sessions loaded", len(_session_cache))
+    except Exception as exc:
+        logger.warning("Session cache prewarm failed (will build lazily): %s", exc)
 
 
 def invalidate_session_cache() -> None:

@@ -105,6 +105,18 @@ async def lifespan(app: FastAPI):
     # load can take seconds — neither should delay first request readiness.
     threading.Thread(target=_ensure_ollama_running, daemon=True, name="ollama-watchdog").start()
 
+    # Prewarm slow caches in the background so the first request that touches
+    # them is fast: the session-file scan takes seconds (~3s for 66 files) and
+    # probing physical cameras takes ~9s on Windows. Without this, the first
+    # /api/sessions and /api/deployment calls block for seconds. Both warmers
+    # guard their own errors, so a failure just falls back to lazy probing.
+    # Run them in parallel — the camera probe is the slower one.
+    from app.repositories.live import warm_camera_cache
+    from app.services.session_cache import prewarm_session_cache
+
+    threading.Thread(target=warm_camera_cache, daemon=True, name="camera-prewarm").start()
+    threading.Thread(target=prewarm_session_cache, daemon=True, name="session-prewarm").start()
+
     model_path = os.path.abspath(MODEL_PATH)
     if not os.path.exists(model_path):
         logger.warning("Pose model not found at %s — live mode unavailable", model_path)
