@@ -3,6 +3,7 @@
 .DS_Store
 data/raw/
 data/processed/
+data/tasks/  # webcam task clips (large binaries); only the extracted CSV is committed
 *.jpg
 *.png
 .env

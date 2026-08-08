@@ -16,6 +16,13 @@ otherwise Gaussian fallback (see backend/services/task_recognition.py).
 
 Usage:
     python scripts/train_task_model_v2.py [--out models/task_model_v2.pkl] [--per-class 4000] [--seed 42]
+    python scripts/train_task_model_v2.py --data data/processed/task_clips_features.csv
+
+The synthetic substrate guarantees class coverage while the rule engine
+(validated) labels stay geometrically consistent. Real captured data
+(scripts/capture_task_clips.py → scripts/build_task_dataset.py) replaces the
+synthetic substrate when --data is given — it is ground truth from your
+actual workplace and therefore higher fidelity.
 """
 
 from __future__ import annotations
@@ -246,9 +253,43 @@ def generate(per_class: int, seed: int) -> Tuple[List[List[float]], List[str], d
     return X, y, {"accepted": accepted, "rejected": rejected}
 
 
-def train(out: Path, per_class: int, seed: int) -> dict:
-    print("generating synthetic labeled poses (validated against the Gaussian)...")
-    X, y, gen_stats = generate(per_class, seed)
+def load_real(data_path: Path) -> Tuple[List[List[float]], List[str], dict]:
+    """Load real captured samples from a task_clips_features.csv.
+
+    Rows whose task_label is not one of CLASSES are dropped; classes with
+    zero samples are reported so the operator can capture more.
+    """
+    import pandas as pd
+
+    df = pd.read_csv(data_path)
+    df = df[df["task_label"].isin(CLASSES)]
+    counts = df["task_label"].value_counts().to_dict()
+    if df.empty:
+        raise RuntimeError(
+            f"No rows with a known task_label in {data_path} — expected one of {CLASSES}")
+
+    missing = [c for c in CLASSES if counts.get(c, 0) == 0]
+    if missing:
+        print(f"WARNING: classes with zero real samples: {missing} — "
+              f"the model will have no real-world coverage for them.")
+
+    X: List[List[float]] = []
+    y: List[str] = []
+    for _, row in df.iterrows():
+        X.append([float(row[c]) for c in TRAIN_FEATURES])
+        y.append(str(row["task_label"]))
+    return X, y, {"per_class": counts}
+
+
+def train(out: Path, per_class: int, seed: int, data_path: Path | None = None) -> dict:
+    if data_path is not None:
+        print(f"training on REAL captured samples from {data_path}...")
+        X, y, gen_stats = load_real(data_path)
+        trained_on = f"real captured task clips ({data_path.name})"
+    else:
+        print("generating synthetic labeled poses (validated against the Gaussian)...")
+        X, y, gen_stats = generate(per_class, seed)
+        trained_on = "synthetic validated poses (rule-engine geometry sweeps)"
     X = np.asarray(X, dtype=float)
     y = np.asarray(y)
 
@@ -279,7 +320,7 @@ def train(out: Path, per_class: int, seed: int) -> dict:
         "metrics": metrics,
         "config": {"confidence_threshold": 0.6},
         "purpose": "Task classifier v2 — model-primary with Gaussian fallback.",
-        "trained_on": "synthetic validated poses (rule-engine geometry sweeps)",
+        "trained_on": trained_on,
     }
     out.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(bundle, out)
@@ -292,5 +333,8 @@ if __name__ == "__main__":
     ap.add_argument("--out", type=Path, default=ROOT / "models/task_model_v2.pkl")
     ap.add_argument("--per-class", type=int, default=4000)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--data", type=Path, default=None,
+                    help="Optional real captured feature CSV (see build_task_dataset.py). "
+                         "When given, training uses these samples instead of synthetic.")
     args = ap.parse_args()
-    train(args.out, args.per_class, args.seed)
+    train(args.out, args.per_class, args.seed, args.data)

@@ -122,3 +122,96 @@ class TestRuntimeIntegration:
         kp = np.zeros((33, 4))
         info = recognizer.detect_task(kp, _features(kp))
         assert info["task"] == "Unknown"
+
+    def test_real_model_uncertain_pose_gates_to_gaussian(self, model_available):
+        """Graceful degradation with the real artifact: a hands-at-sides neutral
+        pose sits OUTSIDE the synthetic 'Neutral Standing' training range
+        (which models hands at chest-waist height), so the model's top
+        prediction stays below the 0.6 gate and the Gaussian fallback must
+        still return a sensible decision — never a crash and never an
+        unguarded model guess."""
+        if not model_available:
+            pytest.skip("task_model_v2.pkl not present")
+        recognizer = TaskRecognition()
+        kp = _build_33()
+        info = recognizer.detect_task(kp, _features(kp))
+        assert recognizer.using_model is False
+        assert info["task"] in CLASSES
+        assert info["confidence"] > 0.0
+        assert "Trained task classifier" not in info["reason"]
+
+
+class DummyModel:
+    """Picklable stand-in exposing sklearn's predict_proba shape."""
+
+    def __init__(self, row: list[float]):
+        self._row = row
+
+    def predict_proba(self, X):
+        return np.tile([self._row], (len(X), 1))
+
+
+class TestConfidenceGate:
+    """The gate must route to the model only when the top prediction clears
+    the 0.6 threshold — otherwise the Gaussian fallback decides and the drift
+    canary sees a 'gaussian' source. These use a fabricated bundle so the
+    gate logic is exercised without depending on the trained artifact."""
+
+    @pytest.fixture()
+    def low_conf_bundle(self, tmp_path):
+        import joblib
+
+        bundle = {
+            "model": DummyModel([0.30, 0.25, 0.20, 0.15, 0.10]),  # best 0.30 < 0.6
+            "feature_columns": [
+                "neck_flexion", "trunk_flexion", "left_shoulder_elev",
+                "right_shoulder_elev", "shoulder_symmetry", "alignment_deviation",
+            ],
+            "labels": CLASSES,
+            "config": {"confidence_threshold": 0.6},
+        }
+        path = tmp_path / "low_conf.pkl"
+        joblib.dump(bundle, path)
+        return str(path)
+
+    @pytest.fixture()
+    def high_conf_bundle(self, tmp_path):
+        import joblib
+
+        bundle = {
+            "model": DummyModel([0.85, 0.05, 0.05, 0.03, 0.02]),  # best 0.85 >= 0.6
+            "feature_columns": [
+                "neck_flexion", "trunk_flexion", "left_shoulder_elev",
+                "right_shoulder_elev", "shoulder_symmetry", "alignment_deviation",
+            ],
+            "labels": CLASSES,
+            "config": {"confidence_threshold": 0.6},
+        }
+        path = tmp_path / "high_conf.pkl"
+        joblib.dump(bundle, path)
+        return str(path)
+
+    def test_below_threshold_gates_to_gaussian(self, low_conf_bundle):
+        recognizer = TaskRecognition(model_path=low_conf_bundle)
+        assert recognizer._get_model_bundle() is not None  # model IS loadable
+        kp = _build_33()
+        info = recognizer.detect_task(kp, _features(kp))
+        assert recognizer.using_model is False
+        # Gaussian must still return a decision on a valid pose
+        assert info["task"] in CLASSES or info["task"] == "Unknown"
+        assert "Trained task classifier" not in info["reason"]
+
+    def test_at_threshold_uses_model(self, high_conf_bundle):
+        recognizer = TaskRecognition(model_path=high_conf_bundle)
+        assert recognizer._get_model_bundle() is not None
+        kp = _build_33()
+        info = recognizer.detect_task(kp, _features(kp))
+        assert recognizer.using_model is True
+        assert info["task"] == CLASSES[0]  # argmax label of the fabricated row
+        assert info["confidence"] == pytest.approx(85.0, abs=0.1)
+        assert "Trained task classifier" in info["reason"]
+
+    def test_threshold_read_from_bundle_config(self, low_conf_bundle):
+        recognizer = TaskRecognition(model_path=low_conf_bundle)
+        recognizer._get_model_bundle()
+        assert recognizer._confidence_threshold == 0.6

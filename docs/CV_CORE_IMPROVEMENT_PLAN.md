@@ -63,9 +63,34 @@ trained models for task & risk classification.
   synthetic distribution). Runtime: **model-primary, confidence-gated (≥0.6), Gaussian
   fallback** in `backend/services/task_recognition.py`; missing/corrupt model never raises.
 - `models/MANIFEST.json` + `verify_models.py` updated for both artifacts; 15 new tests.
-- **Not done (needs you):** Tier-2 workplace capture would replace the synthetic task
-  substrate with real data; dashboard surfacing of the calibrated-risk hint is a small
-  follow-up (schema + UI field).
+
+### ✅ Phase E — calibrated-risk surfacing + confidence-gate validation + real-capture tooling (shipped 2026-08-08)
+
+- **Calibrated-risk surfacing:** `/api/context/snapshot` now carries `calibrated_band` /
+  `calibrated_confidence` / `calibrated_agrees` (via `band_agrees()` in
+  `backend/services/risk_calibration.py`); the Context-Aware Risk card renders the model
+  band + a green/amber model-vs-rules agreement chip. Advisory only — rules stay
+  authoritative.
+- **Confidence-gate validation:** regression tests now exercise the actual gate — a
+  fabricated low-confidence bundle must route to the Gaussian fallback
+  (`using_model=False`), a high-confidence bundle must take the model path
+  (`using_model=True`, argmax label), and the threshold is read from bundle config.
+  A `verify_models.py` guard was added to the pytest suite so a corrupt/unapproved model
+  swap fails tests, not just CI.
+- **Real-task capture tooling (Tier 2 scaffold):** `scripts/capture_task_clips.py`
+  (webcam recorder per class → `data/tasks/<task>/`, gitignored) →
+  `scripts/build_task_dataset.py` (runs the real PoseEngine over sampled frames →
+  `data/processed/task_clips_features.csv`, 19 features + label) →
+  `scripts/train_task_model_v2.py --data <csv>` (trains on real samples instead of
+  synthetic, reports per-class coverage).
+- **Model-quality finding:** the trained task model is *uncertain on real neutral
+  standing* (hands at sides): top prediction Lifting/Picking @ 0.51 vs Inspection @ 0.49,
+  below the 0.6 gate. Cause: the synthetic substrate models "Neutral Standing" with hands
+  at chest-waist height (raise 0.45–0.6), not arms-at-sides. The Gaussian fallback absorbs
+  this (returns Neutral Standing), but it is exactly the synthetic-vs-reality gap that
+  Tier-2 real capture closes.
+- **Not done (needs you):** capture 5–10 s clips per task class (3+ subjects ideally) and
+  run the capture → build → train pipeline to replace the synthetic substrate.
 
 ---
 
