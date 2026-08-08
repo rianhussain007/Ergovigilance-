@@ -90,6 +90,12 @@ async def _retention_loop():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting %s v%s", settings.APP_NAME, settings.APP_VERSION)
+    if settings.DEBUG:
+        logger.warning(
+            "Running in DEBUG mode (DEBUG=true) — dev defaults for JWT are in effect. "
+            "Set DEBUG=false and a strong AUTH_JWT_SECRET before any non-local deployment "
+            "(see backend_api/.env.production.example)."
+        )
     init_local_database()
 
     retention_task = asyncio.create_task(_retention_loop())

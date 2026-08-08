@@ -9,11 +9,15 @@ final result.
 
 from __future__ import annotations
 
+import json
+import logging
 import os
+import sqlite3
 import sys
 import tempfile
 import threading
 import time
+from contextlib import closing
 from pathlib import Path
 from typing import Optional
 from uuid import uuid4
@@ -42,7 +46,118 @@ MODEL_PATH = Path(os.environ.get("POSE_MODEL_PATH", ROOT / "models" / "pose_land
 JOB_TTL_SECONDS = 30 * 60  # completed/errored jobs are kept for 30 minutes
 
 
-# ── In-memory job store (single-process; survives for the app lifetime) ─────
+# ── SQLite-backed job store (survives restarts) ─────────────────────────────
+def _job_db_path() -> Path:
+    """Persist jobs next to the auth DB (same volume in containers)."""
+    db_env = os.environ.get("AUTH_DB_PATH", "")
+    if db_env:
+        return Path(db_env).parent / "video_analysis_jobs.db"
+    return ROOT / "backend_api" / "video_analysis_jobs.db"
+
+
+_JOB_DB = _job_db_path()
+
+
+def _job_db_connection() -> sqlite3.Connection:
+    _JOB_DB.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(_JOB_DB, timeout=10)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _job_db():
+    """Context manager that closes the connection (sqlite's own CM only commits)."""
+    return closing(_job_db_connection())
+
+
+def _init_job_db() -> None:
+    with _job_db() as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS video_analysis_jobs (
+                job_id      TEXT PRIMARY KEY,
+                status      TEXT NOT NULL,
+                progress    TEXT NOT NULL DEFAULT '{}',
+                result      TEXT,
+                error       TEXT,
+                finished_at REAL NOT NULL DEFAULT 0,
+                created_at  REAL NOT NULL
+            )
+            """
+        )
+        conn.commit()
+
+
+def _persist_job(job: "VideoAnalysisJob") -> None:
+    """Write the job row to SQLite (best-effort; never raises at runtime).
+
+    Serializes with ``model_dump(mode="json")`` so numpy-typed values from the
+    analysis result (e.g. float32 features) convert to plain JSON numbers — the
+    default ``mode="python"`` keeps numpy scalars, which ``json.dumps`` rejects.
+    """
+    try:
+        result_json = None
+        if job.result is not None:
+            result_json = json.dumps(job.result.model_dump(mode="json"))
+        with _job_db() as conn:
+            conn.execute(
+                """
+                INSERT INTO video_analysis_jobs (job_id, status, progress, result, error, finished_at, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(job_id) DO UPDATE SET
+                    status = excluded.status,
+                    progress = excluded.progress,
+                    result = excluded.result,
+                    error = excluded.error,
+                    finished_at = excluded.finished_at
+                """,
+                (
+                    job.job_id,
+                    job.status,
+                    json.dumps(job.progress),
+                    result_json,
+                    job.error,
+                    job._finished_at,
+                    time.time(),
+                ),
+            )
+            conn.commit()
+    except Exception as exc:  # noqa: BLE001 - persistence is best-effort
+        logging.getLogger(__name__).warning("Failed to persist analysis job %s: %s", job.job_id, exc)
+
+
+def _load_jobs_from_db() -> None:
+    """Rehydrate the in-memory store from SQLite at startup.
+
+    Jobs that were still ``queued``/``processing`` when the process died are
+    marked ``error`` (their worker thread is gone) so clients polling them get
+    a definitive answer instead of an eternal spinner.
+    """
+    try:
+        _init_job_db()
+        with _job_db() as conn:
+            rows = conn.execute("SELECT * FROM video_analysis_jobs").fetchall()
+        for row in rows:
+            job = VideoAnalysisJob(
+                job_id=row["job_id"],
+                status=row["status"],
+                progress=json.loads(row["progress"] or "{}"),
+                result=VideoAnalysisResponse.model_validate_json(row["result"]) if row["result"] else None,
+                error=row["error"],
+            )
+            job._finished_at = float(row["finished_at"] or 0)
+            if job.status in ("queued", "processing"):
+                job.status = "error"
+                job.error = "Server restarted while this job was running — please re-upload the video."
+                job._finished_at = time.time()
+                _persist_job(job)
+            with _jobs_lock:
+                _jobs[job.job_id] = job
+    except Exception:  # noqa: BLE001 - recovery is best-effort
+        pass
+
+
+# ── In-memory job store (single-process; mirrors the SQLite rows) ───────────
 class VideoAnalysisJob(BaseModel):
     job_id: str
     status: str  # queued | processing | complete | error
@@ -62,6 +177,10 @@ class VideoAnalysisJobStart(BaseModel):
 _jobs: dict[str, VideoAnalysisJob] = {}
 _jobs_lock = threading.Lock()
 
+# Rehydrate persisted jobs from SQLite at import time so analysis jobs survive
+# backend restarts (in-flight ones are marked error).
+_load_jobs_from_db()
+
 
 def _cleanup_expired_jobs() -> None:
     """Drop finished jobs older than the TTL (called on each new submission)."""
@@ -74,6 +193,15 @@ def _cleanup_expired_jobs() -> None:
     ]
     for jid in stale:
         _jobs.pop(jid, None)
+    if stale:
+        try:
+            with _job_db() as conn:
+                conn.executemany(
+                    "DELETE FROM video_analysis_jobs WHERE job_id = ?", [(jid,) for jid in stale]
+                )
+                conn.commit()
+        except Exception:  # noqa: BLE001 - cleanup is best-effort
+            pass
 
 
 def _run_job(job_id: str, temp_path: str, filename: str) -> None:
@@ -82,6 +210,7 @@ def _run_job(job_id: str, temp_path: str, filename: str) -> None:
         with _jobs_lock:
             if job_id in _jobs:
                 _jobs[job_id].status = "processing"
+                _persist_job(_jobs[job_id])
 
         def progress_cb(processed: int, total: int) -> None:
             with _jobs_lock:
@@ -106,6 +235,7 @@ def _run_job(job_id: str, temp_path: str, filename: str) -> None:
                     "percent": 100.0,
                 }
                 job._finished_at = time.time()
+                _persist_job(job)
     except Exception as exc:  # noqa: BLE001 - surface any failure to the job
         detail = getattr(exc, "detail", None) or str(exc)
         with _jobs_lock:
@@ -114,6 +244,7 @@ def _run_job(job_id: str, temp_path: str, filename: str) -> None:
                 job.status = "error"
                 job.error = str(detail)
                 job._finished_at = time.time()
+                _persist_job(job)
     finally:
         try:
             os.unlink(temp_path)
@@ -140,6 +271,7 @@ async def analyze_video(
         with _jobs_lock:
             _cleanup_expired_jobs()
             _jobs[job_id] = VideoAnalysisJob(job_id=job_id, status="queued")
+            _persist_job(_jobs[job_id])
     except Exception:
         # Never leak the uploaded temp file if job registration fails.
         try:

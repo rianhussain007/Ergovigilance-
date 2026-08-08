@@ -143,7 +143,7 @@ Visit **http://localhost:3000** and log in with one of the seeded accounts below
 | `AUTH_JWT_TTL_SECONDS` | `28800` (8 h) | JWT expiry |
 | `TRUST_PROXY_HEADERS` | `false` | Set `true` only behind a trusted proxy (e.g. the nginx frontend) so `X-Forwarded-For` is honored for rate limiting; otherwise the socket IP is used to prevent header spoofing |
 | `LOG_LEVEL` | `INFO` | Logging level |
-| `POSE_MODEL_PATH` | `models/pose_landmarker_lite.task` | MediaPipe pose model |
+| `POSE_MODEL_PATH` | `models/pose_landmarker_lite.task` | MediaPipe pose model — set to `pose_landmarker_full.task` for cluttered industrial scenes (≈2-4× slower inference, better occlusion/scale robustness); lite is ~15-20 FPS on CPU and is the default for webcam real-time monitoring |
 | `SESSIONS_DIR` | `outputs/sessions` | Where recorded session summaries are stored |
 | `SESSION_RETENTION_DAYS` | `30` | Delete session summaries older than this many days (`0` disables) |
 | `RECORDING_RETENTION_DAYS` | `30` | Delete recording session dirs older than this many days (`0` disables) |
@@ -268,6 +268,6 @@ CI is green (first verified run 2026-08-07). See `ROADMAP.md` for the prioritize
 ## Notes & known limitations
 
 - Single-person tracking only (`num_poses=1`), CPU-only inference (~15–20 FPS at 640×480).
-- Risk thresholds are open-source defaults, not clinically validated; the RULA-informed score is a lower-bound estimate (wrist angle/twist, force/load and muscle-use adjustments are defaulted).
+- Risk thresholds are open-source defaults tuned against a 30,698-pose REBA-labeled dataset (see `reports/risk_calibration_report.md` and `scripts/tune_risk_thresholds.py`): the tuned cutoffs raise the weight-shift/symmetry over-alarm features while keeping **zero REBA-HIGH poses scored LOW** (agreement 34% → 36.9%, κ 0.085 → 0.107, HIGH-rate 80% → 73.5%). They are not clinically validated; the RULA-informed score is a lower-bound estimate (wrist angle/twist, force/load and muscle-use adjustments are defaulted).
 - The whole pipeline has so far been validated by one person in one room/camera setup — see `docs/CURRENT_STATE.md` for the full, honest list of gaps and next steps.
 - Legacy Streamlit-era artifacts (`frontend/`, `streamlit_app.py`, `packages.txt`, `run_frontend.bat`, `.streamlit/`) were removed in 2026-08 — they imported deleted pre-pivot modules and could no longer run. They remain in git history (`git log --all`) for reference. The old root `requirements.txt` now simply redirects to `backend_api/requirements.txt`.

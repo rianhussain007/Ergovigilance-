@@ -8,6 +8,9 @@ data/tasks/  # webcam task clips (large binaries); only the extracted CSV is com
 *.png
 .env
 backend_api/local_auth.db
+# SQLite runtime state
+backend_api/video_analysis_jobs.db
+backend_api/tests/*.db
 backend_api/SEED_CREDENTIALS.local.txt
 
 # Local tooling / runtime data

@@ -109,9 +109,25 @@ export function CameraPanel({ status, workerName, task, onCaptureReady }: Camera
   const toggleOverlay = useCallback(() => {
     setShowOverlay((prev) => !prev);
   }, []);
-  const showComingSoon = (label: string) => {
-    addToast('info', `${label} coming soon`, 'This control is a visual placeholder until backend support is connected.');
-  };
+  const handleLog = useCallback(() => {
+    const entry = {
+      timestamp: new Date().toISOString(),
+      worker: workerName,
+      task: task || 'Monitoring Session',
+      status,
+      fps: Number(fps.toFixed(2)),
+      overlay: showOverlay ? 'skeleton' : 'raw',
+    };
+    const blob = new Blob([JSON.stringify(entry, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const filename = `observation-${Date.now()}.json`;
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+    addToast('success', 'Observation logged', `Session snapshot saved as ${filename}`);
+  }, [workerName, task, status, fps, showOverlay, addToast]);
 
   return (
     <div ref={containerRef} className="bg-[#070b10] border border-cyan-400/15 rounded-lg overflow-hidden relative group shadow-[0_0_0_1px_rgba(34,211,238,0.04),0_24px_70px_rgba(0,0,0,0.45)]">
@@ -182,7 +198,7 @@ export function CameraPanel({ status, workerName, task, onCaptureReady }: Camera
             {showOverlay ? 'Skeleton' : 'Raw'}
           </button>
           <ActionButton title="Capture" onClick={handleCapture} icon={Snapshot} />
-          <PlaceholderButton title="Log" onClick={() => showComingSoon('Log')} icon={FileText} />
+          <ActionButton title="Log observation" onClick={handleLog} icon={FileText} />
           <ActionButton title={fullscreen ? 'Exit Fullscreen' : 'Fullscreen'} onClick={toggleFullscreen} icon={fullscreen ? Minimize : Maximize} />
         </div>
       </div>
@@ -203,16 +219,3 @@ function ActionButton({ title, onClick, icon: Icon }: { title: string; onClick: 
   );
 }
 
-function PlaceholderButton({ title, onClick, icon: Icon }: { title: string; onClick: () => void; icon: typeof Snapshot }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="p-sm rounded border border-white/10 bg-white/[0.03] text-on-surface-variant hover:text-cyan-100 hover:border-cyan-400/25 transition-colors relative"
-      title={`${title} - coming soon`}
-    >
-      <Icon className="w-4 h-4" />
-      <span className="absolute -top-1 -right-1 text-[8px] leading-none text-on-surface-variant/60">*</span>
-    </button>
-  );
-}

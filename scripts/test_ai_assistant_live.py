@@ -29,6 +29,19 @@ def _stack_available() -> bool:
         return False
 
 
+def _ollama_available() -> bool:
+    """Skip when the AI backend (Ollama) is not reachable — it is not part of
+    the unit-test environment and only exists in a live deployment."""
+    import requests
+
+    host = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+    try:
+        resp = requests.get(f"{host}/api/tags", timeout=3.0)
+        return resp.status_code == 200
+    except requests.RequestException:
+        return False
+
+
 def test_ai_assistant():
     try:
         from playwright.sync_api import sync_playwright
@@ -38,6 +51,10 @@ def test_ai_assistant():
 
     if not _stack_available():
         print(f"SKIP: frontend stack not running at {FRONTEND_URL} — start the backend + frontend first")
+        return
+
+    if not _ollama_available():
+        print("SKIP: Ollama is not reachable — the AI assistant backend is unavailable in this environment")
         return
 
     os.makedirs(SCREENSHOT_DIR, exist_ok=True)

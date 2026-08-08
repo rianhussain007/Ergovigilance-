@@ -194,6 +194,61 @@ def _generate_mjpeg(overlay: bool = True):
         time.sleep(FRAME_INTERVAL_S)
 
 
+def _resolve_camera_index(camera_id: str | None, service) -> int | None:
+    """Map a requested ``camera_id`` to a camera index, or None for the active session camera.
+
+    The active analysis session records its camera index (``current_camera_index``).
+    A request for that camera — or one without ``camera_id`` — serves the analyzed
+    feed with overlay. A request for a *different* camera routes to the per-camera
+    raw feed manager (multi-camera support).
+    """
+    if camera_id is None:
+        return None
+    # Accept both "0" and "cam-0" id formats.
+    raw = camera_id
+    if raw.lower().startswith("cam-"):
+        raw = raw[4:]
+    try:
+        requested = int(raw)
+    except (ValueError, TypeError):
+        return None  # non-numeric ids fall back to the session feed
+    session_index = getattr(service, "current_camera_index", None)
+    if session_index is not None and requested == int(session_index):
+        return None  # it IS the analysis camera
+    return requested
+
+
+def _generate_raw_mjpeg(camera_index: int):
+    """MJPEG frames from a raw per-camera feed (no pose overlay)."""
+    import time
+
+    from backend.services.raw_camera_feed import get_feed, release_feed
+
+    feed = get_feed(camera_index)
+    feed.acquire()
+    last_frame_number = None
+    try:
+        while True:
+            frame_number = feed.get_frame_number()
+            if frame_number is None or frame_number == last_frame_number:
+                time.sleep(0.05)
+                continue
+            frame = feed.get_frame()
+            if frame is None:
+                time.sleep(0.05)
+                continue
+            last_frame_number = frame_number
+            ret, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 75])
+            if not ret:
+                continue
+            yield (
+                b"--frame\r\n"
+                b"Content-Type: image/jpeg\r\n\r\n" + jpeg.tobytes() + b"\r\n"
+            )
+    finally:
+        release_feed(camera_index)
+
+
 @router.get("/video/feed")
 async def video_feed(
     request: Request,
@@ -205,13 +260,25 @@ async def video_feed(
     Parameters
     ----------
     camera_id : str, optional
-        Reserved for multi-camera support.
+        Camera index ("0", "1", …). When it matches the active analysis session
+        camera — or is omitted — the analyzed feed (with optional pose overlay)
+        is served. A different camera index routes to that camera's RAW feed
+        (multi-camera support).
     overlay : bool, optional
         Set to false to receive raw video without skeleton overlay.
     """
     service = get_live_service()
     if not service.is_running():
         raise HTTPException(status_code=503, detail="No active session. POST /api/session/start first.")
+
+    # Multi-camera: a camera_id naming a different camera serves its raw feed.
+    raw_index = _resolve_camera_index(camera_id, service)
+    if raw_index is not None:
+        return StreamingResponse(
+            _generate_raw_mjpeg(raw_index),
+            media_type="multipart/x-mixed-replace; boundary=frame",
+            headers={"Cache-Control": "no-cache"},
+        )
 
     auth_header = request.headers.get("authorization", "")
     token = request.query_params.get("token")

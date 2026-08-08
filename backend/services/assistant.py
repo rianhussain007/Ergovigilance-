@@ -2,7 +2,8 @@
 
 Loads markdown files from the knowledge/ directory at startup,
 embeds them with nomic-embed-text via Ollama, and answers questions
-using llama3.2:3b grounded in the retrieved context.
+using qwen2.5:1.5b (env-overridable via OLLAMA_CHAT_MODEL) grounded in
+the retrieved context.
 
 Supports session-data tool-calling: when the user asks about their
 session history, the assistant fetches live session data from disk
@@ -26,8 +27,12 @@ import requests
 logger = logging.getLogger(__name__)
 
 OLLAMA_BASE_URL = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
-EMBED_MODEL = "nomic-embed-text"
-CHAT_MODEL = "llama3:8b"
+# Chat model: qwen2.5:1.5b is the supported default (small + fast on CPU,
+# strong instruction following for the RAG prompts). Override per deployment
+# via OLLAMA_CHAT_MODEL — the model must be pulled on the host:
+#   ollama pull qwen2.5:1.5b
+EMBED_MODEL = os.environ.get("OLLAMA_EMBED_MODEL", "nomic-embed-text")
+CHAT_MODEL = os.environ.get("OLLAMA_CHAT_MODEL", "qwen2.5:1.5b")
 KNOWLEDGE_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "knowledge")
 TOP_K = 3
 KEEP_ALIVE = "5m"

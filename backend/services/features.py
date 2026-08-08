@@ -341,9 +341,45 @@ def extract_features_from_keypoints(
     return features, unavailable, approximate_features
 
 
+# Risk-rule thresholds — tuned against the REBA-labeled dataset
+# (scripts/tune_risk_thresholds.py, 30698 poses). The tuned set raises the
+# weight_shift / shoulder_symmetry cutoffs (the two features causing most
+# false-HIGH over-alarm) while keeping **zero** REBA-HIGH poses scored LOW:
+#   agreement 34.0% -> 36.9%   kappa 0.085 -> 0.107   ruleHIGH 80.0% -> 73.5%
+RISK_THRESHOLDS: dict[str, tuple[float, float]] = {
+    # feature -> (MEDIUM cutoff, HIGH cutoff)
+    "neck_flexion": (10.0, 30.0),
+    "trunk_flexion": (20.0, 60.0),
+    "shoulder_elev": (30.0, 60.0),
+    "shoulder_symmetry": (9.0, 18.0),
+    "knee_angle": (150.0, 100.0),  # inverted: lower = riskier
+    "forward_head_posture": (10.0, 20.0),
+    "head_tilt_angle": (10.0, 20.0),
+    "wrist_deviation_angle": (5.0, 15.0),
+    "stance_stability": (0.7, 0.5),  # inverted: lower = riskier
+    "weight_shift_offset": (12.5, 25.0),
+}
+
+# Unknown-value fallbacks (NaN / unavailable landmarks score as elevated risk).
+_UNKNOWN_VALUES: dict[str, float] = {
+    "neck_flexion": 10.0,
+    "trunk_flexion": 20.0,
+    "shoulder_elev": 30.0,
+    "shoulder_symmetry": 9.0,
+    "knee_angle": 140.0,
+    "forward_head_posture": 10.0,
+    "head_tilt_angle": 10.0,
+    "wrist_deviation_angle": 5.0,
+    "stance_stability": 0.6,
+    "weight_shift_offset": 5.0,
+}
+
+
 def risk_from_features(
     features: Mapping[str, float],
     unavailable_features: list[str] | None = None,
+    threshold_multiplier: float = 1.0,
+    thresholds: Mapping[str, tuple[float, float]] | None = None,
 ) -> str:
     """Compute risk level from extracted features.
 
@@ -351,56 +387,75 @@ def risk_from_features(
     (from low-visibility landmarks), features that couldn't be computed
     are treated as "unknown" — scored as elevated risk rather than safe,
     since we can't confirm the posture is fine.
+
+    ``threshold_multiplier`` scales the MEDIUM/HIGH cutoffs (default 1.0 =
+    the calibrated RISK_THRESHOLDS). Multipliers < 1 make the rules more
+    lenient (fewer HIGH verdicts); > 1 stricter. ``thresholds`` overrides
+    RISK_THRESHOLDS entirely (used by the offline tuning sweep and tests).
     """
     unavailable = set(unavailable_features or ())
+    m = float(threshold_multiplier)
+    t = dict(thresholds) if thresholds is not None else dict(RISK_THRESHOLDS)
+    unk = _UNKNOWN_VALUES
 
-    def _get(name: str, default: float, unknown_val: float) -> float:
+    def _get(name: str, default: float) -> float:
         """Get a feature value, treating NaN and explicitly unavailable as unknown."""
         if name in unavailable:
-            return unknown_val
+            return unk[name]
         val = features.get(name, default)
         if val != val:  # NaN check
-            return unknown_val
+            return unk[name]
         return val
 
     shoulder = max(
-        _get("left_shoulder_elev", 0.0, 30.0),
-        _get("right_shoulder_elev", 0.0, 30.0),
+        _get("left_shoulder_elev", 0.0),
+        _get("right_shoulder_elev", 0.0),
     )
-    knee = _get("knee_angle", 180.0, 140.0)
-    neck = _get("neck_flexion", 0.0, 10.0)
-    trunk = _get("trunk_flexion", 0.0, 20.0)
-    sym = _get("shoulder_symmetry", 0.0, 5.0)
-    fhp = _get("forward_head_posture", 0.0, 10.0)
-    head_tilt = _get("head_tilt_angle", 0.0, 10.0)
-    wrist_dev = _get("wrist_deviation_angle", 0.0, 5.0)
-    stance = _get("stance_stability", 1.0, 0.6)
-    weight_shift = _get("weight_shift_offset", 0.0, 5.0)
+    neck = _get("neck_flexion", 0.0)
+    trunk = _get("trunk_flexion", 0.0)
+    sym = _get("shoulder_symmetry", 0.0)
+    knee = _get("knee_angle", 180.0)
+    fhp = _get("forward_head_posture", 0.0)
+    head_tilt = _get("head_tilt_angle", 0.0)
+    wrist_dev = _get("wrist_deviation_angle", 0.0)
+    stance = _get("stance_stability", 1.0)
+    weight_shift = _get("weight_shift_offset", 0.0)
+
+    neck_med, neck_high = t["neck_flexion"]
+    trunk_med, trunk_high = t["trunk_flexion"]
+    sh_med, sh_high = t["shoulder_elev"]
+    sym_med, sym_high = t["shoulder_symmetry"]
+    knee_med, knee_high = t["knee_angle"]
+    fhp_med, fhp_high = t["forward_head_posture"]
+    ht_med, ht_high = t["head_tilt_angle"]
+    wd_med, wd_high = t["wrist_deviation_angle"]
+    st_med, st_high = t["stance_stability"]
+    ws_med, ws_high = t["weight_shift_offset"]
 
     if (
-        neck > 30
-        or trunk > 60
-        or shoulder > 60
-        or sym > 15
-        or knee < 100
-        or fhp > 20
-        or head_tilt > 20
-        or wrist_dev > 15
-        or stance < 0.5
-        or weight_shift > 15
+        neck > neck_high * m
+        or trunk > trunk_high * m
+        or shoulder > sh_high * m
+        or sym > sym_high * m
+        or knee < knee_high / m
+        or fhp > fhp_high * m
+        or head_tilt > ht_high * m
+        or wrist_dev > wd_high * m
+        or stance < st_high / m
+        or weight_shift > ws_high * m
     ):
         return "HIGH"
     if (
-        neck > 10
-        or trunk > 20
-        or shoulder > 30
-        or sym > 5
-        or knee < 150
-        or fhp > 10
-        or head_tilt > 10
-        or wrist_dev > 5
-        or stance < 0.7
-        or weight_shift > 8
+        neck > neck_med * m
+        or trunk > trunk_med * m
+        or shoulder > sh_med * m
+        or sym > sym_med * m
+        or knee < knee_med / m
+        or fhp > fhp_med * m
+        or head_tilt > ht_med * m
+        or wrist_dev > wd_med * m
+        or stance < st_med / m
+        or weight_shift > ws_med * m
     ):
         return "MEDIUM"
 
@@ -433,26 +488,16 @@ def risk_breakdown(features: Mapping[str, float]) -> Dict[str, RiskBreakdown]:
             breakdown[name] = RiskBreakdown(level="LOW", color=RISK_COLORS_BGR["LOW"])
             continue
 
-        if name == "shoulder_symmetry":
-            high, medium = 15.0, 5.0
-        elif "shoulder" in name:
-            high, medium = 60.0, 30.0
-        elif name == "trunk_flexion":
-            high, medium = 60.0, 20.0
-        elif name == "knee_angle":
-            high, medium = 100.0, 150.0
+        # Read cutoffs from the single source of truth (RISK_THRESHOLDS) so the
+        # per-feature breakdown never disagrees with risk_from_features.
+        _key = {
+            "left_shoulder_elev": "shoulder_elev",
+            "right_shoulder_elev": "shoulder_elev",
+        }.get(name, name)
+        if _key in RISK_THRESHOLDS:
+            medium, high = RISK_THRESHOLDS[_key]
         elif name == "alignment_deviation":
             high, medium = 50.0, 20.0
-        elif name == "forward_head_posture":
-            high, medium = 20.0, 10.0
-        elif name == "head_tilt_angle":
-            high, medium = 20.0, 10.0
-        elif name == "wrist_deviation_angle":
-            high, medium = 15.0, 5.0
-        elif name == "stance_stability":
-            high, medium = 0.5, 0.7
-        elif name == "weight_shift_offset":
-            high, medium = 15.0, 8.0
         else:
             high, medium = 30.0, 10.0
 

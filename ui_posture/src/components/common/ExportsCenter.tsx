@@ -85,12 +85,82 @@ export function ExportsCenter({ onClose, timeline, dashboard }: ExportsCenterPro
     }
   };
 
+  const buildSummary = () => {
+    const sessionId = dashboard?.session?.id || 'no-active-session';
+    const worker = dashboard?.session?.workerName || 'unknown worker';
+    const entries = timeline?.length ?? 0;
+    const highRisk = (dashboard?.riskHistory ?? []).filter((p) => p.value >= 60).length;
+    return {
+      subject: `ErgoVigilance report — ${worker} (${sessionId})`,
+      body: [
+        'ErgoVigilance monitoring report',
+        '',
+        `Worker: ${worker}`,
+        `Session: ${sessionId}`,
+        `Timeline entries: ${entries}`,
+        `High-risk readings: ${highRisk}`,
+        '',
+        'Full data is available in the ErgoVigilance dashboard.',
+      ].join('\n'),
+    };
+  };
+
+  const exportEmail = () => {
+    const { subject, body } = buildSummary();
+    window.location.href = `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    addToast('success', 'Email draft opened', 'A report summary email was composed in your mail client.');
+  };
+
+  const exportShare = async () => {
+    // Build the share payload: reuse the JSON export so stakeholders receive data.
+    if (!timeline || timeline.length === 0) {
+      addToast('warning', 'No timeline data', 'Start a monitoring session first.');
+      return;
+    }
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      sessionId: dashboard?.session?.id || null,
+      workerName: dashboard?.session?.workerName || null,
+      entries: timeline,
+    };
+    const json = JSON.stringify(payload, null, 2);
+    const file = new File([json], `ergovigilance-export-${Date.now()}.json`, {
+      type: 'application/json',
+    });
+    const nav = navigator as Navigator & {
+      share?: (data: { files?: File[]; title?: string; text?: string }) => Promise<void>;
+      canShare?: (data: { files: File[] }) => boolean;
+    };
+    if (nav.share) {
+      try {
+        const shareData = { files: [file], title: 'ErgoVigilance export' };
+        if (nav.canShare?.(shareData)) {
+          await nav.share(shareData);
+          addToast('success', 'Export shared', 'The report was shared via your system share sheet.');
+          return;
+        }
+      } catch {
+        // user cancelled — fall through silently
+      }
+    }
+    // Fallback: copy a share-ready summary to the clipboard.
+    const summary = buildSummary();
+    try {
+      await navigator.clipboard.writeText(`${summary.body}\n\nShare this session in ErgoVigilance to collaborate.`);
+      addToast('success', 'Summary copied', 'Share this text with stakeholders.');
+    } catch {
+      addToast('error', 'Share unavailable', 'Your browser cannot share or copy on this device.');
+    }
+  };
+
   const handleExport = async (format: string, label: string) => {
     setExporting(format);
     try {
       if (format === 'CSV') exportCSV();
       else if (format === 'JSON') exportJSON();
       else if (format === 'PDF') await exportPDF();
+      else if (format === 'email') exportEmail();
+      else if (format === 'link') await exportShare();
       else {
         addToast('info', `${label} coming soon`, 'This feature requires backend infrastructure not yet available.');
       }
@@ -137,20 +207,18 @@ export function ExportsCenter({ onClose, timeline, dashboard }: ExportsCenterPro
         <ExportButton
           icon={Mail}
           label="Email Report"
-          desc="Send to stakeholders"
+          desc="Compose a summary email for stakeholders"
           format="email"
           exporting={exporting}
           onClick={() => handleExport('email', 'Email Report')}
-          placeholder
         />
         <ExportButton
           icon={Share2}
-          label="Share Link"
-          desc="Create a shareable link"
+          label="Share Export"
+          desc="Share the data via the system share sheet"
           format="link"
           exporting={exporting}
-          onClick={() => handleExport('link', 'Share Link')}
-          placeholder
+          onClick={() => handleExport('link', 'Share Export')}
         />
       </div>
     </div>
