@@ -405,6 +405,9 @@ export interface ContextSnapshot {
   feature_scores: Record<string, number>;
   rula_informed_score?: number;
   rula_is_partial?: boolean;
+  calibrated_band?: string | null;
+  calibrated_confidence?: number | null;
+  calibrated_agrees?: boolean | null;
   unavailable_features?: string[];
   approximate_features?: string[];
   lower_body_confidence?: number;

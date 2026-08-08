@@ -66,6 +66,15 @@ def predict_risk_band(features: Mapping[str, float]) -> Optional[Dict[str, objec
         return None
 
 
+def band_agrees(band: str | None, risk_level: str | None) -> bool | None:
+    """Case-insensitive agreement between the calibrated model band and the
+    rule-based risk level. Returns None when either side is missing (no
+    comparison possible)."""
+    if not band or not risk_level:
+        return None
+    return str(band).upper() == str(risk_level).upper()
+
+
 def reset_cache() -> None:
     """Clear the cached bundle (used by tests)."""
     global _BUNDLE, _TRIED

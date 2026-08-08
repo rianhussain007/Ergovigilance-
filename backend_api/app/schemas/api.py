@@ -445,6 +445,9 @@ class ContextSnapshotResponse(BaseModel):
     guidance: Optional[GuidanceSnapshot] = None
     rula_informed_score: Optional[int] = None
     rula_is_partial: bool = False
+    calibrated_band: Optional[str] = None
+    calibrated_confidence: Optional[float] = None
+    calibrated_agrees: Optional[bool] = None
     unavailable_features: List[str] = []
     approximate_features: List[str] = []
     lower_body_confidence: float = 0.0

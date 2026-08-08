@@ -814,6 +814,21 @@ class LiveRepository(DashboardRepository):
 
         import math
 
+        # Calibrated-risk advisory overlay: the REBA-trained model cross-checks
+        # the rule-based band. Both are computed from the same features — the
+        # model adds an independent, data-calibrated view that can catch rule
+        # blind spots (advisory only; rules stay authoritative for alerting).
+        calibrated_band: str | None = None
+        calibrated_confidence: float | None = None
+        calibrated_agrees: bool | None = None
+        if features:
+            from backend.services.risk_calibration import band_agrees, predict_risk_band
+            calib = predict_risk_band(features)
+            if calib is not None:
+                calibrated_band = calib["band"]
+                calibrated_confidence = calib["confidence"]
+                calibrated_agrees = band_agrees(calib["band"], snapshot.risk_level)
+
         def _clean_score(v) -> float | None:
             """Coerce a score to a JSON-safe float (numpy scalars and NaN -> None)."""
             if v is None:
@@ -850,6 +865,9 @@ class LiveRepository(DashboardRepository):
             guidance=guidance,
             rula_informed_score=rula_score,
             rula_is_partial=rula_is_partial,
+            calibrated_band=calibrated_band,
+            calibrated_confidence=calibrated_confidence,
+            calibrated_agrees=calibrated_agrees,
             unavailable_features=list(snapshot.unavailable_features),
             approximate_features=list(snapshot.approximate_features),
             lower_body_confidence=snapshot.lower_body_confidence,

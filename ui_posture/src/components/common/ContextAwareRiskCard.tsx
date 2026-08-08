@@ -123,6 +123,44 @@ function SnapshotContent({ snapshot }: { snapshot: ContextSnapshot }) {
             )}
           </div>
         )}
+        {snapshot.calibrated_band != null && (
+          <div>
+            <span className="text-[10px] text-on-surface-variant uppercase tracking-wider flex items-center gap-1">
+              Calibrated Model
+              <span className="text-[8px] italic font-normal normal-case tracking-normal opacity-50">REBA-informed</span>
+            </span>
+            <div className="flex items-center gap-2 mt-0.5">
+              <p className="text-body-sm font-mono" style={{ color: riskColor(snapshot.calibrated_band) }}>
+                {riskLabel(snapshot.calibrated_band)}
+              </p>
+              {snapshot.calibrated_confidence != null && (
+                <span className="text-[10px] text-on-surface-variant font-mono">
+                  {Math.round(snapshot.calibrated_confidence * 100)}% conf
+                </span>
+              )}
+            </div>
+            {snapshot.calibrated_agrees != null && (
+              <div
+                className={`flex items-center gap-1.5 mt-1 rounded-md border px-2 py-1 ${
+                  snapshot.calibrated_agrees
+                    ? 'border-green-500/30 bg-green-500/10'
+                    : 'border-amber-500/30 bg-amber-500/10'
+                }`}
+              >
+                {snapshot.calibrated_agrees ? (
+                  <CheckCircle className="w-3 h-3 text-green-400 shrink-0" />
+                ) : (
+                  <X className="w-3 h-3 text-amber-400 shrink-0" />
+                )}
+                <span className={`text-[10px] font-medium ${snapshot.calibrated_agrees ? 'text-green-400' : 'text-amber-400'}`}>
+                  {snapshot.calibrated_agrees
+                    ? 'Model agrees with rule-based risk'
+                    : 'Model disagrees — review posture'}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div
