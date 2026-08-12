@@ -8,6 +8,7 @@ import logging
 import os
 import sys
 import time
+from pathlib import Path
 from typing import List, Optional
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
@@ -354,7 +355,16 @@ class LiveRepository(DashboardRepository):
         from datetime import datetime
         from fastapi import HTTPException, status
 
-        sessions_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "outputs", "sessions")
+        # Same layout-robust resolution as app/services/session_cache.py: env
+        # override, then local (3 levels up) vs container (/app/app, 2 levels).
+        env_sessions = os.environ.get("SESSIONS_DIR")
+        if env_sessions:
+            sessions_dir = env_sessions
+        else:
+            root = Path(__file__).resolve().parents[3]
+            if not (root / "outputs").is_dir() and (Path(__file__).resolve().parents[2] / "app").is_dir():
+                root = Path(__file__).resolve().parents[2]
+            sessions_dir = os.path.join(str(root), "outputs", "sessions")
 
         ts_part = session_id.replace("SESH-", "", 1)
         candidate_paths = [os.path.join(sessions_dir, f"session_{ts_part}.json")]

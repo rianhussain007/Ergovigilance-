@@ -16,9 +16,24 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-SESSIONS_DIR = os.path.join(
-    os.path.dirname(__file__), "..", "..", "..", "outputs", "sessions"
-)
+def _resolve_sessions_dir() -> str:
+    """Locate the sessions directory across the local and container layouts.
+
+    Local:  backend_api/app/services/ -> project_root/outputs/sessions (3 levels)
+    Docker: /app/app/services/        -> /app/outputs/sessions (2 levels, the
+            Dockerfile copies backend_api/app to /app/app). SESSIONS_DIR env
+            overrides both (compose sets it to /data/sessions for persistence).
+    """
+    env_dir = os.environ.get("SESSIONS_DIR")
+    if env_dir:
+        return env_dir
+    root = Path(__file__).resolve().parents[3]
+    if not (root / "outputs").is_dir() and (Path(__file__).resolve().parents[2] / "app").is_dir():
+        root = Path(__file__).resolve().parents[2]  # container layout
+    return os.path.join(str(root), "outputs", "sessions")
+
+
+SESSIONS_DIR = _resolve_sessions_dir()
 
 _session_cache: list[dict[str, Any]] | None = None
 _session_cache_time: float = 0

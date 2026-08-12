@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   db:
     # Tier 1 telemetry store — session summaries + per-frame timeline rows.
@@ -44,6 +42,9 @@ services:
       - AUTH_DB_PATH=/data/local_auth.db
       # Tier 1 telemetry store (additive; unset = JSON-file mode).
       - DATABASE_URL=postgresql://${POSTGRES_USER:-ergovigilance}:${POSTGRES_PASSWORD:-ergovigilance}@db:5432/${POSTGRES_DB:-ergovigilance}
+      # Session JSON files live on the /data volume so file-mode sessions
+      # survive container recreation (down/up) — not just the container layer.
+      - SESSIONS_DIR=/data/sessions
       - PG_TIMESCALEDB=${PG_TIMESCALEDB:-false}
     volumes:
       - ergovigilance-db:/data

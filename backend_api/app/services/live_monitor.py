@@ -45,7 +45,10 @@ from backend.recommendations.engine import RecommendationEngine
 # Canonical definitions live in backend.core.types.
 # Re-exported here for backward compatibility.
 from backend.core.types import LiveState  # noqa: F401
-from backend_api.app.services.pose_overlay import draw_skeleton
+try:
+    from app.services.pose_overlay import draw_skeleton
+except ImportError:  # pragma: no cover - local layout where only the repo root is on sys.path
+    from backend_api.app.services.pose_overlay import draw_skeleton
 
 RECORDINGS_DIR = os.environ.get(
     "RECORDINGS_DIR",

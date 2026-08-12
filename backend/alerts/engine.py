@@ -150,10 +150,13 @@ class AlertEngine:
         session starts with a clean slate. Only history is kept for reference.
         """
         try:
-            from backend_api.app.core.database import load_active_alerts, load_alert_history
+            from app.core.database import load_active_alerts, load_alert_history
         except ImportError:
-            logger.warning("Alert persistence: database module not available, skipping rehydration")
-            return
+            try:
+                from backend_api.app.core.database import load_active_alerts, load_alert_history
+            except ImportError:
+                logger.warning("Alert persistence: database module not available, skipping rehydration")
+                return
 
         try:
             active_rows = load_active_alerts()
@@ -197,7 +200,10 @@ class AlertEngine:
         if not self._db_enabled:
             return
         try:
-            from backend_api.app.core.database import insert_alert
+            try:
+                from app.core.database import insert_alert
+            except ImportError:
+                from backend_api.app.core.database import insert_alert
             insert_alert(
                 alert_id=alert.id,
                 severity=alert.severity.value,
@@ -220,7 +226,10 @@ class AlertEngine:
         if not self._db_enabled:
             return
         try:
-            from backend_api.app.core.database import update_alert_state
+            try:
+                from app.core.database import update_alert_state
+            except ImportError:
+                from backend_api.app.core.database import update_alert_state
             update_alert_state(alert_id, state)
         except Exception as exc:
             logger.error("Alert persistence: failed to update alert %s: %s", alert_id, exc)

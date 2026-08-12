@@ -20,7 +20,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install python dependencies
 COPY backend_api/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Local dev only: this machine's proxy presents a self-signed certificate, so
+# pip's cert verification fails on PyPI downloads (same category as the
+# playwright NODE_TLS_REJECT_UNAUTHORIZED below). Bypass verification for the
+# PyPI hosts only — production should drop these flags and use PIP_CERT.
+RUN pip install --no-cache-dir \
+    --trusted-host pypi.org \
+    --trusted-host files.pythonhosted.org \
+    -r requirements.txt
 
 # Install playwright chromium (temporarily skip cert verification for local dev build only)
 RUN NODE_TLS_REJECT_UNAUTHORIZED=0 playwright install chromium --with-deps

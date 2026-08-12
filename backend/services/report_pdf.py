@@ -260,7 +260,30 @@ def _branded_html(title: str, body_html: str, report_id: str, generated_at: str)
 # Risk Trend Report body
 # ---------------------------------------------------------------------------
 
+def _no_data_body(title: str, status: str) -> str:
+    """Render a minimal, honest body when a report has no source data.
+
+    The analysis functions return only {"total_sessions": 0, "status": "..."}
+    (or similar) for empty input, so the full-shape renderers must not run.
+    """
+    return f"""
+<h1>{title}</h1>
+<div class="section">
+  <p><strong>No data available.</strong> {status}</p>
+  <p>Run a monitoring session (or seed session data) and regenerate this report.</p>
+</div>
+"""
+
+
 def _risk_trend_body(data: Dict[str, Any]) -> str:
+    if not data.get("total_sessions"):
+        # analyze_risk_trend returns only {"total_sessions": 0, "status": "..."}
+        # when there is no session data — render an honest empty report instead
+        # of KeyErroring on the missing aggregation keys.
+        return _no_data_body(
+            "Risk Trend Report",
+            data.get("status", "No session data available"),
+        )
     rd = data["risk_distribution"]
     metrics_html = "".join(
         _metric_row(m) for m in data["metrics"]
@@ -336,6 +359,13 @@ def _metric_row(m: Dict[str, Any]) -> str:
 
 def _safety_body(data: Dict[str, Any]) -> str:
     d = data
+    if not d.get("total_sessions_with_alerts"):
+        # analyze_safety returns only {"total_sessions_with_alerts": 0,
+        # "coverage_statement": "...", "status": "..."} for empty input.
+        return _no_data_body(
+            "Safety Report",
+            d.get("status", "No session data available"),
+        )
 
     # Severity bars
     sev_colors = {
