@@ -31,6 +31,8 @@ from typing import Dict, List, Mapping, Sequence
 
 import numpy as np
 
+from backend.services.calibration import PostureCalibration, STANDARD
+
 
 # ── REBA Table A (neck x trunk) — standard 4x6 matrix ──────────────
 # Rows: neck score 1..4; columns: trunk score 1..6 (upright, 0-20,
@@ -100,8 +102,8 @@ def _signed_deviation(angle: float, straight: float = 180.0) -> float:
 
 
 def _neck_score(forehead: np.ndarray | None, neck: np.ndarray | None,
-                hip: np.ndarray | None) -> int:
-    """REBA neck posture score (flexion 0-20 = 1, >20 = 2, extension = 3)."""
+                hip: np.ndarray | None, cal: PostureCalibration) -> int:
+    """REBA neck posture score (neutral flexion, extension)."""
     if neck is None or hip is None:
         return 0
     if forehead is None:
@@ -110,15 +112,16 @@ def _neck_score(forehead: np.ndarray | None, neck: np.ndarray | None,
     dev = _signed_deviation(angle)
     if dev != dev:
         return 1
-    if dev < -20:  # head tilted back (extension)
+    if dev < -cal.neck_side_bend_max:  # head tilted back (extension)
         return 3
-    if dev > 20:
+    if dev > cal.neck_high_max:
         return 2
     return 1
 
 
-def _trunk_score(neck: np.ndarray | None, hip: np.ndarray | None) -> int:
-    """REBA trunk posture score (upright=1, 0-20=2, 20-60=3, >60=4)."""
+def _trunk_score(neck: np.ndarray | None, hip: np.ndarray | None,
+                 cal: PostureCalibration) -> int:
+    """REBA trunk posture score (neutral / medium / high / severe bands)."""
     if neck is None or hip is None:
         return 0
     # Angle of the neck->hip line from vertical (0 = upright).
@@ -126,19 +129,20 @@ def _trunk_score(neck: np.ndarray | None, hip: np.ndarray | None) -> int:
     angle = _angle(vertical, hip, neck)
     if angle != angle:
         return 1
-    if angle <= 1.0:
+    if angle <= cal.trunk_neutral_max:
         return 1
-    if angle <= 20.0:
+    if angle <= cal.trunk_medium_max:
         return 2
-    if angle <= 60.0:
+    if angle <= cal.trunk_high_max:
         return 3
     return 4
 
 
 def _legs_score(left_knee: np.ndarray | None, right_knee: np.ndarray | None,
                 left_ankle: np.ndarray | None, right_ankle: np.ndarray | None,
-                left_hip: np.ndarray | None, right_hip: np.ndarray | None) -> int:
-    """REBA legs score (bilateral=1, knee flexion 30-60 = +1, >60 = +2)."""
+                left_hip: np.ndarray | None, right_hip: np.ndarray | None,
+                cal: PostureCalibration) -> int:
+    """REBA legs score (bilateral=1, knee flexion > medium = +1, > high = +2)."""
     if left_hip is None or right_hip is None or left_ankle is None or right_ankle is None:
         return 0
     base = 1  # bilateral weight bearing / walking / sitting
@@ -154,29 +158,30 @@ def _legs_score(left_knee: np.ndarray | None, right_knee: np.ndarray | None,
     if not flexions:
         return base
     max_flex = max(flexions)
-    if max_flex > 60:
+    if max_flex > cal.knee_high_max:
         return base + 2
-    if max_flex > 30:
+    if max_flex > cal.knee_medium_max:
         return base + 1
     return base
 
 
 def _upper_arm_score(shoulder: np.ndarray | None, elbow: np.ndarray | None,
                      neck: np.ndarray | None, hip: np.ndarray | None,
+                     cal: PostureCalibration,
                      shoulder_elevated: bool = False,
                      abducted: bool = False) -> int:
-    """REBA upper-arm score from angle-from-vertical (<=20=1 ... >90=4)."""
+    """REBA upper-arm score from angle-from-vertical (neutral ... severe)."""
     if shoulder is None or elbow is None:
         return 0
     vertical_down = np.array([shoulder[0], shoulder[1] + 1.0])
     angle = _angle(vertical_down, shoulder, elbow)  # 0 = arm hanging
     if angle != angle:
         return 1
-    if angle <= 20.0:
+    if angle <= cal.upper_arm_neutral_max:
         score = 1
-    elif angle <= 45.0:
+    elif angle <= cal.upper_arm_medium_max:
         score = 2
-    elif angle <= 90.0:
+    elif angle <= cal.upper_arm_high_max:
         score = 3
     else:
         score = 4
@@ -188,19 +193,19 @@ def _upper_arm_score(shoulder: np.ndarray | None, elbow: np.ndarray | None,
 
 
 def _lower_arm_score(shoulder: np.ndarray | None, elbow: np.ndarray | None,
-                     wrist: np.ndarray | None) -> int:
-    """REBA lower-arm score (flexion 60-100 = 1, else 2)."""
+                     wrist: np.ndarray | None, cal: PostureCalibration) -> int:
+    """REBA lower-arm score (neutral elbow flexion = 1, else 2)."""
     if elbow is None or wrist is None:
         return 1
     angle = _angle(shoulder, elbow, wrist)
     if angle != angle:
         return 1
-    return 1 if 60.0 <= angle <= 100.0 else 2
+    return 1 if cal.elbow_neutral_min <= angle <= cal.elbow_neutral_max else 2
 
 
 def _wrist_score(elbow: np.ndarray | None, wrist: np.ndarray | None,
-                 hand: np.ndarray | None) -> int:
-    """REBA wrist score (neutral=1, <=15 dev = 2, >15 = 3)."""
+                 hand: np.ndarray | None, cal: PostureCalibration) -> int:
+    """REBA wrist score (neutral / medium / deviated bands)."""
     if wrist is None or hand is None:
         return 1
     angle = _angle(elbow, wrist, hand)
@@ -208,9 +213,9 @@ def _wrist_score(elbow: np.ndarray | None, wrist: np.ndarray | None,
     if dev != dev:
         return 1
     adev = abs(dev)
-    if adev <= 5.0:
+    if adev <= cal.wrist_neutral_max:
         return 1
-    if adev <= 15.0:
+    if adev <= cal.wrist_medium_max:
         return 2
     return 3
 
@@ -223,17 +228,24 @@ def reba_risk_from_level(score_c: int) -> tuple[int, int]:
     return 1, 0
 
 
-def reba_from_keypoints(points: Mapping[str, Sequence[float]]) -> Dict[str, float | int]:
+def reba_from_keypoints(points: Mapping[str, Sequence[float]],
+                         calibration: PostureCalibration | None = None) -> Dict[str, float | int]:
     """Compute the full REBA score from a named-keypoint dict.
 
     Args:
         points: mapping of joint name -> [x, y, visibility] (COCO
             visibility convention; >0 means present).
+        calibration: posture calibration (how much bend/strain counts
+            before a joint starts scoring). Defaults to STANDARD — the
+            published REBA breakpoints — so dataset labeling and any
+            direct caller keep the reference methodology. The live risk
+            gate (``assess_standard_risk``) passes its own profile.
 
     Returns a dict with keys: reba_score (Score C, 1-15), reba_risk_level
     (1-5), reba_action_level (0-4), plus the partial scores (A, B), and
     the per-segment posture scores used to build the tables.
     """
+    cal = calibration if calibration is not None else STANDARD
     forehead = _point(points, "forehead")
     if forehead is None:
         forehead = _point(points, "nose")
@@ -254,9 +266,9 @@ def reba_from_keypoints(points: Mapping[str, Sequence[float]]) -> Dict[str, floa
     lan, ran = _point(points, "left_ankle"), _point(points, "right_ankle")
 
     # ── Group A: neck, trunk, legs ─────────────────────────────────
-    neck_s = _neck_score(forehead, neck, mid_hip)
-    trunk_s = _trunk_score(neck, mid_hip)
-    legs_s = _legs_score(lkn, rkn, lan, ran, lhip, rhip)
+    neck_s = _neck_score(forehead, neck, mid_hip, cal)
+    trunk_s = _trunk_score(neck, mid_hip, cal)
+    legs_s = _legs_score(lkn, rkn, lan, ran, lhip, rhip, cal)
     # Clamp with max(0, ...): posture scores of 0 (missing joints) must
     # stay at the neutral table cell, NOT wrap to the worst-case row/col
     # via a negative index.
@@ -270,16 +282,16 @@ def reba_from_keypoints(points: Mapping[str, Sequence[float]]) -> Dict[str, floa
     left_abducted = lel is not None and lhip is not None and lel[0] < lhip[0] - 5
     right_abducted = rel is not None and rhip is not None and rel[0] > rhip[0] + 5
 
-    upper_l = _upper_arm_score(lsh, lel, neck, mid_hip, left_elevated, left_abducted)
-    upper_r = _upper_arm_score(rsh, rel, neck, mid_hip, right_elevated, right_abducted)
+    upper_l = _upper_arm_score(lsh, lel, neck, mid_hip, cal, left_elevated, left_abducted)
+    upper_r = _upper_arm_score(rsh, rel, neck, mid_hip, cal, right_elevated, right_abducted)
     upper_s = max(upper_l, upper_r)
 
-    lower_l = _lower_arm_score(lsh, lel, lwr)
-    lower_r = _lower_arm_score(rsh, rel, rwr)
+    lower_l = _lower_arm_score(lsh, lel, lwr, cal)
+    lower_r = _lower_arm_score(rsh, rel, rwr, cal)
     lower_s = max(lower_l, lower_r)
 
-    wrist_l = _wrist_score(lel, lwr, lha)
-    wrist_r = _wrist_score(rel, rwr, rha)
+    wrist_l = _wrist_score(lel, lwr, lha, cal)
+    wrist_r = _wrist_score(rel, rwr, rha, cal)
     wrist_s = max(wrist_l, wrist_r)
 
     score_b = TABLE_B[max(0, min(upper_s - 1, 5))][max(0, min(lower_s - 1, 1))] + wrist_s

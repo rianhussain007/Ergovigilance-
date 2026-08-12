@@ -1,6 +1,7 @@
 """Video streaming endpoint — MJPEG feed from the live pipeline with pose overlay."""
 
 import logging
+import os
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
@@ -12,176 +13,92 @@ from app.services.live_monitor import get_live_service
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Risk-level BGR colors matching Video Review (green-400, amber-400, red-400)
-RISK_COLORS = {
-    "LOW": (128, 222, 74),     # rgb(74, 222, 128) → BGR
-    "MEDIUM": (36, 191, 251),  # rgb(251, 191, 36) → BGR
-    "HIGH": (113, 113, 248),   # rgb(248, 113, 113) → BGR
-}
+from app.services.pose_overlay import draw_skeleton
 
-# MediaPipe Pose connections for skeleton drawing
-POSE_CONNECTIONS = [
-    (11, 12), (11, 13), (13, 15), (12, 14), (14, 16),  # Arms
-    (11, 23), (12, 24), (23, 24),  # Torso
-    (23, 25), (25, 27), (24, 26), (26, 28),  # Legs
-    (27, 29), (29, 31), (28, 30), (30, 32),  # Lower legs
-    (15, 17), (15, 19), (15, 21), (16, 18), (16, 20), (16, 22),  # Hands
-    (0, 1), (1, 2), (2, 3), (3, 7),  # Face
-    (0, 4), (4, 5), (5, 6), (6, 8),  # Face
-    (9, 10),  # Mouth
-]
+# Serve the MJPEG stream at the camera's native rate (~30 fps). The pose
+# pipeline is throttled separately (POSE_PROCESS_FPS) — the VIDEO path is
+# decoupled from inference, so it can run at full capture rate while the
+# skeleton refreshes as fast as inference allows. Override with
+# VIDEO_FEED_FPS.
+def _feed_fps() -> float:
+    try:
+        return max(5.0, min(30.0, float(os.environ.get("VIDEO_FEED_FPS", "30"))))
+    except (TypeError, ValueError):
+        return 30.0
 
-# Cap the MJPEG stream at ~30 fps. Without throttling the generator re-encodes
-# the latest frame as fast as the client drains it, pegging a CPU core.
-FRAME_INTERVAL_S = 1.0 / 30.0
+FRAME_INTERVAL_S = 1.0 / _feed_fps()
 
-# Label positions: (feature_name, short_label, landmark_index, (dx, dy))
-LABEL_CONFIG = [
-    ("neck_flexion", "N", 0, (-20, -30)),
-    ("trunk_flexion", "T", 23, (15, -10)),
-    ("left_shoulder_elev", "LS", 11, (-30, -20)),
-    ("right_shoulder_elev", "RS", 12, (10, -20)),
-    ("shoulder_symmetry", "Sym", 11, (-55, -35)),
-    ("knee_angle", "K", 25, (15, 5)),
-]
-
-
-def _draw_skeleton(frame, keypoints, risk_level, features=None, feature_scores=None):
-    """Draw pose skeleton overlay on the frame using risk-level colors only.
-
-    Uses the same green/orange/red color scheme as Video Review.
-    Confidence-based dimming and angle labels are preserved.
-    """
-    import cv2
-
-    if not keypoints:
-        return frame
-
-    features = features or {}
-
-    glow = frame.copy()
-    overlay = frame.copy()
-    h, w = frame.shape[:2]
-
-    color = RISK_COLORS.get(risk_level, (128, 128, 128))
-
-    def _dimmed(c, visibility):
-        if visibility >= 0.75:
-            return c
-        if visibility >= 0.35:
-            factor = 0.5 + 0.5 * (visibility - 0.35) / 0.4
-        else:
-            factor = max(0.15, visibility / 0.35 * 0.35)
-        return tuple(int(v * factor) for v in c)
-
-    # ── 1. Draw connections ──
-    for start_idx, end_idx in POSE_CONNECTIONS:
-        if start_idx < len(keypoints) and end_idx < len(keypoints):
-            start_kp = keypoints[start_idx]
-            end_kp = keypoints[end_idx]
-
-            if len(start_kp) >= 2 and len(end_kp) >= 2:
-                x1, y1 = int(start_kp[0] * w), int(start_kp[1] * h)
-                x2, y2 = int(end_kp[0] * w), int(end_kp[1] * h)
-
-                vis_start = start_kp[3] if len(start_kp) > 3 else 1.0
-                vis_end = end_kp[3] if len(end_kp) > 3 else 1.0
-                c = _dimmed(color, min(vis_start, vis_end))
-
-                cv2.line(glow, (x1, y1), (x2, y2), c, 8, cv2.LINE_AA)
-                cv2.line(overlay, (x1, y1), (x2, y2), c, 3, cv2.LINE_AA)
-
-    # ── 2. Draw keypoints ──
-    for i, kp in enumerate(keypoints):
-        if len(kp) >= 2:
-            x, y = int(kp[0] * w), int(kp[1] * h)
-            visibility = kp[3] if len(kp) > 3 else 1.0
-            c = _dimmed(color, visibility)
-
-            cv2.circle(glow, (x, y), 9, c, -1, cv2.LINE_AA)
-            cv2.circle(overlay, (x, y), 5, c, -1, cv2.LINE_AA)
-            cv2.circle(overlay, (x, y), 6, _dimmed((235, 255, 245), visibility), 1, cv2.LINE_AA)
-
-    # Blend overlay with original frame
-    cv2.addWeighted(glow, 0.28, frame, 0.72, 0, frame)
-    cv2.addWeighted(overlay, 0.82, frame, 0.18, 0, frame)
-
-    # ── 3. Per-joint angle labels ──
-    import math
-    for feat_name, short, kp_idx, (dx, dy) in LABEL_CONFIG:
-        if kp_idx >= len(keypoints) or len(keypoints[kp_idx]) < 2:
-            continue
-        value = features.get(feat_name)
-        if value is None or (isinstance(value, float) and math.isnan(value)):
-            continue
-        kp = keypoints[kp_idx]
-        kx = int(kp[0] * w)
-        ky = int(kp[1] * h)
-        lx = kx + dx
-        ly = ky + dy
-        lx = max(4, min(lx, w - 80))
-        ly = max(14, min(ly, h - 4))
-        text = f"{short}:{value:.1f}"
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        scale = 0.45
-        thick = 1
-        (tw, th), base = cv2.getTextSize(text, font, scale, thick)
-        pad = 4
-        cv2.rectangle(frame, (lx - pad, ly - th - pad),
-                      (lx + tw + pad, ly + base + pad), (8, 12, 18), -1)
-        cv2.rectangle(frame, (lx - pad, ly - th - pad),
-                      (lx + tw + pad, ly + base + pad), color, 1)
-        cv2.putText(frame, text, (lx, ly), font, scale, color, thick, cv2.LINE_AA)
-
-    # Add risk level indicator
-    cv2.rectangle(frame, (10, h - 46), (180, h - 12), (8, 12, 18), -1)
-    cv2.rectangle(frame, (10, h - 46), (180, h - 12), color, 1)
-    cv2.putText(frame, f"RISK: {risk_level}", (20, h - 23),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.58, color, 2, cv2.LINE_AA)
-
-    return frame
+# Encode the MJPEG stream at a reduced resolution. draw_skeleton + JPEG
+# encode at native 1280x720 cost ~19 ms/frame — at 30 fps that's ~570 ms/s
+# of GIL-bound CPU, starving the pose-inference thread (pipeline fps halved
+# when the stream went to 30 fps). The browser scales the feed to its
+# container anyway, so 640 wide looks near-identical on the dashboard while
+# cutting stream cost ~4x. Override with STREAM_WIDTH.
+def _stream_width() -> int:
+    try:
+        return max(320, int(os.environ.get("STREAM_WIDTH", "640")))
+    except (TypeError, ValueError):
+        return 640
 
 
 def _generate_mjpeg(overlay: bool = True):
     """Generate multipart MJPEG frames from the live service with optional pose overlay.
 
-    - Sleeps properly while no frame is ready (previously a never-awaited
-      ``asyncio.sleep`` made this loop busy-spin at 100% CPU until the first
-      frame — the cause of the startup hang).
-    - Skips re-encoding frames the client already received.
-    - Throttles to ~30 fps so JPEG encoding can't saturate a core.
+    Serves EVERY captured camera frame (keyed off the capture counter, which
+    advances at the camera's native rate), so the feed stays continuous even
+    when pose inference lags behind. When *overlay* is enabled, the latest
+    processed skeleton is redrawn on each fresh frame — the video keeps
+    moving and the skeleton refreshes whenever inference completes.
     """
     import cv2
     import time
 
     service = get_live_service()
-    last_frame_number = None
+    last_capture_counter = None
+    last_frame_time = time.perf_counter()
     while True:
-        frame_number = service.get_frame_number()
-        if frame_number is None:
-            time.sleep(0.05)
-            continue
-        if last_frame_number is not None and frame_number == last_frame_number:
-            # Already served this frame — wait for a new one before copying/encoding.
-            time.sleep(FRAME_INTERVAL_S)
+        capture_counter = service.get_capture_counter()
+        if capture_counter is None or capture_counter == last_capture_counter:
+            time.sleep(0.005)
             continue
 
-        frame = service.get_frame()
+        frame = service.get_frame(overlaid=False)
         if frame is None:
-            time.sleep(0.05)
+            time.sleep(0.005)
             continue
-        last_frame_number = frame_number
+        last_capture_counter = capture_counter
 
-        if overlay:
-            payload = service.get_overlay_payload()
-            frame = _draw_skeleton(
-                frame,
-                payload["keypoints"],
-                payload["risk_level"],
-                payload["features"],
+        # Downscale for the stream: drawing the skeleton + JPEG encoding at
+        # native 1280x720 at 30 fps starves the inference thread (GIL). The
+        # browser scales the feed to its container, so this looks the same
+        # on the dashboard at ~4x less CPU.
+        max_w = _stream_width()
+        if frame.shape[1] > max_w:
+            scale = max_w / float(frame.shape[1])
+            frame = cv2.resize(
+                frame, (max_w, max(1, int(frame.shape[0] * scale)))
             )
 
-        ret, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        if overlay:
+            try:
+                # Pass the current capture counter so the service interpolates
+                # keypoints between processed poses — the skeleton tracks the
+                # moving body at video rate instead of jumping once per
+                # inference (~8 fps), which made the overlay visibly lag.
+                payload = service.get_overlay_payload(capture_counter)
+                keypoints = payload.get("keypoints") or []
+                if keypoints:
+                    draw_skeleton(
+                        frame,
+                        keypoints,
+                        payload.get("risk_level", "LOW"),
+                        payload.get("features") or {},
+                        standard_assessment=payload.get("standard_assessment"),
+                    )
+            except Exception:
+                pass  # never let overlay drawing kill the stream
+
+        ret, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
         if not ret:
             continue
 
@@ -191,40 +108,68 @@ def _generate_mjpeg(overlay: bool = True):
             jpeg.tobytes() +
             b'\r\n'
         )
-        time.sleep(FRAME_INTERVAL_S)
+
+        # Throttle to ~15fps max
+        elapsed = time.perf_counter() - last_frame_time
+        if elapsed < FRAME_INTERVAL_S:
+            time.sleep(FRAME_INTERVAL_S - elapsed)
+        last_frame_time = time.perf_counter()
 
 
-def _resolve_camera_index(camera_id: str | None, service) -> int | None:
-    """Map a requested ``camera_id`` to a camera index, or None for the active session camera.
+def _resolve_camera_source(camera_id: str | None, service) -> int | str | None:
+    """Map a requested ``camera_id`` to a camera source, or None for the session camera.
 
-    The active analysis session records its camera index (``current_camera_index``).
-    A request for that camera — or one without ``camera_id`` — serves the analyzed
-    feed with overlay. A request for a *different* camera routes to the per-camera
-    raw feed manager (multi-camera support).
+    The active analysis session records its camera source (``current_camera_source``
+    — an int index or an RTSP URL). A request for that camera — or one without
+    ``camera_id`` — serves the analyzed feed with overlay. A request for a
+    *different* camera routes to the per-camera raw feed manager (multi-camera
+    support). ``camera_id`` may be:
+
+    - ``None`` / the session camera  -> ``None`` (analyzed feed)
+    - a configured ``CAMERA_SOURCES`` id -> that camera's RTSP URL
+    - an RTSP/HTTP URL directly
+    - ``"0"`` / ``"cam-0"`` -> int index 0
     """
     if camera_id is None:
         return None
+    cid = camera_id.strip()
+    if not cid:
+        return None
+
+    # Match a configured IP camera by id -> serve its RTSP URL raw.
+    try:
+        from app.core.config import settings
+        for cam in settings.CAMERA_SOURCES:
+            if cam["id"] == cid:
+                return cam["url"]
+    except Exception:
+        pass
+
+    # Direct RTSP/HTTP URL (e.g. camera_id=rtsp://...).
+    if cid.lower().startswith(("rtsp://", "rtmp://", "http://", "https://")):
+        return cid
+
     # Accept both "0" and "cam-0" id formats.
-    raw = camera_id
+    raw = cid
     if raw.lower().startswith("cam-"):
         raw = raw[4:]
     try:
         requested = int(raw)
     except (ValueError, TypeError):
         return None  # non-numeric ids fall back to the session feed
-    session_index = getattr(service, "current_camera_index", None)
-    if session_index is not None and requested == int(session_index):
+    session_source = getattr(service, "current_camera_source", None)
+    if session_source is not None and requested == int(session_source):
         return None  # it IS the analysis camera
     return requested
 
 
-def _generate_raw_mjpeg(camera_index: int):
+def _generate_raw_mjpeg(source: int | str):
     """MJPEG frames from a raw per-camera feed (no pose overlay)."""
     import time
 
     from backend.services.raw_camera_feed import get_feed, release_feed
 
-    feed = get_feed(camera_index)
+    feed = get_feed(source)
     feed.acquire()
     last_frame_number = None
     try:
@@ -246,7 +191,7 @@ def _generate_raw_mjpeg(camera_index: int):
                 b"Content-Type: image/jpeg\r\n\r\n" + jpeg.tobytes() + b"\r\n"
             )
     finally:
-        release_feed(camera_index)
+        release_feed(source)
 
 
 @router.get("/video/feed")
@@ -272,10 +217,10 @@ async def video_feed(
         raise HTTPException(status_code=503, detail="No active session. POST /api/session/start first.")
 
     # Multi-camera: a camera_id naming a different camera serves its raw feed.
-    raw_index = _resolve_camera_index(camera_id, service)
-    if raw_index is not None:
+    raw_source = _resolve_camera_source(camera_id, service)
+    if raw_source is not None:
         return StreamingResponse(
-            _generate_raw_mjpeg(raw_index),
+            _generate_raw_mjpeg(raw_source),
             media_type="multipart/x-mixed-replace; boundary=frame",
             headers={"Cache-Control": "no-cache"},
         )

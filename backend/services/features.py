@@ -16,6 +16,118 @@ from backend.core.constants import (  # noqa: F401
 
 RISK_LEVELS = ["LOW", "MEDIUM", "HIGH"]
 
+# ── Task-Conditional Threshold Tables ────────────────────────────────
+# Each task class gets its own (MEDIUM, HIGH) cutoffs per feature,
+# grounded in the ergonomic method best suited to that task type:
+#
+#   • Lifting / Picking   → REBA-style (whole-body, trunk/knee dominant)
+#   • Assembly Work       → RULA-style (upper-body, neck/shoulder/wrist)
+#   • Reaching            → Blend (shoulder-dominant + weight-shift)
+#   • Inspection          → RULA-style (upper-body, repetitive gaze)
+#   • Walking / Moving    → Baseline (loose thresholds, movement-heavy)
+#   • Seated Work         → RULA-style (upper-body, neck/wrist focus)
+#   • Neutral Standing    → Baseline (the existing calibrated defaults)
+#
+# Thresholds share the same feature names as RISK_THRESHOLDS.  Any feature
+# not listed for a task inherits from RISK_THRESHOLDS (the default).
+
+task_thresholds: dict[str, dict[str, tuple[float, float]]] = {
+    # ── Lifting / Picking ─ REBA-informed: whole-body, load-bearing ────
+    "Lifting / Picking": {
+        "neck_flexion":         (10.0, 25.0),   # moderate (REBA Table A)
+        "trunk_flexion":        (20.0, 45.0),   # REBA trunk bands: <20 low, 20-45 mod, >45 high
+        "shoulder_elev":        (30.0, 55.0),   # slightly relaxed vs baseline (arms carry load)
+        "shoulder_symmetry":    (9.0, 18.0),    # same as baseline
+        "knee_angle":           (155.0, 120.0), # REBA leg assessment: deep knee bend = high risk
+        "forward_head_posture": (12.0, 25.0),   # slightly relaxed (focus is on trunk/legs)
+        "head_tilt_angle":      (10.0, 20.0),   # same as baseline
+        "wrist_deviation_angle": (5.0, 15.0),   # same as baseline
+        "stance_stability":     (0.65, 0.40),   # tighter: balance matters under load
+        "weight_shift_offset":  (10.0, 20.0),   # tighter: asymmetric loading is dangerous
+    },
+
+    "Assembly Work": {
+        # MENDED (assembly worker who also does heavy lifting): normal
+        # assembly work now scores on the SAME relaxed bands the standard
+        # RULA/REBA gate uses (calibration RELAXED feature_cutoffs), so a
+        # routine assembly posture — moderate neck flexion, arms at bench
+        # height — no longer over-alarms. Previously this table was stricter
+        # than the standard gate itself (neck 8/22, shoulder 25/50, wrist
+        # 4/12), which manufactured yellow/red on slight movement. Only
+        # sustained strain beyond the relaxed bands scores now; heavy
+        # lifting is scored by the REBA-grounded Lifting / Picking table.
+        "neck_flexion":         (15.0, 35.0),
+        "trunk_flexion":        (30.0, 70.0),
+        "shoulder_elev":        (35.0, 60.0),
+        "shoulder_symmetry":    (9.0, 18.0),
+        "knee_angle":           (140.0, 95.0),
+        "forward_head_posture": (15.0, 28.0),
+        "head_tilt_angle":      (15.0, 28.0),
+        "wrist_deviation_angle": (10.0, 25.0),
+        "stance_stability":     (0.6, 0.45),
+        "weight_shift_offset":  (15.0, 30.0),
+    },
+
+    "Reaching": {
+        # Blend: shoulder-dominated with trunk/weight-shift secondary
+        "neck_flexion":         (10.0, 28.0),   # slightly relaxed
+        "trunk_flexion":        (18.0, 50.0),   # tighter: forward reach = trunk involvement
+        "shoulder_elev":        (22.0, 45.0),   # tighter: reaching elevates shoulders
+        "shoulder_symmetry":    (7.0, 15.0),    # tighter: one-arm reach = asymmetry
+        "knee_angle":           (150.0, 100.0), # same as baseline
+        "forward_head_posture": (10.0, 22.0),   # same as baseline
+        "head_tilt_angle":      (10.0, 20.0),   # same as baseline
+        "wrist_deviation_angle": (5.0, 15.0),   # same as baseline
+        "stance_stability":     (0.65, 0.45),   # tighter: balance during reach
+        "weight_shift_offset":  (10.0, 20.0),   # tighter: reaching shifts weight
+    },
+
+    "Inspection": {
+        # RULA-style: upper-body focused, visual task
+        "neck_flexion":         (8.0, 25.0),    # tighter: sustained neck flexion looking down
+        "trunk_flexion":        (20.0, 60.0),   # same as baseline
+        "shoulder_elev":        (28.0, 55.0),   # slightly tighter
+        "shoulder_symmetry":    (8.0, 16.0),    # slightly tighter
+        "knee_angle":           (150.0, 100.0), # same as baseline
+        "forward_head_posture": (8.0, 18.0),    # tighter: inspecting = head forward
+        "head_tilt_angle":      (8.0, 18.0),    # tighter: looking at angles
+        "wrist_deviation_angle": (5.0, 15.0),   # same as baseline
+        "stance_stability":     (0.7, 0.5),     # same as baseline
+        "weight_shift_offset":  (12.5, 25.0),   # same as baseline
+    },
+
+    "Walking / Moving": {
+        # Baseline: dynamic activity, moderate thresholds
+        "neck_flexion":         (12.0, 30.0),   # relaxed (movement = transient postures)
+        "trunk_flexion":        (22.0, 60.0),   # relaxed
+        "shoulder_elev":        (32.0, 60.0),   # relaxed
+        "shoulder_symmetry":    (10.0, 20.0),   # relaxed
+        "knee_angle":           (148.0, 110.0), # slightly tighter (gait analysis)
+        "forward_head_posture": (12.0, 25.0),   # relaxed
+        "head_tilt_angle":      (12.0, 22.0),   # relaxed
+        "wrist_deviation_angle": (6.0, 16.0),   # relaxed
+        "stance_stability":     (0.6, 0.35),    # tighter: walking = dynamic balance
+        "weight_shift_offset":  (15.0, 30.0),   # relaxed
+    },
+
+    "Seated Work": {
+        # RULA-style: upper-body dominant, sustained posture
+        "neck_flexion":         (8.0, 22.0),    # tighter: desk/workbench neck strain
+        "trunk_flexion":        (18.0, 50.0),   # tighter: seated trunk posture matters
+        "shoulder_elev":        (25.0, 50.0),   # tighter: repetitive arm work
+        "shoulder_symmetry":    (7.0, 15.0),    # tighter
+        "knee_angle":           (100.0, 80.0),  # tighter: seated knee angle critical
+        "forward_head_posture": (8.0, 18.0),    # tighter: sustained desk posture
+        "head_tilt_angle":      (8.0, 18.0),    # tighter
+        "wrist_deviation_angle": (4.0, 12.0),   # tighter: keyboard/tool use
+        "stance_stability":     (0.7, 0.5),     # same (seated = stable)
+        "weight_shift_offset":  (10.0, 20.0),   # tighter: seated weight distribution
+    },
+}
+
+# Neutral Standing uses the original baseline thresholds (no task-specific table needed).
+_TASK_THRESHOLD_CLASSES = frozenset(task_thresholds.keys())
+
 FEATURE_DEPENDENCIES = {
     "neck_flexion": ["left_ear", "right_ear", "left_shoulder", "right_shoulder", "left_hip", "right_hip"],
     "trunk_flexion": ["left_shoulder", "right_shoulder", "left_hip", "right_hip"],
@@ -26,9 +138,10 @@ FEATURE_DEPENDENCIES = {
     "knee_angle": ["left_hip", "right_hip", "left_knee", "right_knee", "left_ankle", "right_ankle"],
     "elbow_flexion_angle": ["left_shoulder", "right_shoulder", "left_elbow", "right_elbow", "left_wrist", "right_wrist"],
     "upper_arm_angle_from_vertical": ["left_shoulder", "right_shoulder", "left_wrist", "right_wrist"],
-    # Phase-A additions (2026-08) — use nose, fingers, heels/feet
-    "forward_head_posture": ["left_ear", "right_ear", "left_shoulder", "right_shoulder", "nose"],
-    "head_tilt_angle": ["left_ear", "right_ear", "nose"],
+    # Phase-A additions (2026-08) — use nose, fingers, heels/feet        # nose is optional (fallback head reference when ears are occluded),
+        # so it is NOT a required dependency.
+        "forward_head_posture": ["left_ear", "right_ear", "left_shoulder", "right_shoulder"],
+    "head_tilt_angle": ["left_ear", "right_ear"],
     "wrist_deviation_angle": ["left_elbow", "right_elbow", "left_wrist", "right_wrist", "left_index", "right_index"],
     "stance_stability": ["left_hip", "right_hip", "left_ankle", "right_ankle"],
     "weight_shift_offset": ["left_hip", "right_hip", "left_ankle", "right_ankle"],
@@ -148,7 +261,12 @@ def extract_features_from_keypoints(
     neck = _midpoint(left_shoulder, right_shoulder)
     hip = _midpoint(left_hip, right_hip)
     shoulder_width = _safe_distance(left_shoulder, right_shoulder)
-    torso_len = _safe_distance(neck, hip, default=shoulder_width)
+    # Minimum shoulder-width guard: prevents division explosion when the
+    # person is in profile view and both shoulders project close together.
+    # 15 px ≈ < 1% of a 1920-wide frame — only fires on genuinely narrow
+    # projections, not on real shoulder widths.
+    _min_sw = max(shoulder_width, 15.0)
+    torso_len = _safe_distance(neck, hip, default=_min_sw)
 
     vertical_up_from_hip = np.array([hip[0], hip[1] - torso_len])
     vertical_down_left = np.array([left_shoulder[0], left_shoulder[1] + shoulder_width])
@@ -159,7 +277,7 @@ def extract_features_from_keypoints(
     trunk_flexion = angle_between_three_points(neck, hip, vertical_up_from_hip)
     left_shoulder_elev = angle_between_three_points(left_elbow, left_shoulder, vertical_down_left)
     right_shoulder_elev = angle_between_three_points(right_elbow, right_shoulder, vertical_down_right)
-    shoulder_symmetry = abs(left_shoulder[1] - right_shoulder[1]) / shoulder_width * 100.0
+    shoulder_symmetry = abs(left_shoulder[1] - right_shoulder[1]) / _min_sw * 100.0
     alignment_deviation = abs(ear[0] - hip[0]) / torso_len * 100.0
 
     # Knee angle (hip-knee-ankle, averaged L/R)
@@ -198,24 +316,62 @@ def extract_features_from_keypoints(
     left_hip_pt = _safe_point(kps, index_map, "left_hip")
     right_hip_pt = _safe_point(kps, index_map, "right_hip")
 
-    # forward_head_posture: horizontal protrusion of the head (nose + ear-mid
-    # average as a head-centre proxy) ahead of the neck, in % of shoulder width.
-    head_refs = [ear]
-    if nose is not None and np.isfinite(nose).all():
-        head_refs.append(nose)
-    if head_refs:
-        head_centre_x = float(np.mean([p[0] for p in head_refs]))
-        forward_head_posture = abs(head_centre_x - neck[0]) / shoulder_width * 100.0
+    # forward_head_posture: head protrusion as a TRUE ANGLE in degrees — the
+    # angle between the vertical axis through the neck and the line from the
+    # neck to the head centre (ear midpoint; nose only as a fallback when the
+    # ears are occluded). Head directly above the neck = 0 deg; a forward-
+    # jutting head reads as a real angle, matching the RULA/REBA neck-posture
+    # bands the 10/20 deg thresholds expect. The previous "% of shoulder
+    # width" ratio was unbounded and exploded in profile view, where the
+    # shoulders project to near-zero width (observed values like 862.3).
+    ear_ok = bool(np.isfinite(ear).all())
+    nose_ok = nose is not None and bool(np.isfinite(nose).all())
+    if ear_ok:
+        head_ref = ear
+    elif nose_ok:
+        head_ref = nose
+    else:
+        head_ref = None
+    if head_ref is not None:
+        vertical_up_from_neck = np.array([neck[0], neck[1] - torso_len])
+        forward_head_posture = angle_between_three_points(
+            vertical_up_from_neck, neck, head_ref
+        )
     else:
         forward_head_posture = float("nan")
+    if forward_head_posture != forward_head_posture:
+        # No head reference visible — mark unavailable explicitly so the value
+        # is never serialized as 0.0 (which would read as a safe reading).
+        if "forward_head_posture" not in unavailable:
+            unavailable.append("forward_head_posture")
 
-    # head_tilt_angle: deviation of the ear→nose vector from image vertical.
-    # A level head (nose straight above ear) yields 0 deg; 180-raw converts
-    # the at-ear angle to an off-vertical deviation.
-    if nose is not None and np.isfinite(nose).all() and np.isfinite(ear).all():
-        below = np.array([ear[0], ear[1] + 1.0])
-        raw_tilt = angle_between_three_points(below, ear, nose)
-        head_tilt_angle = abs(180.0 - raw_tilt) if raw_tilt == raw_tilt else float("nan")
+    # head_tilt_angle: lateral (roll) tilt of the head relative to the torso,
+    # measured as the angle between the ear-to-ear line and the shoulder-to-
+    # shoulder line. A level head = 0 deg regardless of camera framing; the
+    # head leaning toward a shoulder registers as real degrees (RULA/REBA
+    # neck-lateral posture). The previous "ear→nose vs image-vertical"
+    # convention assumed a profile view and read 150-173 deg on neutral
+    # frontal webcam poses (nose naturally at/below the ear line), which
+    # fired HIGH on every frame.
+    if (
+        np.isfinite(left_ear).all()
+        and np.isfinite(right_ear).all()
+        and np.isfinite(left_shoulder).all()
+        and np.isfinite(right_shoulder).all()
+    ):
+        v_ear = np.array([right_ear[0] - left_ear[0], right_ear[1] - left_ear[1]], dtype=float)
+        v_sh = np.array(
+            [right_shoulder[0] - left_shoulder[0], right_shoulder[1] - left_shoulder[1]], dtype=float
+        )
+        denom = np.linalg.norm(v_ear) * np.linalg.norm(v_sh)
+        if denom > 0:
+            cos_a = float(np.clip(np.dot(v_ear, v_sh) / denom, -1.0, 1.0))
+            raw_tilt = float(np.degrees(np.arccos(cos_a)))
+            # Acute angle between the two lines: 0 deg = level, 90 deg = fully
+            # sideways. Mirrors shoulder_symmetry's absolute-deviation style.
+            head_tilt_angle = min(raw_tilt, 180.0 - raw_tilt)
+        else:
+            head_tilt_angle = float("nan")
     else:
         head_tilt_angle = float("nan")
 
@@ -365,6 +521,10 @@ _UNKNOWN_VALUES: dict[str, float] = {
     "neck_flexion": 10.0,
     "trunk_flexion": 20.0,
     "shoulder_elev": 30.0,
+    # Per-side shoulder features share the aggregated shoulder fallback —
+    # risk_from_features looks these up directly and they must never KeyError.
+    "left_shoulder_elev": 30.0,
+    "right_shoulder_elev": 30.0,
     "shoulder_symmetry": 9.0,
     "knee_angle": 140.0,
     "forward_head_posture": 10.0,
@@ -380,6 +540,8 @@ def risk_from_features(
     unavailable_features: list[str] | None = None,
     threshold_multiplier: float = 1.0,
     thresholds: Mapping[str, tuple[float, float]] | None = None,
+    task_label: str | None = None,
+    task_confidence: float = 100.0,
 ) -> str:
     """Compute risk level from extracted features.
 
@@ -392,19 +554,61 @@ def risk_from_features(
     the calibrated RISK_THRESHOLDS). Multipliers < 1 make the rules more
     lenient (fewer HIGH verdicts); > 1 stricter. ``thresholds`` overrides
     RISK_THRESHOLDS entirely (used by the offline tuning sweep and tests).
+
+    ``task_label`` selects a task-specific threshold table when available,
+    producing risk scores that account for the biomechanical demands of
+    the detected activity.  When task_label is None or confidence is below
+    the classifier gate, the baseline RISK_THRESHOLDS are used.
     """
     unavailable = set(unavailable_features or ())
     m = float(threshold_multiplier)
-    t = dict(thresholds) if thresholds is not None else dict(RISK_THRESHOLDS)
+    if thresholds is not None:
+        t = dict(thresholds)
+    elif task_label and task_label in task_thresholds and task_confidence >= 50.0:
+        # Merge task-specific thresholds onto the baseline defaults, so any
+        # feature not overridden by the task table inherits the calibrated
+        # baseline value.
+        t = dict(RISK_THRESHOLDS)
+        t.update(task_thresholds[task_label])
+    else:
+        t = dict(RISK_THRESHOLDS)
     unk = _UNKNOWN_VALUES
 
+    def _unknown_for(name: str) -> float:
+        """Unknown-value fallback, never raising for an unexpected feature name."""
+        value = unk.get(name)
+        if value is not None:
+            return value
+        # Side-specific shoulder features share the aggregated shoulder fallback.
+        return unk.get("shoulder_elev", 30.0)
+
+    # Physically impossible angle bounds for a standing worker. Corrupt pose
+    # estimates (person half out of frame, landmarks snapped to furniture) can
+    # produce absurd values like trunk flexion 176 deg or neck flexion 130 deg;
+    # those must NOT score HIGH - an impossible pose is not an assessment, so
+    # the feature falls back to its unknown value (which sits exactly at the
+    # MEDIUM cutoff and therefore contributes nothing).
+    _IMPLAUSIBLE_MAX = {
+        "neck_flexion": 90.0,  # head cannot bend past horizontal from vertical
+        "trunk_flexion": 90.0,  # torso cannot go past horizontal from vertical
+        "shoulder_symmetry": 150.0,
+        "forward_head_posture": 90.0,  # true angle from vertical, bounded 0-90
+        "head_tilt_angle": 90.0,
+        "wrist_deviation_angle": 180.0,
+        "weight_shift_offset": 200.0,
+    }
+
     def _get(name: str, default: float) -> float:
-        """Get a feature value, treating NaN and explicitly unavailable as unknown."""
+        """Get a feature value, treating NaN, explicitly unavailable, and
+        physically impossible values as unknown."""
         if name in unavailable:
-            return unk[name]
+            return _unknown_for(name)
         val = features.get(name, default)
         if val != val:  # NaN check
-            return unk[name]
+            return _unknown_for(name)
+        limit = _IMPLAUSIBLE_MAX.get(name)
+        if limit is not None and val > limit:
+            return _unknown_for(name)
         return val
 
     shoulder = max(
@@ -472,7 +676,22 @@ def risk_from_features(
     return "LOW"
 
 
-def risk_breakdown(features: Mapping[str, float]) -> Dict[str, RiskBreakdown]:
+def risk_breakdown(
+    features: Mapping[str, float],
+    calibration: "PostureCalibration | None" = None,
+) -> Dict[str, RiskBreakdown]:
+    """Per-feature risk bands for segment colors and UI feature cards.
+
+    Reads the (MEDIUM, HIGH) cutoffs from the active posture calibration
+    (defaults to the ``RISK_CALIBRATION`` profile — relaxed), so the
+    overlay only colors a joint yellow/red once its posture actually
+    exceeds the operator's chosen strain allowance. ``risk_from_features``
+    (the legacy gate) intentionally keeps the pinned RISK_THRESHOLDS.
+    """
+    if calibration is None:
+        from backend.services.calibration import load_calibration
+        calibration = load_calibration()
+    cutoffs = calibration.feature_cutoffs
     breakdown: Dict[str, RiskBreakdown] = {}
     for name, value in features.items():
         # Treat NaN as "unknown" — show as a distinct color
@@ -488,14 +707,10 @@ def risk_breakdown(features: Mapping[str, float]) -> Dict[str, RiskBreakdown]:
             breakdown[name] = RiskBreakdown(level="LOW", color=RISK_COLORS_BGR["LOW"])
             continue
 
-        # Read cutoffs from the single source of truth (RISK_THRESHOLDS) so the
-        # per-feature breakdown never disagrees with risk_from_features.
-        _key = {
-            "left_shoulder_elev": "shoulder_elev",
-            "right_shoulder_elev": "shoulder_elev",
-        }.get(name, name)
-        if _key in RISK_THRESHOLDS:
-            medium, high = RISK_THRESHOLDS[_key]
+        # Read cutoffs from the active calibration so segment colors and the
+        # UI feature cards follow the operator's strain allowance.
+        if name in cutoffs:
+            medium, high = cutoffs[name]
         elif name == "alignment_deviation":
             high, medium = 50.0, 20.0
         else:
@@ -509,114 +724,23 @@ def risk_breakdown(features: Mapping[str, float]) -> Dict[str, RiskBreakdown]:
     return breakdown
 
 
-def _band(value: float, thresholds: list[float]) -> int:
-    """Convert a degree value to a RULA band score (1-4).
-
-    thresholds: list of [low_cutoff, med_cutoff, high_cutoff] boundaries.
-    Returns 1 if below first threshold, 2 if between first and second, etc.
-    """
-    for i, t in enumerate(thresholds):
-        if value < t:
-            return i + 1
-    return len(thresholds) + 1
-
-
 def compute_rula_informed_score(
     features: Mapping[str, float],
     unavailable_features: list[str] | None = None
 ) -> Dict[str, int | bool]:
-    """Compute an informed RULA-style score (1-7) from extracted features.
+    """Compute a faithful RULA grand score (1-7) from extracted features.
 
-    Uses a simplified mapping from ergonomic feature angles to RULA Table A/B/C.
-    Returns {"rula_informed_score": int, "is_partial_score": bool}.
+    Delegates to :func:`backend.services.standard_assessment.compute_rula_score`
+    (the same tables the authoritative RULA/REBA gate uses) so the API's
+    informational ``rula_informed_score`` always agrees with the risk engine.
+    Returns {"rula_informed_score": int, "is_partial_score": bool, ...}.
     """
-    unavailable = set(unavailable_features or [])
+    from backend.services.standard_assessment import compute_rula_score
 
-    neck = features.get("neck_flexion", 0.0)
-    trunk = features.get("trunk_flexion", 0.0)
-    head_tilt = features.get("head_tilt_angle", 0.0)
-    wrist_dev = features.get("wrist_deviation_angle", 0.0)
-    stance = features.get("stance_stability", 1.0)
-
-    # Conservative knee angle default (HIGH risk if knee_angle is unavailable:
-    # Assume 90 degrees (which makes legs_b = 3, worst case)
-    knee = features.get("knee_angle", 90.0) if "knee_angle" in unavailable else features.get("knee_angle", 180.0)
-    # If knee_angle is NaN or unavailable, use 90 as conservative default:
-    knee_val = knee if (knee == knee) else 90.0
-
-    # Newly added features may be NaN/partial — treat as neutral (no penalty)
-    # unless unavailable is explicitly reported, mirroring the wrist-default gap.
-    is_partial = "knee_angle" in unavailable or (knee != knee)
-    if wrist_dev != wrist_dev or "wrist_deviation_angle" in unavailable:
-        is_partial = True
-        wrist_dev = 0.0
-    if head_tilt != head_tilt:
-        head_tilt = 0.0
-    if stance != stance:
-        stance = 1.0
-
-    shoulder_l = features.get("left_shoulder_elev", 0.0)
-    shoulder_r = features.get("right_shoulder_elev", 0.0)
-    shoulder = max(shoulder_l, shoulder_r)
-    elbow_l = features.get("elbow_flexion_angle", 90.0)
-    elbow_r = features.get("elbow_flexion_angle", 90.0)
-    upper_arm = features.get("upper_arm_angle_from_vertical", 0.0)
-
-    # --- Table A: Neck / Trunk / Legs ---
-    neck_b = _band(neck, [10, 20, 30])
-    # Head tilt off vertical adds to the neck posture band (looking down).
-    if head_tilt > 20:
-        neck_b = min(neck_b + 1, 4)
-    elif head_tilt > 10:
-        neck_b = min(neck_b + 1, 4) if neck_b >= 3 else neck_b
-    trunk_b = _band(trunk, [20, 40, 60])
-    legs_b = 1 if knee_val >= 150 else 2 if knee_val >= 100 else 3
-    # Unstable stance (narrow/wide base) adds to the legs posture band.
-    if stance < 0.5:
-        legs_b = min(legs_b + 1, 3)
-    score_a_table = [
-        [1, 2, 3, 4],
-        [2, 3, 4, 5],
-        [3, 4, 5, 6],
-    ]
-    row_a = min(trunk_b - 1, 2)
-    col_a = min(neck_b - 1, 3)
-    table_a = score_a_table[row_a][col_a] + (legs_b - 1)
-
-    # --- Table B: Arm / Wrist ---
-    arm_b = _band(upper_arm, [20, 45, 90])
-    elbow_b_l = _band(elbow_l, [45, 90, 150])
-    elbow_b_r = _band(elbow_r, [45, 90, 150])
-    elbow_b = max(elbow_b_l, elbow_b_r)
-    # RULA Table B wrist deviation: 0 deg = neutral, <=15 deg = +1, >15 deg = +2.
-    wrist_bonus = 1 if wrist_dev > 5 else 0
-    if wrist_dev > 15:
-        wrist_bonus = 2
-    score_b_table = [
-        [1, 2, 3, 4],
-        [2, 3, 4, 5],
-        [3, 4, 5, 6],
-    ]
-    row_b = min(arm_b - 1, 2)
-    col_b = min(elbow_b - 1 + wrist_bonus, 3)
-    table_b = score_b_table[row_b][col_b]
-
-    # --- Table C: Combined Score ---
-    combined_a = max(table_a, 1)
-    combined_b = max(table_b, 1)
-    score_c_table = [
-        [1, 2, 3, 4, 5, 6],
-        [2, 3, 4, 5, 6, 7],
-        [3, 4, 5, 6, 7, 7],
-    ]
-    row_c = min(combined_a - 1, 2)
-    col_c = min(combined_b - 1, 5)
-    final_score = score_c_table[row_c][col_c]
-
-    return {
-        "rula_informed_score": final_score,
-        "is_partial_score": is_partial
-    }
+    result = compute_rula_score(
+        features, list(unavailable_features or []), legs_visible=True
+    )
+    return result
 
 
 def mediapipe_landmarks_to_keypoints(landmarks: Iterable[object], width: int, height: int) -> list[list[float]]:

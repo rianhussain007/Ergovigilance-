@@ -9,13 +9,11 @@ from app.repositories.base import DashboardRepository
 from app.schemas.api import (
     DashboardResponse,
     SessionRecord,
-    TrendResponse,
     CameraInfo,
     WorkstationInfo,
     DeploymentMetrics,
     ManagerSummary,
     Alert,
-    ReportRecord,
     ContextSnapshotResponse,
     AlertsResponse,
     AlertResponse,
@@ -38,12 +36,6 @@ class MockRepository(DashboardRepository):
 
     async def get_sessions(self, current_user=None) -> List[SessionRecord]:
         return [SessionRecord(**s) for s in mock_data.SESSIONS]
-
-    async def get_trends(self) -> TrendResponse:
-        return TrendResponse(**mock_data.TRENDS)
-
-    async def get_reports(self) -> List[ReportRecord]:
-        return [ReportRecord(**r) for r in mock_data.REPORTS]
 
     async def get_cameras(self) -> List[CameraInfo]:
         return [CameraInfo(**c) for c in mock_data.CAMERAS]

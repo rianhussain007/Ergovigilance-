@@ -104,9 +104,51 @@ _ISSUE_RULES = [
 ]
 
 
-def detect_posture_issues(features: Mapping[str, float]) -> List[Dict]:
+# Issue features whose MEDIUM/HIGH cutoffs follow the active posture
+# calibration (relaxed by default). shoulder_symmetry, weight_shift_offset
+# and alignment_deviation keep their own documented/historical cutoffs —
+# they are less jitter-prone and were already tuned against the REBA
+# dataset (see features.RISK_THRESHOLDS and the issue table above).
+_CALIBRATED_ISSUE_FEATURES = {
+    "neck_flexion", "trunk_flexion",
+    "left_shoulder_elev", "right_shoulder_elev",
+    "knee_angle", "forward_head_posture", "head_tilt_angle",
+    "wrist_deviation_angle", "stance_stability",
+}
+
+
+def _issues_with_calibration(calibration) -> List[Dict]:
+    """Issue rules with MEDIUM/HIGH cutoffs from the active calibration."""
+    cut = calibration.feature_cutoffs
+    rules = [dict(rule) for rule in _ISSUE_RULES]
+    for rule in rules:
+        feat = rule["feature"]
+        if feat not in _CALIBRATED_ISSUE_FEATURES or feat not in cut:
+            continue
+        med, high = cut[feat]
+        if rule["inverted"]:
+            rule["med_max"] = med
+        else:
+            rule["med_min"] = med
+        rule["high_min"] = high
+    return rules
+
+
+def detect_posture_issues(
+    features: Mapping[str, float],
+    calibration=None,
+) -> List[Dict]:
+    """Detect posture issues, using the calibration's strain allowance.
+
+    ``calibration`` defaults to the ``RISK_CALIBRATION`` profile (relaxed),
+    so slight, normal movements no longer trigger issues — only postures
+    that exceed the operator's chosen bend/strain thresholds do.
+    """
+    if calibration is None:
+        from backend.services.calibration import load_calibration
+        calibration = load_calibration()
     issues: List[Dict] = []
-    for rule in _ISSUE_RULES:
+    for rule in _issues_with_calibration(calibration):
         value = features.get(rule["feature"], 0.0)
         if rule["inverted"]:
             if value < rule["high_min"]:

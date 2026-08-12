@@ -64,6 +64,18 @@ async def detect_cameras(
             )
             for c in cams
         ]
+        # Include configured IP/RTSP cameras (CAMERA_SOURCES env) so factory
+        # cameras appear in camera pickers even when no USB camera is attached.
+        from app.core.config import settings
+        for cam in settings.CAMERA_SOURCES:
+            result.append(DetectedCamera(
+                index=-1,
+                name=cam["name"],
+                width=0,
+                height=0,
+                fps=0.0,
+                backend="RTSP",
+            ))
         _camera_detect_cache = result
         _camera_detect_cache_time = now
         return result

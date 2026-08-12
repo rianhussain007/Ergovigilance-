@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from backend.services.calibration import RELAXED, STANDARD
 from backend.services.reba_scoring import (
     reba_from_keypoints,
     reba_risk_band,
@@ -111,3 +112,43 @@ class TestDegradation:
         assert reba_risk_band(3) == "MEDIUM"
         assert reba_risk_band(4) == "HIGH"
         assert reba_risk_band(5) == "HIGH"
+
+
+class TestCalibration:
+    """The standalone REBA scorer defaults to the published (STANDARD)
+    breakpoints so dataset labeling keeps the reference methodology; an
+    explicit relaxed profile must never score a pose HIGHER."""
+
+    def test_default_is_published(self):
+        std = reba_from_keypoints(_pose())
+        default = reba_from_keypoints(_pose())
+        assert default["reba_score"] == std["reba_score"]
+        explicit = reba_from_keypoints(_pose(), calibration=STANDARD)
+        assert explicit["reba_score"] == std["reba_score"]
+
+    def test_relaxed_never_scores_higher(self):
+        # Mild forward lean: shoulders/neck pushed ~60px ahead of the hips.
+        mild = _pose(
+            forehead=[395, 120, 2], nose=[395, 130, 2],
+            neck=[395, 220, 2], left_shoulder=[370, 225, 2], right_shoulder=[420, 225, 2],
+            left_elbow=[380, 330, 2], right_elbow=[410, 330, 2],
+            left_wrist=[375, 430, 2], right_wrist=[415, 430, 2],
+        )
+        std = reba_from_keypoints(mild)
+        relaxed = reba_from_keypoints(mild, calibration=RELAXED)
+        assert relaxed["reba_score"] <= std["reba_score"]
+        assert relaxed["trunk_score"] <= std["trunk_score"]
+
+    def test_severe_still_scores_high_under_relaxed(self):
+        # Deep hunch + arms overhead remains a HIGH-risk posture regardless
+        # of calibration.
+        severe = _pose(
+            forehead=[430, 140, 2], nose=[430, 150, 2],
+            neck=[430, 230, 2], left_shoulder=[405, 235, 2], right_shoulder=[455, 235, 2],
+            left_elbow=[410, 170, 2], right_elbow=[450, 170, 2],
+            left_wrist=[415, 120, 2], right_wrist=[445, 120, 2],
+            left_hand=[415, 105, 2], right_hand=[445, 105, 2],
+        )
+        relaxed = reba_from_keypoints(severe, calibration=RELAXED)
+        assert relaxed["reba_score"] >= 8
+        assert relaxed["reba_risk_level"] >= 4

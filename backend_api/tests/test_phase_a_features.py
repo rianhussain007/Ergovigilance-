@@ -106,14 +106,31 @@ class TestNeutralPosture:
 
 class TestNewFeatures:
     def test_forward_head_posture_detects_protrusion(self):
-        # Head juts ~25px ahead of the neck (shoulder width = 50px -> 50%).
+        # Head centre juts 25px ahead of the neck over a ~90px neck-to-head
+        # height -> ~15.5 deg from vertical (a real forward-head angle, not
+        # the old unbounded %-of-shoulder-width ratio that exploded to
+        # hundreds of "degrees" in profile view).
         feats, _, _ = _extract(_build_33({"nose": (345, 120), "left_ear": (320, 130), "right_ear": (370, 130)}))
-        assert feats["forward_head_posture"] > 20
+        assert feats["forward_head_posture"] > 10
+        assert feats["forward_head_posture"] < 90
         assert risk_from_features(feats, []) in {"MEDIUM", "HIGH"}
 
     def test_head_tilt_detects_side_tilt(self):
-        feats, _, _ = _extract(_build_33({"nose": (335, 120)}))
+        # Tilt the ear line (right ear raised) — head_tilt_angle measures the
+        # ear-to-ear line against the shoulder line, so moving the nose alone
+        # no longer registers as a tilt.
+        feats, _, _ = _extract(_build_33({"right_ear": (345, 100)}))
         assert feats["head_tilt_angle"] > 20
+        assert risk_from_features(feats, []) in {"MEDIUM", "HIGH"}
+
+    def test_frontal_view_neutral_head_tilt_is_zero(self):
+        # Regression: a real webcam sees the nose at/below the ear line (the
+        # old "ear→nose vs image-vertical" convention read 150-173 deg on this
+        # and fired HIGH on every neutral frame). Level ears vs shoulders must
+        # stay ~0 deg regardless of where the nose sits.
+        feats, unavail, _ = _extract(_build_33({"nose": (320, 155)}))
+        assert feats["head_tilt_angle"] == pytest.approx(0.0, abs=2.0)
+        assert risk_from_features(feats, unavail) == "LOW"
 
     def test_wrist_deviation_detects_bent_wrist(self):
         kp = _build_33({"left_index": (320, 435)})

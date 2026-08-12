@@ -21,10 +21,13 @@ from backend.services.features import (
     unavailable_features_from_keypoints,
     lower_body_confidence,
 )
+from backend.services.standard_assessment import assess_standard_risk
 from backend.services.issue_detection import detect_posture_issues
 from backend.services.recommendation_engine import get_recommendations
 from backend.services.task_recognition import TaskRecognition
 from backend.services.drift_monitor import get_drift_monitor
+from backend.services.kalman import LandmarkKalmanSmoother
+from backend.services.performance import frame_skipper, feature_cache, performance_monitor
 
 # Canonical definitions live in backend.core.constants and backend.core.types.
 # Re-exported here for backward compatibility.
@@ -76,46 +79,140 @@ class PoseEngine:
         except (TypeError, ValueError):
             self._smooth_alpha = 0.7
         self._smooth_alpha = min(1.0, max(0.1, self._smooth_alpha))
+        # Landmark-level Kalman smoothing (Tier 0): removes per-frame jitter
+        # at the source so features, risk, and the overlay skeleton all read a
+        # cleaner signal. Disable with ERGOVIGILANCE_KALMAN=0.
+        try:
+            kalman_env = os.environ.get("ERGOVIGILANCE_KALMAN", "1").strip().lower()
+            self._kalman_enabled = kalman_env not in ("0", "false", "no", "off")
+        except AttributeError:
+            self._kalman_enabled = True
+        self._kalman = LandmarkKalmanSmoother() if self._kalman_enabled else None
 
     def initialize(self):
+        # Tier 3 multi-person foundation: MediaPipe can detect several poses
+        # per frame (CPU cost grows roughly linearly). The pipeline still
+        # SCORES the primary person (largest bbox) but ``person_count`` lets
+        # the UI/reporting know more than one worker is in view. Configure
+        # with ERGOVIGILANCE_NUM_POSES (default 1 preserves current behavior).
+        try:
+            num_poses = max(1, int(os.environ.get("ERGOVIGILANCE_NUM_POSES", "1")))
+        except (TypeError, ValueError):
+            num_poses = 1
+        self._num_poses = min(num_poses, 4)
         options = vision.PoseLandmarkerOptions(
             base_options=BaseOptions(model_asset_path=self.model_path),
             running_mode=vision.RunningMode.VIDEO,
-            num_poses=1,
+            num_poses=self._num_poses,
             min_pose_detection_confidence=0.5,
             min_tracking_confidence=0.5,
         )
         self.pose_landmarker = vision.PoseLandmarker.create_from_options(options)
         self._initialized = True
+        self._init_time = time.perf_counter()  # For accurate MediaPipe timestamps
 
     def process_frame(self, frame: np.ndarray) -> ProcessedFrame:
+        """Process one camera frame through the full CV pipeline.
+
+        Performance note: this method is the hot path during live monitoring.
+        Each sub-step (MediaPipe inference, feature extraction, context eval)
+        is bounded to keep total latency under the POSE_PROCESS_FPS target.
+        """
         if not self._initialized or self.pose_landmarker is None:
             raise RuntimeError("PoseEngine not initialized. Call initialize() first.")
 
-        self.timestamp_ms += 33
+        # Performance: skip frames if we're ahead of schedule
+        if not frame_skipper.should_process():
+            # Return a lightweight result indicating frame was skipped
+            return ProcessedFrame(
+                keypoints=[],
+                features={},
+                risk_level="LOW",
+                confidence=0.0,
+                person_detected=False,
+                task_info=None,
+                issues=[],
+                recommendations=[],
+                timestamp=time.time(),
+                unavailable_features=[],
+                approximate_features=[],
+                lower_body_confidence=0.0,
+                standard_assessment={},
+                framing={},
+                person_count=0,
+            )
+        
+        # Start timing
+        start_time = time.perf_counter()
+        
+        # Use actual elapsed time for MediaPipe timestamp, not hardcoded 33ms
+        self.timestamp_ms = int((time.perf_counter() - self._init_time) * 1000) if hasattr(self, '_init_time') else self.timestamp_ms + 33
         rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
+        # Inference timing
+        inference_start = time.perf_counter()
         result = self.pose_landmarker.detect_for_video(mp_image, self.timestamp_ms)
+        inference_time = time.perf_counter() - inference_start
 
-        features = {c: 0.0 for c in FEATURE_COLUMNS}
+        # Initialize defaults — avoided when no person detected (early exit)
+        features: dict[str, float] = {}
         risk_level = "LOW"
         confidence = 0.0
         person_detected = False
         task_info = None
-        issues = []
-        recommendations = []
-        keypoints = []
-        features: dict[str, float] = {}
+        issues: list[dict] = []
+        recommendations: list[dict] = []
+        keypoints: list[list[float]] = []
         unavailable: list[str] = []
         approximate: list[str] = []
         lb_conf = 0.0
+        standard_assessment: dict = {}
+        framing: dict = {}
+        person_count = 0
 
         if result.pose_landmarks:
             person_detected = True
+            person_count = len(result.pose_landmarks)
+            # Primary person: the largest bounding box (most of the worker's
+            # body in frame = most reliable angles). Multi-person session
+            # isolation (per-worker sessions/analytics) is the follow-up; for
+            # now the pipeline scores the primary worker and reports how many
+            # people the camera can see.
             landmarks = result.pose_landmarks[0]
+            if person_count > 1:
+                best_i, best_area = 0, -1.0
+                for i, pose in enumerate(result.pose_landmarks):
+                    xs = [lm.x for lm in pose]
+                    ys = [lm.y for lm in pose]
+                    area = (max(xs) - min(xs)) * (max(ys) - min(ys))
+                    if area > best_area:
+                        best_i, best_area = i, area
+                landmarks = result.pose_landmarks[best_i]
             h_f, w_f = frame.shape[:2]
             keypoints = mediapipe_landmarks_to_keypoints(landmarks, w_f, h_f)
-            features, unavailable, approximate = extract_features_from_keypoints(keypoints)
+            # Landmark-level Kalman smoothing before feature extraction — the
+            # smoothed skeleton feeds features, risk, and the overlay overlay,
+            # so all three agree instead of the overlay jittering frame to frame.
+            if self._kalman is not None:
+                keypoints = self._kalman.smooth(keypoints)
+            
+            # Feature extraction timing
+            feature_start = time.perf_counter()
+            # Performance: check cache first to avoid redundant feature extraction
+            cached_features = feature_cache.get(keypoints)
+            if cached_features is not None:
+                features = cached_features.get('features', {})
+                unavailable = cached_features.get('unavailable', [])
+                approximate = cached_features.get('approximate', [])
+            else:
+                features, unavailable, approximate = extract_features_from_keypoints(keypoints)
+                # Cache the computed features
+                feature_cache.set(keypoints, {
+                    'features': features,
+                    'unavailable': unavailable,
+                    'approximate': approximate,
+                })
+            feature_time = time.perf_counter() - feature_start
             lb_conf = _compute_lower_body_confidence(keypoints)
 
             current_time = time.time()
@@ -168,7 +265,28 @@ class PoseEngine:
             # fewer false alerts). Motion signals and NaN pass through.
             features = self._apply_smoothing(features)
 
-            risk_level = risk_from_features(features, unavailable)
+            # Tier 3 framing intelligence: profile view / cropped body /
+            # occlusion -> camera guidance + per-joint angle uncertainty
+            # (sigma) that the context engine uses for uncertainty-aware
+            # scoring (P(rule violated) instead of hard cutoffs).
+            try:
+                from backend.services.framing_quality import assess_framing
+                framing = assess_framing(keypoints, w_f, h_f)
+            except Exception:
+                framing = {}
+
+            # Authoritative standard-method gate: RULA when the full body is
+            # NOT visible (legs out of frame), REBA only when it is. Risk
+            # triggers only when a published RULA/REBA rule is broken; the
+            # legacy threshold rules remain as a fallback when the standard
+            # method cannot be computed (e.g. too few landmarks).
+            standard_assessment = assess_standard_risk(
+                keypoints, features, unavailable, lb_conf
+            )
+            if standard_assessment.get("risk_level"):
+                risk_level = standard_assessment["risk_level"]
+            else:
+                risk_level = risk_from_features(features, unavailable)
             confidence = _compute_confidence(landmarks)
             task_info = self.task_recognizer.detect_task(keypoints, features)
             # Drift canary: record whether the trained task classifier decided
@@ -188,11 +306,23 @@ class PoseEngine:
             # No person this frame: reset smoothing so a re-detection
             # starts fresh instead of interpolating against a stale pose.
             self._smoothed_features = None
+            if self._kalman is not None:
+                self._kalman.reset()
 
         if person_detected:
             issues = detect_posture_issues(features)
             recommendations = get_recommendations(issues)
 
+        # Record performance metrics
+        end_time = time.perf_counter()
+        total_time = end_time - start_time
+        performance_monitor.record_frame_time(
+            total_time=total_time,
+            inference_time=inference_time if 'inference_time' in locals() else 0.0,
+            feature_time=feature_time if 'feature_time' in locals() else 0.0,
+            context_time=context_time if 'context_time' in locals() else 0.0,
+        )
+        
         return ProcessedFrame(
             keypoints=keypoints,
             features=features,
@@ -206,6 +336,9 @@ class PoseEngine:
             unavailable_features=unavailable,
             approximate_features=approximate,
             lower_body_confidence=lb_conf,
+            standard_assessment=standard_assessment,
+            framing=framing,
+            person_count=person_count,
         )
 
     def _apply_smoothing(self, features: dict[str, float]) -> dict[str, float]:
@@ -243,3 +376,5 @@ class PoseEngine:
             self.pose_landmarker = None
         self._initialized = False
         self._smoothed_features = None
+        if self._kalman is not None:
+            self._kalman.reset()

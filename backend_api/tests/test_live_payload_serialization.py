@@ -99,6 +99,32 @@ class LivePayloadSerializationTest(unittest.TestCase):
         assert result.guidance is not None
         assert result.rula_informed_score is not None
 
+    def test_context_snapshot_empty_features_does_not_crash(self):
+        """A no-person frame (empty feature dict) must NOT 500 the endpoint.
+
+        Regression: ``rula_is_partial`` was only assigned inside ``if features:``
+        but referenced unconditionally, so the dashboard + context-snapshot
+        endpoints crashed with ``UnboundLocalError`` the moment a frame had no
+        person detected — the "live monitoring collapses mid-session" bug.
+        """
+        import asyncio
+
+        class _NoPersonService:
+            def get_state_snapshot(self):
+                return SimpleNamespace(
+                    context_snapshot=_make_snapshot({"neck_flexion": 5.0}),
+                    features={},  # no person on this frame
+                )
+
+        repo = LiveRepository()
+        with patch("app.repositories.live.get_live_service", return_value=_NoPersonService()):
+            result = asyncio.run(repo.get_context_snapshot())
+
+        assert result is not None
+        assert result.rula_is_partial is False
+        assert result.rula_informed_score is None
+        result.model_dump_json()  # must serialize
+
     def test_context_snapshot_guidance_renders(self):
         """Guidance + RULA blocks build from realistic features."""
         raw = build_guidance(_FEATURES)

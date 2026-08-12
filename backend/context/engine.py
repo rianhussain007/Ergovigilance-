@@ -9,12 +9,15 @@ context to produce a context-adjusted risk assessment as a ContextSnapshot.
 from __future__ import annotations
 
 import json
+import os
+from collections import Counter, deque
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Optional
 
 from backend.context.exposure import ExposureTracker
 from backend.context.fatigue import FatigueModel
+from backend.core.constants import RISK_ORDER
 from backend.services.features import FEATURE_DEPENDENCIES
 
 
@@ -36,15 +39,40 @@ _FEATURE_RULES: dict[str, tuple[float, float, bool]] = {
     "weight_shift_offset":  (8.0, 15.0, False),
 }
 
+# ── Task-Conditional Feature Rules ─────────────────────────────────
+# When a task is classified with sufficient confidence, feature scoring
+# uses task-specific (MEDIUM, HIGH, inverted) tuples instead of the
+# one-size-fits-all _FEATURE_RULES above.  Only features relevant to
+# the task are overridden — everything else falls through to the default.
+
+def _task_feature_rules(task_label: str | None, task_confidence: float) -> dict[str, tuple[float, float, bool]]:
+    """Return feature rules adjusted for the detected task.
+
+    Below 50% confidence, or for unknown/Neutral Standing tasks, the
+    baseline _FEATURE_RULES are used unchanged.
+    """
+    from backend.services.features import task_thresholds
+    if not task_label or task_label not in task_thresholds or task_confidence < 50.0:
+        return dict(_FEATURE_RULES)
+    tt = task_thresholds[task_label]
+    rules = dict(_FEATURE_RULES)
+    for feature, (med, high) in tt.items():
+        # Look up inversion flag from the baseline rules
+        inv = rules.get(feature, (0, 0, False))[2]
+        rules[feature] = (med, high, inv)
+    return rules
+
 
 # ── Task Modifiers ─────────────────────────────────────────────────
 
 _TASK_MODIFIERS: dict[str, float] = {
     "Neutral Standing": 0,
+    "Walking / Moving": 2,
+    "Inspection": 3,
+    "Seated Work": 4,
     "Assembly Work": 5,
     "Reaching": 8,
     "Lifting / Picking": 12,
-    "Inspection": 3,
 }
 
 
@@ -92,10 +120,23 @@ class ContextSnapshot:
     approximate_features: tuple[str, ...] = ()
     lower_body_confidence: float = 0.0
 
+    # Authoritative standard-method assessment (RULA vs REBA by body
+    # visibility): {"method", "score", "risk_level", "is_partial", "reason"}.
+    standard_assessment: dict = field(default_factory=dict)
+
+    # Task classification (from the deterministic HistGradientBoosting model)
+    task_label: str = "Unknown"
+    task_confidence: float = 0.0
+
     # Explainability
     reason: str = ""
     active_rules: tuple[str, ...] = ()
     feature_scores: dict[str, float] = field(default_factory=dict)
+
+    # Ollama-generated plain-language explanation (populated post-scoring,
+    # never in the critical path — a slow or failed LLM call never blocks
+    # or corrupts the actual risk computation).
+    ai_explanation: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a JSON-compatible dictionary."""
@@ -113,10 +154,14 @@ class ContextSnapshot:
             "risk_level": self.risk_level,
             "safety_state": self.safety_state,
             "movement_velocity": self.movement_velocity,
+            "task_label": self.task_label,
+            "task_confidence": self.task_confidence,
             "reason": self.reason,
             "active_rules": list(self.active_rules),
             "feature_scores": dict(self.feature_scores),
             "approximate_features": list(self.approximate_features),
+            "standard_assessment": dict(self.standard_assessment),
+            "ai_explanation": self.ai_explanation,
         }
 
     def to_json(self, indent: int | None = None) -> str:
@@ -141,9 +186,13 @@ class ContextSnapshot:
             safety_state=data.get("safety_state", "SAFE"),
             movement_velocity=data.get("movement_velocity", 0.0),
             reason=data.get("reason", ""),
+            task_label=data.get("task_label", "Unknown"),
+            task_confidence=data.get("task_confidence", 0.0),
             active_rules=tuple(data.get("active_rules", [])),
             feature_scores=data.get("feature_scores", {}),
             approximate_features=tuple(data.get("approximate_features", [])),
+            standard_assessment=data.get("standard_assessment", {}),
+            ai_explanation=data.get("ai_explanation", ""),
         )
 
     @classmethod
@@ -183,6 +232,17 @@ class ContextIntelligenceEngine:
         self._session_id = session_id
         self._worker_id = worker_id
         self._frame_counter: int = 0
+        # Risk-level dwell: the displayed level only changes once a strict
+        # majority of the last N frames agree, so pose-estimation jitter or a
+        # single post-smoothing spike can no longer flicker the badge or fire
+        # an alert. While the window is still filling (warm-up), the raw level
+        # is committed immediately so session start isn't delayed.
+        try:
+            self._level_dwell = max(1, int(os.environ.get("ERGOVIGILANCE_LEVEL_DWELL", "10") or "10"))
+        except (TypeError, ValueError):
+            self._level_dwell = 10
+        self._level_history: deque[str] = deque(maxlen=self._level_dwell)
+        self._last_committed_level: str = "LOW"
 
     @property
     def session_id(self) -> str:
@@ -217,6 +277,8 @@ class ContextIntelligenceEngine:
         unavailable_features: list[str] | None = None,
         approximate_features: list[str] | None = None,
         lower_body_confidence: float = 0.0,
+        standard_assessment: dict | None = None,
+        joint_uncertainty: dict | None = None,
     ) -> ContextSnapshot:
         """Run the full context intelligence evaluation for one frame.
 
@@ -247,13 +309,35 @@ class ContextIntelligenceEngine:
         nan_features = {name for name in features if features.get(name, 0) != features.get(name, 0)}
         all_unavailable = unavailable_set | nan_features
 
+        # The standard-method assessment (RULA/REBA) is the authoritative
+        # posture-risk gate: risk fires only when a published rule is broken.
+        # Its band anchors base_risk and the final level is capped so context
+        # noise (confidence, minor fatigue) can never manufacture HIGH from a
+        # LOW posture.
+        std = standard_assessment or {}
+        std_band = std.get("risk_level")
+        std_valid = std_band in ("LOW", "MEDIUM", "HIGH")
+        if std_valid:
+            active_rules.append(
+                f"standard_assessment: {std.get('method', '?')} score={std.get('score')} -> {std_band} ({std.get('reason', '')})"
+            )
+
         feature_scores = {}
-        for feature, (med, high, inverted) in _FEATURE_RULES.items():
+        active_feature_rules = _task_feature_rules(task_name, task_confidence)
+        for feature, (med, high, inverted) in active_feature_rules.items():
             value = features.get(feature, 0.0)
             if feature in all_unavailable:
                 feature_scores[feature] = float("nan")
             else:
-                score = self._score_feature(value, med, high, inverted)
+                # Uncertainty-aware scoring: when the framing model estimates
+                # per-joint angle uncertainty (sigma, degrees), the score near
+                # a boundary is softened — P(rule violated) instead of a hard
+                # cutoff — so pose jitter can no longer flip a feature between
+                # 0 and 100. With no estimate (sigma 0) behavior is unchanged.
+                sigma = 0.0
+                if joint_uncertainty:
+                    sigma = float(joint_uncertainty.get(feature, 0.0) or 0.0)
+                score = self._score_feature(value, med, high, inverted, sigma)
                 # Coerce to a plain python float — numpy scalars (from smoothed
                 # or numpy-sourced feature values) break JSON serialization
                 # downstream (pydantic cannot serialize numpy.float32/64).
@@ -274,45 +358,43 @@ class ContextIntelligenceEngine:
             if score == score and score > 0:
                 exceeding_items.append((score, fname in approx_set))
         exceeding_items.sort(key=lambda x: x[0], reverse=True)
-        if exceeding_items:
-            n_exceeding_effective = sum(0.5 if approx else 1.0 for _, approx in exceeding_items)
-            weights = [1.0 / (2 ** i) for i in range(len(exceeding_items))]
-            weighted_sum = sum(s * w for (s, _), w in zip(exceeding_items, weights))
-            base_risk = min(100.0, weighted_sum * (n_exceeding_effective / len(_FEATURE_RULES)))
+        if std_valid:
+            # Anchor base risk to the standard band. A published rule was (or
+            # was not) broken — that is the signal, not loose per-feature
+            # cutoffs. Unavailable features are already accounted for by the
+            # method choice (RULA for partial body), so no soft floor applies.
+            _BAND_BASE = {"LOW": 20.0, "MEDIUM": 50.0, "HIGH": 80.0}
+            base_risk = _BAND_BASE[std_band]
+            active_rules.append(f"base_risk: anchored to standard {std_band} band (base={base_risk:.0f})")
         else:
-            base_risk = 0.0
-
-        if base_risk > 0:
-            available_features = {f: s for f, s in feature_scores.items() if s == s}
-            worst_feature = max(available_features, key=available_features.get)
-            active_rules.append(f"base_risk: worst={worst_feature}={features.get(worst_feature, 0):.1f} score={feature_scores[worst_feature]:.0f}")
-            if len(exceeding_items) > 1:
-                active_rules.append(f"weighted: {n_exceeding_effective:.1f}/{len(_FEATURE_RULES)} effective exceed (base={base_risk:.1f})")
-
-        # ── Step 1a: Apply soft floor for unavailable features ────────
-        # Define soft floors:
-        # 0 unavailable: no floor
-        # 1 lower-body: 25.0
-        # 1 upper-body: 20.0
-        # ≥2: 40.0
-        # Group features into lower vs upper body
-        lower_body_features = {"trunk_flexion", "knee_angle", "stance_stability", "weight_shift_offset"}
-        upper_body_features = {"neck_flexion", "left_shoulder_elev", "right_shoulder_elev", "shoulder_symmetry", "alignment_deviation", "forward_head_posture", "head_tilt_angle", "wrist_deviation_angle"}
-        unavailable_lower = len(all_unavailable & lower_body_features)
-        unavailable_upper = len(all_unavailable & upper_body_features)
-        total_unavailable = len(all_unavailable)
-
-        soft_floor = 0.0
-        if total_unavailable > 0:
-            if total_unavailable >= 2:
-                soft_floor = 40.0
-            elif unavailable_lower > 0:
-                soft_floor = 25.0
+            if exceeding_items:
+                n_exceeding_effective = sum(0.5 if approx else 1.0 for _, approx in exceeding_items)
+                weights = [1.0 / (2 ** i) for i in range(len(exceeding_items))]
+                weighted_sum = sum(s * w for (s, _), w in zip(exceeding_items, weights))
+                base_risk = min(100.0, weighted_sum * (n_exceeding_effective / len(active_feature_rules)))
             else:
-                soft_floor = 20.0
-            active_rules.append(f"unavailable_features: {len(all_unavailable)} (lower={unavailable_lower}, upper={unavailable_upper}) -> soft_floor={soft_floor:.1f}")
+                base_risk = 0.0
 
-        base_risk = max(base_risk, soft_floor)
+            if base_risk > 0:
+                available_features = {f: s for f, s in feature_scores.items() if s == s}
+                worst_feature = max(available_features, key=available_features.get)
+                active_rules.append(f"base_risk: worst={worst_feature}={features.get(worst_feature, 0):.1f} score={feature_scores[worst_feature]:.0f}")
+                if len(exceeding_items) > 1:
+                    active_rules.append(f"weighted: {n_exceeding_effective:.1f}/{len(active_feature_rules)} effective exceed (base={base_risk:.1f})")
+
+            # ── Step 1a: Assess what's available — no soft floor ────
+            # Legacy behavior manufactured MEDIUM (soft floor 20-40) whenever
+            # features couldn't be computed, so a worker half out of frame
+            # was scored as elevated even when every visible feature was in
+            # range. Per operator guidance we now assess only what IS
+            # available: unavailable features simply don't contribute, and
+            # the standard RULA/REBA gate already handles partial-body
+            # visibility by scoring the visible half (RULA for top-half).
+            if len(all_unavailable) > 0:
+                active_rules.append(
+                    f"unavailable_features: {len(all_unavailable)} excluded from scoring "
+                    "(assessing available features only, no soft floor)"
+                )
 
         # ── Step 2: Duration penalty ───────────────────────────────
         self._exposure.update(features, delta_seconds)
@@ -328,6 +410,13 @@ class ContextIntelligenceEngine:
             task_modifier = task_modifier * (task_confidence / 100.0)
         if task_modifier > 0:
             active_rules.append(f"task_modifier: {task_name}=+{task_modifier:.1f} (confidence={task_confidence:.0f}%)")
+
+        # Log which threshold table is active for this frame
+        from backend.services.features import task_thresholds as _tt
+        if task_name in _tt and task_confidence >= 50.0:
+            active_rules.append(f"task_thresholds: using {task_name} table (conf={task_confidence:.0f}%)")
+        else:
+            active_rules.append(f"task_thresholds: using baseline (task={task_name}, conf={task_confidence:.0f}%)")
 
         # ── Step 4: Fatigue modifier ───────────────────────────────
         self._fatigue.update(
@@ -358,6 +447,30 @@ class ContextIntelligenceEngine:
         # ── Step 7: Determine risk level ───────────────────────────
         risk_level = self._risk_level_from_score(final_risk)
 
+        # Cap the level by the standard-method band so context noise can never
+        # manufacture HIGH from a LOW posture: a neutral pose (RULA 1-2 /
+        # REBA 1-3) is not "high risk" no matter how long the session runs or
+        # how tired the model thinks the worker is. A MEDIUM posture may
+        # escalate to HIGH only with real exposure/fatigue (sustained medium
+        # posture all shift IS high risk per ergonomics); HIGH stays HIGH.
+        if std_valid:
+            _LEVEL_CAP = {"LOW": "MEDIUM", "MEDIUM": "HIGH", "HIGH": "HIGH"}
+            cap = _LEVEL_CAP[std_band]
+            if RISK_ORDER[risk_level] > RISK_ORDER[cap]:
+                risk_level = cap
+                active_rules.append(f"standard_cap: {std_band} posture capped level at {cap}")
+
+        # ── Step 7b: Level dwell (temporal hysteresis) ─────────────
+        # Require a strict majority of the dwell window to change the level;
+        # otherwise hold the last committed level. final_risk stays raw so
+        # the gauge responds instantly — only the discrete level is smoothed.
+        raw_level = risk_level
+        risk_level = self._dwell_level(risk_level)
+        if risk_level != raw_level:
+            active_rules.append(
+                f"level_dwell: held {risk_level} (window {len(self._level_history)}/{self._level_dwell}, raw {raw_level})"
+            )
+
         # ── Step 8: Determine safety state ─────────────────────────
         safety_state = self._determine_state(final_risk, risk_level)
 
@@ -385,9 +498,12 @@ class ContextIntelligenceEngine:
             unavailable_features=tuple(unavailable_features or ()),
             approximate_features=tuple(approximate_features or ()),
             lower_body_confidence=lower_body_confidence,
+            task_label=task_name,
+            task_confidence=task_confidence,
             reason=reason,
             active_rules=tuple(active_rules),
             feature_scores=feature_scores,
+            standard_assessment=dict(std) if std_valid else {},
         )
 
     def reset(self) -> None:
@@ -397,26 +513,79 @@ class ContextIntelligenceEngine:
         self._previous_state = "SAFE"
         self._state_since = 0.0
         self._frame_counter = 0
+        self._level_history.clear()
+        self._last_committed_level = "LOW"
+
+    def _dwell_level(self, level: str) -> str:
+        """Temporal hysteresis on the discrete risk level.
+
+        Appends the raw level to a rolling window. While the window is still
+        filling (warm-up) the raw level is committed immediately. Once full,
+        the level only changes when a strict majority of the window agrees;
+        otherwise the last committed level is held — a one-frame spike can
+        never flip the displayed level or trigger an alert.
+        """
+        self._level_history.append(level)
+        hist = list(self._level_history)
+        if len(hist) < self._level_dwell:
+            self._last_committed_level = level
+            return level
+        winner, count = Counter(hist).most_common(1)[0]
+        if count * 2 > len(hist):  # strict majority
+            self._last_committed_level = winner
+            return winner
+        return self._last_committed_level
 
     # ── Private Helpers ────────────────────────────────────────────
 
     @staticmethod
-    def _score_feature(value: float, medium: float, high: float, inverted: bool) -> float:
-        """Score a single feature on a 0-100 scale."""
+    def _score_feature(value: float, medium: float, high: float, inverted: bool,
+                       sigma: float = 0.0) -> float:
+        """Score a single feature on a 0-100 scale.
+
+        With ``sigma > 0`` the score becomes uncertainty-aware: it is the
+        expected value of the hard score over a Gaussian angle distribution
+        centered on ``value`` with std ``sigma`` — i.e. P(rule violated)
+        rather than a hard cutoff. At the exact boundary a deterministic
+        scorer would snap 0->100 (boundary-flip sensitivity); the soft
+        version lands at ~25 (medium) / ~75 (high), so a jittering angle
+        near a threshold produces a smooth gradient instead of a flip.
+        With ``sigma == 0`` (no uncertainty estimate) the original hard
+        interpolation is used, keeping legacy callers byte-identical.
+        """
+        if sigma is None or sigma <= 0:
+            sigma = 0.0
+            if inverted:
+                # Lower value = higher risk (e.g., knee_angle)
+                if value <= high:
+                    return 100.0
+                if value >= medium:
+                    return 0.0
+                return (medium - value) / (medium - high) * 100.0
+            else:
+                # Higher value = higher risk (e.g., neck_flexion)
+                if value >= high:
+                    return 100.0
+                if value <= medium:
+                    return 0.0
+                return (value - medium) / (high - medium) * 100.0
+
+        from math import erf
+
+        def _phi(x: float) -> float:
+            """Standard normal CDF (approximation is unnecessary — math.erf)."""
+            return 0.5 * (1.0 + erf(x / 1.4142135623730951))
+
         if inverted:
-            # Lower value = higher risk (e.g., knee_angle)
-            if value <= high:
-                return 100.0
-            if value >= medium:
-                return 0.0
-            return (medium - value) / (medium - high) * 100.0
+            # Risk when the true value is BELOW the threshold.
+            p_med = _phi((medium - value) / sigma)   # P(true < medium)
+            p_high = _phi((high - value) / sigma)    # P(true < high)
         else:
-            # Higher value = higher risk (e.g., neck_flexion)
-            if value >= high:
-                return 100.0
-            if value <= medium:
-                return 0.0
-            return (value - medium) / (high - medium) * 100.0
+            # Risk when the true value is ABOVE the threshold.
+            p_med = 1.0 - _phi((medium - value) / sigma)
+            p_high = 1.0 - _phi((high - value) / sigma)
+        # Expected score = 100 * P(high) + 50 * P(medium-only).
+        return 50.0 * p_med + 50.0 * p_high
 
     @staticmethod
     def _confidence_modifier(camera_confidence: float) -> float:
@@ -481,3 +650,61 @@ class ContextIntelligenceEngine:
             parts.append(f"Confidence: {confidence_modifier:.1f}")
         parts.append(f"Final: {final_risk:.0f}")
         return " | ".join(parts)
+
+
+def generate_ai_explanation(snapshot: ContextSnapshot) -> str:
+    """Generate a plain-language explanation from a completed risk assessment.
+
+    This function calls Ollama **after** scoring is complete — it is never
+    in the critical path.  A slow or failed LLM response returns an empty
+    string rather than blocking or corrupting the monitoring pipeline.
+
+    The prompt includes only structured, already-computed results: the
+    classified task, risk level, key features, and which thresholds were
+    applied.  Ollama narrates the result; it does not compute it.
+    """
+    import os
+    import logging
+    import requests as _requests
+
+    logger = logging.getLogger(__name__)
+
+    ollama_url = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+    model = os.environ.get("OLLAMA_MODEL", "qwen2.5:1.5b")
+
+    # Build a structured prompt from the already-computed snapshot
+    features_of_interest = []
+    for fname in ["neck_flexion", "trunk_flexion", "left_shoulder_elev",
+                  "right_shoulder_elev", "knee_angle", "wrist_deviation_angle"]:
+        val = snapshot.feature_scores.get(fname)
+        if val is not None and val == val:  # not NaN
+            features_of_interest.append(f"{fname}={val:.1f}")
+
+    std = snapshot.standard_assessment
+    std_info = f"{std.get('method', '?')} score={std.get('score', '?')} -> {std.get('risk_level', '?')}" if std else "N/A"
+
+    prompt = (
+        f"You are an ergonomic risk assistant. Given these ALREADY-COMPUTED results, "
+        f"write ONE concise sentence (max 25 words) explaining the risk to a safety manager. "
+        f"Do NOT compute or classify anything — just narrate what is shown.\n\n"
+        f"Task: {snapshot.task_label} (confidence {snapshot.task_confidence:.0f}%)\n"
+        f"Risk level: {snapshot.risk_level} (score {snapshot.final_risk:.0f}/100)\n"
+        f"Standard assessment: {std_info}\n"
+        f"Key features: {', '.join(features_of_interest)}\n"
+        f"Thresholds used: {snapshot.task_label if snapshot.task_label in ('Lifting / Picking', 'Assembly Work', 'Reaching', 'Inspection', 'Walking / Moving', 'Seated Work') else 'baseline'}\n\n"
+        f"Explanation:"
+    )
+
+    try:
+        resp = _requests.post(
+            f"{ollama_url}/api/generate",
+            json={"model": model, "prompt": prompt, "stream": False, "options": {"temperature": 0.3, "num_predict": 60}},
+            timeout=5.0,
+        )
+        if resp.ok:
+            data = resp.json()
+            return data.get("response", "").strip()
+    except Exception:
+        logger.debug("Ollama explanation failed — returning empty", exc_info=True)
+
+    return ""

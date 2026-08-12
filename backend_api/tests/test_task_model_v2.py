@@ -20,7 +20,10 @@ from backend.services.task_recognition import TaskRecognition  # noqa: E402
 
 MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "task_model_v2.pkl"
 
-CLASSES = ["Neutral Standing", "Assembly Work", "Reaching", "Lifting / Picking", "Inspection"]
+CLASSES = [
+    "Neutral Standing", "Assembly Work", "Reaching", "Lifting / Picking",
+    "Inspection", "Seated Work", "Walking / Moving",
+]
 
 _NEUTRAL = {
     "nose": (320, 120),
@@ -96,7 +99,7 @@ class TestBundle:
         feats = _features(_build_33())
         row = [feats.get(c, 0.0) for c in bundle["feature_columns"]]
         proba = bundle["model"].predict_proba([row])[0]
-        assert proba.shape == (5,)
+        assert proba.shape == (len(CLASSES),)
         assert proba.sum() == pytest.approx(1.0)
 
 
@@ -141,17 +144,86 @@ class TestRuntimeIntegration:
         assert info["confidence"] >= 60.0  # cleared the 0.6 gate
         assert "Trained task classifier" in info["reason"]
 
-    def test_real_model_out_of_distribution_gates_to_gaussian(self, model_available):
-        """Graceful degradation stays intact: a genuinely out-of-distribution
-        pose (arms crossed at the waist — the generator never produces crossed
-        wrists) must route to the Gaussian fallback instead of an unguarded
-        model guess."""
+    def test_seated_pose_is_seated_work_not_neutral_standing(self):
+        """The user-facing regression: a sitting worker (knee ~93°, thighs
+        horizontal, hips dropped) must read 'Seated Work' — never 'Neutral
+        Standing'. The geometric gate decides BEFORE the model, so this holds
+        even with the trained classifier present (which was trained on
+        standing poses and confidently mislabeled real seating at 98.9%)."""
+        recognizer = TaskRecognition()
+        overrides = {
+            # Drop the whole torso ~84px so the hips land at knee height
+            # (thighs horizontal), keep ankles forward under the knees.
+            "left_shoulder": (295, 304), "right_shoulder": (345, 304),
+            "nose": (320, 204), "left_ear": (295, 214), "right_ear": (345, 214),
+            "left_elbow": (290, 400), "right_elbow": (350, 400),
+            "left_wrist": (300, 470), "right_wrist": (340, 470),
+            "left_hip": (300, 504), "right_hip": (340, 504),
+            "left_knee": (305, 560), "right_knee": (335, 560),
+            "left_ankle": (385, 610), "right_ankle": (415, 610),
+            "left_heel": (387, 624), "right_heel": (417, 624),
+            "left_foot_index": (395, 626), "right_foot_index": (425, 626),
+        }
+        kp = _build_33(overrides)
+        info = recognizer.detect_task(kp, _features(kp))
+        assert info["task"] == "Seated Work"
+        assert info["confidence"] >= 60.0
+
+    def test_seated_gate_uses_geometry_not_model(self, model_available):
+        """The seated gate must fire even when the model is present and
+        would confidently vote otherwise — geometry is authoritative."""
         if not model_available:
             pytest.skip("task_model_v2.pkl not present")
         recognizer = TaskRecognition()
         overrides = {
-            "left_wrist": (345, 400), "right_wrist": (295, 400),
-            "left_index": (352, 415), "right_index": (288, 415),
+            "left_shoulder": (295, 304), "right_shoulder": (345, 304),
+            "left_hip": (300, 504), "right_hip": (340, 504),
+            "left_knee": (305, 560), "right_knee": (335, 560),
+            "left_ankle": (385, 610), "right_ankle": (415, 610),
+            "left_elbow": (290, 400), "right_elbow": (350, 400),
+            "left_wrist": (300, 470), "right_wrist": (340, 470),
+        }
+        kp = _build_33(overrides)
+        info = recognizer.detect_task(kp, _features(kp))
+        assert info["task"] == "Seated Work"
+        assert recognizer.using_model is False
+        assert "seated" in info["reason"].lower()
+
+    def test_standing_neutral_not_seated(self):
+        """Straight legs (knee ~180°) must NOT trip the seated gate."""
+        recognizer = TaskRecognition(model_path="C:/nonexistent/task_model_v2.pkl")
+        kp = _build_33()  # neutral standing, knees straight
+        info = recognizer.detect_task(kp, _features(kp))
+        assert info["task"] != "Seated Work"
+        assert info["task"] in CLASSES
+
+    def test_walking_velocity_detected(self):
+        """High frame-to-frame movement with an upright posture and straight
+        legs reads as 'Walking / Moving', not 'Neutral Standing' (which now
+        subtracts a velocity term)."""
+        recognizer = TaskRecognition(model_path="C:/nonexistent/task_model_v2.pkl")
+        kp = _build_33()
+        feats = _features(kp)
+        feats["movement_velocity"] = 120.0
+        feats["wrist_movement_velocity"] = 90.0
+        info = recognizer.detect_task(kp, feats)
+        assert info["task"] == "Walking / Moving"
+
+    def test_real_model_out_of_distribution_gates_to_gaussian(self, model_available):
+        """Graceful degradation stays intact: a genuinely out-of-distribution
+        pose (T-pose — arms fully abducted to horizontal; the generator never
+        produces it) must route to the Gaussian fallback instead of an
+        unguarded model guess. Arms crossed at the waist no longer qualifies
+        as OOD — the 7-class model confidently handles it."""
+        if not model_available:
+            pytest.skip("task_model_v2.pkl not present")
+        recognizer = TaskRecognition()
+        overrides = {
+            "left_elbow": (195, 220), "right_elbow": (445, 220),
+            "left_wrist": (130, 220), "right_wrist": (510, 220),
+            "left_index": (110, 215), "right_index": (530, 215),
+            "left_thumb": (120, 210), "right_thumb": (520, 210),
+            "left_pinky": (105, 225), "right_pinky": (535, 225),
         }
         kp = _build_33(overrides)
         info = recognizer.detect_task(kp, _features(kp))

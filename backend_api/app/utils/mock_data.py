@@ -102,48 +102,6 @@ SESSIONS = [
 ]
 
 # ---------------------------------------------------------------------------
-# Trends — matches React's TrendResponse
-# ---------------------------------------------------------------------------
-
-TRENDS = {
-    "weeklyTrend": [
-        {"week": "W22", "averageRisk": 38.2, "sessions": 18, "incidents": 12},
-        {"week": "W23", "averageRisk": 35.7, "sessions": 21, "incidents": 10},
-        {"week": "W24", "averageRisk": 32.4, "sessions": 19, "incidents": 8},
-        {"week": "W25", "averageRisk": 36.1, "sessions": 22, "incidents": 11},
-        {"week": "W26", "averageRisk": 33.8, "sessions": 20, "incidents": 9},
-        {"week": "W27", "averageRisk": 31.2, "sessions": 23, "incidents": 7},
-        {"week": "W28", "averageRisk": 29.5, "sessions": 25, "incidents": 6},
-        {"week": "W29", "averageRisk": 32.4, "sessions": 20, "incidents": 9},
-    ],
-    "featureTrends": [
-        {"feature": "Neck Flexion", "current": 18.0, "previous": 22.0, "change": -18.2},
-        {"feature": "Trunk Flexion", "current": 22.0, "previous": 25.0, "change": -12.0},
-        {"feature": "Shoulder Elevation", "current": 12.0, "previous": 15.0, "change": -20.0},
-        {"feature": "Shoulder Symmetry", "current": 8.0, "previous": 10.0, "change": -20.0},
-        {"feature": "Alignment Deviation", "current": 4.0, "previous": 6.0, "change": -33.3},
-        {"feature": "Knee Angle", "current": 142.0, "previous": 138.0, "change": 2.9},
-    ],
-    "riskDistribution": {
-        "low": 112,
-        "moderate": 18,
-        "high": 12,
-    },
-}
-
-# ---------------------------------------------------------------------------
-# Reports
-# ---------------------------------------------------------------------------
-
-REPORTS = [
-    {"id": 1, "title": "Safety Report \u2014 June 2026", "type": "Safety", "date": "2026-06-30", "size": "2.4 MB"},
-    {"id": 2, "title": "Trend Report \u2014 Week 29", "type": "Trend", "date": "2026-06-28", "size": "1.8 MB"},
-    {"id": 3, "title": "Session Export \u2014 SESH-001", "type": "Session", "date": "2026-06-30", "size": "4.2 MB"},
-    {"id": 4, "title": "Monthly Summary \u2014 June", "type": "Summary", "date": "2026-06-30", "size": "3.1 MB"},
-    {"id": 5, "title": "CSV \u2014 Raw Telemetry", "type": "Data", "date": "2026-06-29", "size": "12.6 MB"},
-]
-
-# ---------------------------------------------------------------------------
 # Cameras
 # ---------------------------------------------------------------------------
 

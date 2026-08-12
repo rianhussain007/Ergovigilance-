@@ -24,6 +24,7 @@ from uuid import uuid4
 
 import cv2
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -37,6 +38,8 @@ from backend.context.engine import ContextIntelligenceEngine
 from backend.services.features import unavailable_features_from_keypoints, lower_body_confidence
 from backend.services.pose_engine import PoseEngine
 
+from app.services.pose_overlay import compute_region_levels, draw_skeleton
+
 router = APIRouter()
 
 MAX_VIDEO_BYTES = 200 * 1024 * 1024
@@ -44,6 +47,9 @@ ALLOWED_EXTENSIONS = {".mp4", ".avi", ".mov", ".m4v"}
 MODEL_PATH = Path(os.environ.get("POSE_MODEL_PATH", ROOT / "models" / "pose_landmarker_lite.task"))
 
 JOB_TTL_SECONDS = 30 * 60  # completed/errored jobs are kept for 30 minutes
+
+# Burned-in overlay videos are written here and deleted when the job expires.
+OVERLAY_OUTPUT_DIR = Path(ROOT) / "outputs" / "video_review"
 
 
 # ── SQLite-backed job store (survives restarts) ─────────────────────────────
@@ -193,6 +199,11 @@ def _cleanup_expired_jobs() -> None:
     ]
     for jid in stale:
         _jobs.pop(jid, None)
+        # The burned overlay video has the same lifecycle as the job.
+        try:
+            (OVERLAY_OUTPUT_DIR / f"{jid}.mp4").unlink(missing_ok=True)
+        except OSError:
+            pass
     if stale:
         try:
             with _job_db() as conn:
@@ -223,7 +234,12 @@ def _run_job(job_id: str, temp_path: str, filename: str) -> None:
                     "percent": round(processed / total * 100, 1) if total else 0.0,
                 }
 
-        result = _analyze_video_file(temp_path, filename, progress_cb=progress_cb)
+        result = _analyze_video_file(
+            temp_path,
+            filename,
+            progress_cb=progress_cb,
+            output_video_path=str(OVERLAY_OUTPUT_DIR / f"{job_id}.mp4"),
+        )
         with _jobs_lock:
             job = _jobs.get(job_id)
             if job is not None:
@@ -290,6 +306,90 @@ async def analyze_video(
     return VideoAnalysisJobStart(job_id=job_id, status="queued")
 
 
+@router.post("/video/analyze/recording/{session_id}", response_model=VideoAnalysisJobStart)
+async def analyze_recording(
+    session_id: str,
+    _: AuthenticatedUser = Depends(get_current_user),
+):
+    """Queue the same ML pose-analysis pipeline on a recorded session's video.
+
+    Copies ``original.mp4`` from the session's recording directory into a temp
+    file and runs the identical background job as an uploaded video, so admins
+    can re-review any past session with full keypoints, features, risk
+    timeline, and a downloadable overlay video.
+    """
+    import shutil
+
+    from app.api.recordings import _find_recording_dir
+
+    rec_dir = _find_recording_dir(session_id)
+    if not rec_dir:
+        raise HTTPException(status_code=404, detail=f"Recording {session_id} not found")
+    video_path = Path(rec_dir) / "original.mp4"
+    if not video_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="No video was recorded for this session — only sessions with a recording can be analyzed.",
+        )
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+        temp_path = tmp.name
+    shutil.copyfile(video_path, temp_path)
+
+    job_id = f"VIDJOB-{uuid4().hex[:8]}"
+    try:
+        with _jobs_lock:
+            _cleanup_expired_jobs()
+            _jobs[job_id] = VideoAnalysisJob(job_id=job_id, status="queued")
+            _persist_job(_jobs[job_id])
+    except Exception:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
+        raise
+
+    threading.Thread(
+        target=_run_job,
+        args=(job_id, temp_path, f"{session_id}.mp4"),
+        daemon=True,
+        name=f"video-analysis-{job_id}",
+    ).start()
+
+    return VideoAnalysisJobStart(job_id=job_id, status="queued")
+
+
+@router.get("/video/analyze/{job_id}/download")
+async def download_video_with_overlay(
+    job_id: str,
+    _: AuthenticatedUser = Depends(get_current_user),
+):
+    """Download the analyzed video with the ML pose overlay burned in."""
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+        if job is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Analysis job not found (expired after 30 minutes).",
+            )
+        if job.status != "complete":
+            raise HTTPException(
+                status_code=409,
+                detail=f"Analysis is {job.status} — the overlay video is not ready yet.",
+            )
+    overlay_path = OVERLAY_OUTPUT_DIR / f"{job_id}.mp4"
+    if not overlay_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Overlay video not found for this job (encoding may have been skipped).",
+        )
+    return FileResponse(
+        str(overlay_path),
+        media_type="video/mp4",
+        filename=f"{job_id}_overlay.mp4",
+    )
+
+
 @router.get("/video/analyze/{job_id}", response_model=VideoAnalysisJob)
 async def get_video_analysis_job(
     job_id: str,
@@ -337,11 +437,67 @@ async def _save_limited_upload(file: UploadFile, suffix: str) -> str:
     return temp_path
 
 
+def _burn_overlay(video_path: str, frames: list[VideoAnalysisFrame], frame_step: int, output_path: str) -> bool:
+    """Re-encode the video with the ML pose overlay burned into the sampled frames.
+
+    Uses the same ``draw_skeleton`` rendering as the live MJPEG feed, so the
+    downloaded video is pixel-identical to what the operator sees live. Frames
+    that were not pose-sampled are copied through unchanged. Returns True when
+    the output file was written.
+    """
+    try:
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            return False
+        try:
+            fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 1)
+            height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 1)
+            if width < 1 or height < 1:
+                return False
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            writer = cv2.VideoWriter(
+                output_path,
+                cv2.VideoWriter_fourcc(*"mp4v"),
+                fps,
+                (width, height),
+            )
+            if not writer.isOpened():
+                return False
+            by_index = {frame.frame_index: frame for frame in frames}
+            frame_index = 0
+            while True:
+                ok, frame = cap.read()
+                if not ok:
+                    break
+                analyzed = by_index.get(frame_index)
+                if analyzed is not None:
+                    try:
+                        frame = draw_skeleton(
+                            frame,
+                            analyzed.keypoints,
+                            analyzed.risk_level,
+                            features=analyzed.features,
+                            region_levels=analyzed.region_risks,
+                        )
+                    except Exception:  # noqa: BLE001 - never fail the whole job on one frame
+                        pass
+                writer.write(frame)
+                frame_index += 1
+            writer.release()
+        finally:
+            cap.release()
+        return os.path.exists(output_path) and os.path.getsize(output_path) > 0
+    except Exception:  # noqa: BLE001 - overlay burn is best-effort
+        return False
+
+
 def _analyze_video_file(
     video_path: str,
     filename: str,
     frame_step: int = 10,
     progress_cb=None,
+    output_video_path: str | None = None,
 ) -> VideoAnalysisResponse:
     """Analyze a video file synchronously (runs inside the background job).
 
@@ -400,6 +556,7 @@ def _analyze_video_file(
                         delta_seconds=delta_seconds,
                         unavailable_features=result.unavailable_features,
                         lower_body_confidence=result.lower_body_confidence,
+                        standard_assessment=result.standard_assessment,
                     )
 
                     # Normalize keypoints to 0-1 for frontend
@@ -414,6 +571,14 @@ def _analyze_video_file(
                     if len(result.unavailable_features) > 0:
                         frames_with_unavailable_count += 1
 
+                    # Same per-region risk bands the live overlay uses, so the
+                    # replay skeleton colors exactly like the live feed. The
+                    # standard assessment is threaded through so the colors
+                    # derive from the RULA/REBA sub-scores, matching the level.
+                    region_risks = compute_region_levels(
+                        result.features, snapshot.risk_level, result.standard_assessment
+                    )
+
                     frames.append(
                         VideoAnalysisFrame(
                             frame_index=frame_index,
@@ -425,6 +590,7 @@ def _analyze_video_file(
                             unavailable_features=list(result.unavailable_features),
                             lower_body_confidence=result.lower_body_confidence,
                             keypoints=normalized_keypoints,
+                            region_risks=region_risks,
                         )
                     )
             frame_index += 1
@@ -461,6 +627,11 @@ def _analyze_video_file(
 
     # Calculate percentage of frames with unavailable features
     frames_with_unavailable_percentage = round(frames_with_unavailable_count / analyzed * 100, 1) if analyzed > 0 else 0.0
+
+    # Burn the ML pose overlay into a downloadable copy (best-effort; the
+    # analysis result is already complete even if encoding fails).
+    if output_video_path:
+        _burn_overlay(video_path, frames, frame_step, output_video_path)
 
     return VideoAnalysisResponse(
         filename=filename,

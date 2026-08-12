@@ -29,6 +29,15 @@ class ProcessedFrame:
     unavailable_features: list = field(default_factory=list)
     approximate_features: list = field(default_factory=list)
     lower_body_confidence: float = 0.0
+    # Authoritative standard-method assessment (RULA vs REBA by body
+    # visibility): {"method", "score", "risk_level", "is_partial", "reason", ...}
+    standard_assessment: dict = field(default_factory=dict)
+    # Tier 3: camera-framing intelligence + per-joint angle uncertainty
+    # (sigma, degrees) used for uncertainty-aware scoring.
+    framing: dict = field(default_factory=dict)
+    # Tier 3: number of people MediaPipe detected in the frame (num_poses>1
+    # foundation). The pipeline still scores the PRIMARY person.
+    person_count: int = 1
 
 
 @dataclass
@@ -39,6 +48,7 @@ class LiveState:
     session_start: Optional[float] = None
 
     current_frame: Optional[np.ndarray] = None
+    overlaid_frame: Optional[np.ndarray] = None
     features: dict = field(default_factory=dict)
     risk_level: str = "LOW"
     risk_score: float = 0.0
@@ -62,6 +72,9 @@ class LiveState:
 
     unavailable_features: list = field(default_factory=list)
     lower_body_confidence: float = 0.0
+    # Tier 3 framing intelligence + person count
+    framing: dict = field(default_factory=dict)
+    person_count: int = 1
 
     # Monotonic frame counter for the current processed frame — lets stream
     # consumers (e.g. the MJPEG feed) skip re-encoding identical frames.

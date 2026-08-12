@@ -1,0 +1,5 @@
+{
+  "session_retention_days": 365,
+  "recording_retention_days": 365,
+  "recordings_max_gb": 20.0
+}

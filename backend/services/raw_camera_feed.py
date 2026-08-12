@@ -6,7 +6,10 @@ connected cameras so every tile shows a real per-camera feed instead of a
 duplicate of the analysis camera.
 
 Design:
-  - One background capture thread per requested camera index.
+  - One background capture thread per requested camera source. A source is
+    either an int camera index ("0", "1") or an RTSP/IP URL string
+    ("rtsp://user:pass@192.168.1.50:554/stream1") — both are accepted by
+    ``cv2.VideoCapture``.
   - Frames are read at a modest FPS (~15) to avoid saturating the CPU
     (analysis already consumes a core on the primary camera).
   - A feed auto-releases its camera after ``IDLE_TIMEOUT_S`` with no active
@@ -21,7 +24,7 @@ from __future__ import annotations
 
 import threading
 import time
-from typing import Optional
+from typing import Optional, Union
 
 import cv2
 import numpy as np
@@ -30,10 +33,16 @@ CAPTURE_FPS = 15.0
 FRAME_INTERVAL_S = 1.0 / CAPTURE_FPS
 IDLE_TIMEOUT_S = 30.0
 
+CameraSource = Union[int, str]
+
+
+def _source_key(source: CameraSource) -> str:
+    return f"cam:{source}"
+
 
 class _CameraFeed:
-    def __init__(self, index: int):
-        self.index = index
+    def __init__(self, source: CameraSource):
+        self.source = source
         self._lock = threading.Lock()
         self._frame: Optional[np.ndarray] = None
         self._frame_number = 0
@@ -49,14 +58,14 @@ class _CameraFeed:
         self._thread = threading.Thread(
             target=self._capture_loop,
             daemon=True,
-            name=f"raw-camera-{self.index}",
+            name=f"raw-camera-{_source_key(self.source)}",
         )
         self._thread.start()
 
     def _capture_loop(self) -> None:
         cap: Optional[cv2.VideoCapture] = None
         try:
-            cap = cv2.VideoCapture(self.index)
+            cap = cv2.VideoCapture(self.source)
             if not cap.isOpened():
                 return
             while not self._stop.is_set():
@@ -100,24 +109,29 @@ class _CameraFeed:
             self._consumers = 0
 
 
-_feeds: dict[int, _CameraFeed] = {}
+_feeds: dict[str, _CameraFeed] = {}
 _feeds_lock = threading.Lock()
 
 
-def get_feed(index: int) -> _CameraFeed:
-    """Return (creating if needed) the feed for a camera index."""
+def get_feed(source: CameraSource) -> _CameraFeed:
+    """Return (creating if needed) the feed for a camera source.
+
+    ``source`` is an int camera index (``0``, ``1``) or an RTSP URL string.
+    """
+    key = _source_key(source)
     with _feeds_lock:
-        feed = _feeds.get(index)
+        feed = _feeds.get(key)
         if feed is None:
-            feed = _CameraFeed(index)
-            _feeds[index] = feed
+            feed = _CameraFeed(source)
+            _feeds[key] = feed
         return feed
 
 
-def release_feed(index: int) -> None:
+def release_feed(source: CameraSource) -> None:
     """Drop a consumer from the feed; stops the thread when idle."""
+    key = _source_key(source)
     with _feeds_lock:
-        feed = _feeds.get(index)
+        feed = _feeds.get(key)
     if feed is not None:
         feed.release()
 

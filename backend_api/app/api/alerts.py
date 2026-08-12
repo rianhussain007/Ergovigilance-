@@ -12,12 +12,28 @@ from app.core.deps import get_repository
 from app.core.auth import get_current_user, require_live_session_access, require_roles
 from app.core.security import AuthenticatedUser
 from app.core.database import insert_audit_log
-from app.services.live_monitor import get_live_service, get_live_service_or_none
+from app.services.live_monitor import get_live_service_or_none
 from app.repositories.base import DashboardRepository
 from app.schemas.api import Alert, AlertResponse, AlertsResponse, AlertsHistoryResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _require_live_service():
+    """Return the live monitoring service or a clean 503 instead of a raw 500.
+
+    get_live_service() raises RuntimeError when the service was never
+    initialized (e.g. the pose model was missing at startup), which FastAPI
+    would otherwise surface as an unhandled 500.
+    """
+    service = get_live_service_or_none()
+    if service is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Live monitoring service is not initialized (pose model unavailable at startup?)",
+        )
+    return service
 
 
 @router.get("/alerts", response_model=AlertsResponse)
@@ -29,9 +45,8 @@ async def get_alerts(
 
     Full history is available at GET /api/alerts/history with pagination.
     """
-    service = get_live_service_or_none()
-    if service is not None:
-        require_live_session_access(user, service)
+    service = _require_live_service()
+    require_live_session_access(user, service)
     return await repo.get_alerts_summary(recent_n=20)
 
 
@@ -41,7 +56,7 @@ async def acknowledge_alert(
     user: AuthenticatedUser = Depends(require_roles("supervisor", "safety_mgr", "admin")),
 ):
     """Acknowledge an active alert. Allowed for supervisor, safety_mgr, admin."""
-    service = get_live_service()
+    service = _require_live_service()
     require_live_session_access(user, service)
 
     engine = service.alert_engine
@@ -73,7 +88,7 @@ async def resolve_alert(
     user: AuthenticatedUser = Depends(require_roles("safety_mgr", "admin")),
 ):
     """Resolve an active or acknowledged alert. Allowed for safety_mgr and admin only."""
-    service = get_live_service()
+    service = _require_live_service()
     require_live_session_access(user, service)
 
     engine = service.alert_engine
@@ -106,7 +121,7 @@ async def get_alerts_history(
     user: AuthenticatedUser = Depends(get_current_user),
 ):
     """Paginated full alert history. Not polled — called on-demand by NotificationCenter."""
-    service = get_live_service()
+    service = _require_live_service()
     engine = service.alert_engine
     export = engine.export()
     all_history = export.get("history", [])

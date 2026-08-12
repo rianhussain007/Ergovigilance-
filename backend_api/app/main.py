@@ -98,6 +98,18 @@ async def lifespan(app: FastAPI):
         )
     init_local_database()
 
+    # Tier 1: when DATABASE_URL is configured, create the Postgres telemetry
+    # tables (non-blocking, never raises — file mode continues if it fails).
+    try:
+        from app.core.postgres import pg_enabled, init_postgres_schema
+        if pg_enabled():
+            if init_postgres_schema():
+                logger.info("PostgreSQL telemetry store ready")
+            else:
+                logger.warning("Postgres unavailable at startup — sessions stay in file mode")
+    except Exception as exc:
+        logger.warning("Postgres init skipped: %s", exc)
+
     retention_task = asyncio.create_task(_retention_loop())
     logger.info(
         "Data retention active (session_days=%.0f recording_days=%.0f cap=%.0f GB, interval=%.1fh)",
@@ -119,9 +131,11 @@ async def lifespan(app: FastAPI):
     # Run them in parallel — the camera probe is the slower one.
     from app.repositories.live import warm_camera_cache
     from app.services.session_cache import prewarm_session_cache
+    from app.api.recordings import prewarm_recordings_cache
 
     threading.Thread(target=warm_camera_cache, daemon=True, name="camera-prewarm").start()
     threading.Thread(target=prewarm_session_cache, daemon=True, name="session-prewarm").start()
+    threading.Thread(target=prewarm_recordings_cache, daemon=True, name="recordings-prewarm").start()
 
     model_path = os.path.abspath(MODEL_PATH)
     if not os.path.exists(model_path):

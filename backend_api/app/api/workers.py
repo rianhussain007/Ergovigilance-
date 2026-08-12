@@ -25,6 +25,15 @@ from app.core.security import AuthenticatedUser
 router = APIRouter()
 
 
+def _normalize_name(name: str) -> str:
+    """Title-case an all-lowercase name so entries are stored consistently
+    ("praneeth" -> "Praneeth"). Names with any capitalization are left as-is
+    so proper names like "McDonald" or "van der Berg" are never mangled."""
+    if not name or name != name.lower():
+        return name
+    return " ".join(part.capitalize() for part in name.split())
+
+
 class WorkerResponse(BaseModel):
     worker_id: str
     employee_id: str
@@ -64,13 +73,13 @@ async def create_worker(
             status_code=409,
             detail=f"Employee ID '{body.employee_id}' already belongs to worker '{existing['worker_id']}'",
         )
-    worker_id = insert_worker(body.employee_id, body.name, body.department, body.shift)
+    worker_id = insert_worker(body.employee_id, _normalize_name(body.name), body.department, body.shift)
     row = get_worker(worker_id)
 
     # Log to audit trail
     details = json.dumps({
         "employee_id": body.employee_id,
-        "name": body.name,
+        "name": _normalize_name(body.name),
         "department": body.department,
         "shift": body.shift
     })
@@ -99,7 +108,7 @@ async def update_worker_endpoint(
     existing_worker = get_worker(worker_id)
     if not existing_worker:
         raise HTTPException(status_code=404, detail="Worker not found")
-    updated = update_worker(worker_id, body.name, body.department, body.shift)
+    updated = update_worker(worker_id, _normalize_name(body.name), body.department, body.shift)
     if not updated:
         raise HTTPException(status_code=500, detail="Failed to update worker")
     row = get_worker(worker_id)
@@ -107,7 +116,7 @@ async def update_worker_endpoint(
     # Log to audit trail
     details = json.dumps({
         "old_name": existing_worker["name"],
-        "new_name": body.name,
+        "new_name": _normalize_name(body.name),
         "old_department": existing_worker["department"],
         "new_department": body.department,
         "old_shift": existing_worker["shift"],

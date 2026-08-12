@@ -60,18 +60,24 @@ def _risk_score_from_level(value: str) -> float | None:
 
 
 def _average_risk_from_session_detail(detail) -> float | None:
+    """Real time-weighted average risk for one session.
+
+    Uses the same ``(MEDIUM*50 + HIGH*100) / total`` computation as the
+    analytics summary so the dashboard's "Average Risk" card shows the same
+    number as the Session Summary card (e.g. 44.7), not a band-quantized peak
+    (MEDIUM -> 50). Falls back to the peak level only when percentages are
+    missing.
+    """
     risk_pct = detail.risk_percentages or {}
-    weighted = 0.0
-    total = 0.0
-    for key, score in (("LOW", 0.0), ("MEDIUM", 50.0), ("HIGH", 100.0)):
-        pct = risk_pct.get(key)
-        if pct is None:
-            continue
-        weighted += float(pct) * score
-        total += float(pct)
-    if total > 0:
-        return weighted / total
-    return _risk_score_from_level(detail.highest_risk_level)
+    low = risk_pct.get("LOW")
+    med = risk_pct.get("MEDIUM")
+    high = risk_pct.get("HIGH")
+    if low is None and med is None and high is None:
+        return _risk_score_from_level(getattr(detail, "highest_risk_level", None) or getattr(detail, "highestRisk", None))
+    total = float(low or 0) + float(med or 0) + float(high or 0)
+    if total <= 0:
+        return _risk_score_from_level(getattr(detail, "highest_risk_level", None) or getattr(detail, "highestRisk", None))
+    return (float(med or 0) * 50.0 + float(high or 0) * 100.0) / total
 
 
 def _count_saved_session_files() -> int:
@@ -132,7 +138,9 @@ async def _build_supervisor_summary(repo: DashboardRepository, user: Authenticat
             dashboard = await repo.get_dashboard()
             risk_values.append(float(dashboard.liveStatus.riskScore))
             continue
-        score = _risk_score_from_level(session.highestRisk)
+        # Real time-weighted risk from the session's frame percentages (same
+        # computation as the analytics Session Summary card), not the peak band.
+        score = _average_risk_from_session_detail(session)
         if score is not None:
             risk_values.append(score)
 

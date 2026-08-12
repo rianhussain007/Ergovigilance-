@@ -22,10 +22,13 @@ SESSIONS_DIR = os.path.join(
 
 _session_cache: list[dict[str, Any]] | None = None
 _session_cache_time: float = 0
+_session_source: str = "file"  # "file" or "postgres"
 # Sessions only change when a session ends (invalidate_session_cache() is
-# called on stop), so 5 minutes is plenty — a 30s TTL made every sessions
-# poll re-scan + re-parse all session JSON files on disk (~3s for 66 files).
-SESSION_CACHE_TTL: float = 300.0  # seconds
+# called on stop), so the TTL is only a safety net — keep it long to avoid
+# the ~400ms full rescan of every session file on disk (99 files as of
+# 2026-08-12) every few minutes. Freshness is guaranteed by the invalidation
+# on stop.
+SESSION_CACHE_TTL: float = 1800.0  # seconds (30 min)
 
 
 def _scan_session_files() -> list[dict[str, Any]]:
@@ -49,13 +52,28 @@ def _scan_session_files() -> list[dict[str, Any]]:
 def get_all_sessions() -> list[dict[str, Any]]:
     """Return cached parsed session list.
 
-    Re-scans disk only if cache is stale (TTL exceeded).
+    Prefers the Postgres telemetry store when configured (fast indexed query);
+    falls back to scanning JSON files. Re-reads only if the cache is stale
+    (TTL exceeded) or the source changed.
     """
-    global _session_cache, _session_cache_time
+    global _session_cache, _session_cache_time, _session_source
     now = time.time()
     if _session_cache is not None and (now - _session_cache_time) < SESSION_CACHE_TTL:
         return _session_cache
+
+    from app.core.postgres import pg_enabled, fetch_sessions
+    if pg_enabled():
+        rows = fetch_sessions()
+        if rows:
+            _session_cache = rows
+            _session_source = "postgres"
+            _session_cache_time = now
+            logger.debug("Session cache refreshed — %d sessions from Postgres", len(rows))
+            return _session_cache
+        logger.debug("Postgres store empty — falling back to session files")
+
     _session_cache = _scan_session_files()
+    _session_source = "file"
     _session_cache_time = now
     logger.debug("Session cache refreshed — %d sessions loaded", len(_session_cache))
     return _session_cache
@@ -78,14 +96,21 @@ def prewarm_session_cache() -> None:
 
 
 def invalidate_session_cache() -> None:
-    """Force re-scan on next call to get_all_sessions().
+    """Force re-read on next call to get_all_sessions().
 
-    Call this after saving a new session file so the new session appears
+    Call this after saving a new session so the new session appears
     immediately without waiting for the TTL to expire.
     """
-    global _session_cache
+    global _session_cache, _session_source
     _session_cache = None
+    _session_source = "file"
     logger.debug("Session cache invalidated")
+
+
+def cache_source() -> str:
+    """Which store the cache last read from ('file' or 'postgres')."""
+    global _session_source
+    return _session_source
 
 
 def get_cache_info() -> dict:

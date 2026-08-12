@@ -4,7 +4,6 @@ from fastapi import APIRouter
 
 from app.api.dashboard import router as dashboard_router
 from app.api.sessions import router as sessions_router
-from app.api.trends import router as trends_router
 from app.api.reports import router as reports_router
 from app.api.cameras import router as cameras_router
 from app.api.workstations import router as workstations_router
@@ -32,6 +31,7 @@ from app.api.pilot_requests import router as pilot_requests_router
 from app.api.task_config import router as task_config_router
 from app.api.worker_trends import router as worker_trends_router
 from app.api.settings import router as settings_router
+from app.api.predictions import router as predictions_router
 from app.api.retention import router as retention_router
 from app.api.privacy import router as privacy_router
 from app.api.observations import router as observations_router
@@ -41,7 +41,6 @@ api_router = APIRouter()
 api_router.include_router(auth_router, prefix="/api", tags=["Auth"])
 api_router.include_router(dashboard_router, prefix="/api", tags=["Dashboard"])
 api_router.include_router(sessions_router, prefix="/api", tags=["Sessions"])
-api_router.include_router(trends_router, prefix="/api", tags=["Trends"])
 api_router.include_router(reports_router, prefix="/api", tags=["Reports"])
 api_router.include_router(cameras_router, prefix="/api", tags=["Cameras"])
 api_router.include_router(workstations_router, prefix="/api", tags=["Workstations"])
@@ -68,6 +67,7 @@ api_router.include_router(pilot_requests_router, prefix="/api", tags=["Pilot Req
 api_router.include_router(task_config_router, prefix="/api", tags=["Task Config"])
 api_router.include_router(worker_trends_router, prefix="/api", tags=["Worker Trends"])
 api_router.include_router(settings_router, prefix="/api", tags=["Settings"])
+api_router.include_router(predictions_router, prefix="/api", tags=["Predictions"])
 api_router.include_router(retention_router, prefix="/api", tags=["Retention"])
 api_router.include_router(privacy_router, prefix="/api", tags=["Privacy"])
 api_router.include_router(observations_router, prefix="/api", tags=["Session Lifecycle"])

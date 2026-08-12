@@ -6,13 +6,11 @@ from typing import List, Optional
 from app.schemas.api import (
     DashboardResponse,
     SessionRecord,
-    TrendResponse,
     CameraInfo,
     WorkstationInfo,
     DeploymentMetrics,
     ManagerSummary,
     Alert,
-    ReportRecord,
     ContextSnapshotResponse,
     AlertsResponse,
     RecommendationsBundleResponse,
@@ -32,14 +30,6 @@ class DashboardRepository(ABC):
 
     @abstractmethod
     async def get_sessions(self, current_user=None) -> List[SessionRecord]:
-        ...
-
-    @abstractmethod
-    async def get_trends(self) -> TrendResponse:
-        ...
-
-    @abstractmethod
-    async def get_reports(self) -> List[ReportRecord]:
         ...
 
     @abstractmethod

@@ -24,7 +24,7 @@ class SessionStartRequest(BaseModel):
 
 
 @router.post("/session/start", response_model=SessionActionResponse)
-async def start_session(
+def start_session(
     req: SessionStartRequest,
     user: AuthenticatedUser = Depends(get_current_user),
 ):
@@ -43,16 +43,11 @@ async def start_session(
         raise HTTPException(status_code=400, detail=f"Unknown worker_id: {req.worker_id}")
 
     try:
-        # If camera_id is provided (e.g. "0", "1"), use it as the camera index
-        camera_index = req.camera_index
-        if req.camera_id is not None:
-            try:
-                camera_index = int(req.camera_id)
-            except (ValueError, TypeError):
-                pass  # fall back to camera_index
-
+        # camera_id may be a numeric index, a configured CAMERA_SOURCES id, or
+        # an RTSP URL — resolution happens in start_session() so USB and IP
+        # cameras share one code path.
         session_id = service.start_session(
-            camera_index=camera_index,
+            camera_index=req.camera_index,
             worker_id=req.worker_id,
             created_by_user_id=user.id,
             camera_id=req.camera_id,
@@ -84,7 +79,7 @@ async def start_session(
 
 
 @router.post("/session/stop", response_model=SessionActionResponse)
-async def stop_session(user: AuthenticatedUser = Depends(get_current_user)):
+def stop_session(user: AuthenticatedUser = Depends(get_current_user)):
     """Stop the pipeline, save session data, release camera."""
     service = get_live_service()
     if not service.is_running():

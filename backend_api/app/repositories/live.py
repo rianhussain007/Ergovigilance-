@@ -18,14 +18,12 @@ from app.repositories.base import DashboardRepository
 from app.schemas.api import (
     DashboardResponse,
     SessionRecord,
-    TrendResponse,
     CameraInfo,
     WorkstationInfo,
     DeploymentMetrics,
     ManagerSummary,
     WorkerSummary,
     Alert,
-    ReportRecord,
     ContextSnapshotResponse,
     GuidanceSnapshot,
     GuidanceFeedbackItem,
@@ -209,6 +207,7 @@ class LiveRepository(DashboardRepository):
                 "riskScore": state.risk_score,
                 "confidence": state.confidence,
                 "currentTask": state.task_name,
+                "taskConfidence": getattr(state, "task_confidence", 0.0),
                 "taskDurationSeconds": state.task_duration_seconds,
                 "workerStatus": "active" if state.person_detected else "idle",
             },
@@ -285,6 +284,7 @@ class LiveRepository(DashboardRepository):
                 date=date_str,
                 duration=duration_str,
                 highestRisk=state.risk_level or "LOW",
+                highest_risk_level=state.risk_level or "LOW",
                 task=state.task_name or "Monitoring Session",
                 status="active",
                 worker_id=worker_id,
@@ -311,6 +311,10 @@ class LiveRepository(DashboardRepository):
             highest = data.get("highest_risk_level", "LOW")
             risk_map = {"LOW": "low", "MEDIUM": "moderate", "HIGH": "high"}
             highest_risk = risk_map.get(highest, "low")
+            # Dominant level for list/calendar display (falls back to peak).
+            dominant = data.get("risk_level") or highest
+            if dominant not in ("LOW", "MEDIUM", "HIGH"):
+                dominant = highest
 
             date_str = ""
             if ts:
@@ -328,7 +332,13 @@ class LiveRepository(DashboardRepository):
                 date=date_str,
                 duration=duration_str,
                 highestRisk=data.get("most_frequent_issue") or highest_risk,
-                task="Monitoring Session",
+                highest_risk_level=highest,
+                risk_level=dominant,
+                risk_percentages=data.get("risk_percentages") or {},
+                # Real per-session task classification (persisted at save time
+                # since task recognition is live-only). Older sessions predate
+                # the field — show them honestly instead of a fake value.
+                task=data.get("task_name") or "Not classified",
                 status="completed",
                 worker_id=data.get("worker_id"),
                 created_by_user_id=created_by_user_id,
@@ -367,10 +377,21 @@ class LiveRepository(DashboardRepository):
                     break
 
         if filepath is None:
-            return None
-
-        with open(filepath, "r") as f:
-            data = json.load(f)
+            # Tier 1: fall back to the Postgres telemetry store when the JSON
+            # file is missing (e.g. a session mirrored from another deployment).
+            from app.core.postgres import pg_enabled, fetch_sessions
+            if pg_enabled():
+                for cached in fetch_sessions():
+                    if cached.get("session_id") == session_id:
+                        data = cached
+                        break
+                else:
+                    return None
+            else:
+                return None
+        else:
+            with open(filepath, "r") as f:
+                data = json.load(f)
 
         created_by_user_id = data.get("created_by_user_id")
         if current_user is not None and not can_view_all_sessions(current_user):
@@ -421,71 +442,11 @@ class LiveRepository(DashboardRepository):
             worker_id=data.get("worker_id"),
             created_by_user_id=created_by_user_id,
             camera_id=data.get("camera_id"),
-            video_path=data.get("video_path"),
-            video_recording_status=data.get("video_recording_status"),
+            video_path=data.get("video_path"),            video_recording_status=data.get("video_recording_status"),
             video_recording_error=data.get("video_recording_error"),
             video_frame_count=data.get("video_frame_count"),
             video_codec=data.get("video_codec"),
         )
-
-    async def get_trends(self) -> TrendResponse:
-        import app.utils.mock_data as mock_data
-        return TrendResponse(**mock_data.TRENDS)
-
-    async def get_reports(self) -> List[ReportRecord]:
-        """Return real reports from session data."""
-        import os
-        import json
-        from datetime import datetime
-
-        sessions_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..", "outputs", "sessions")
-        reports = []
-
-        if os.path.exists(sessions_dir):
-            for filename in os.listdir(sessions_dir):
-                if filename.endswith(".json"):
-                    filepath = os.path.join(sessions_dir, filename)
-                    try:
-                        with open(filepath, 'r') as f:
-                            data = json.load(f)
-                            session_id = data.get("session_id", filename.replace(".json", ""))
-                            ended_at = data.get("ended_at", "")
-                            stats = data.get("statistics", {})
-                            alerts_count = len(data.get("alerts", []))
-
-                            # Calculate report date
-                            try:
-                                if ended_at:
-                                    dt = datetime.fromisoformat(ended_at.replace("Z", "+00:00"))
-                                    report_date = dt.strftime("%Y-%m-%d")
-                                else:
-                                    report_date = datetime.now().strftime("%Y-%m-%d")
-                            except (ValueError, TypeError) as exc:
-                                logger.warning("Failed to parse ended_at %s: %s", ended_at, exc)
-                                report_date = datetime.now().strftime("%Y-%m-%d")
-
-                            # Determine report type
-                            if alerts_count > 0:
-                                report_type = "safety"
-                                title = f"Safety Report — {session_id}"
-                            else:
-                                report_type = "session"
-                                title = f"Session Report — {session_id}"
-
-                            reports.append(ReportRecord(
-                                id=f"RPT-{session_id}",
-                                title=title,
-                                type=report_type,
-                                date=report_date,
-                                status="completed",
-                                size=f"{len(data.get('snapshots', []))} snapshots",
-                            ))
-                    except Exception as exc:
-                        logger.warning("Skipping corrupt report file %s: %s", filename, exc)
-
-        # Sort by date (newest first)
-        reports.sort(key=lambda x: x.date if x.date else "", reverse=True)
-        return reports
 
     async def get_cameras(self) -> List[CameraInfo]:
         """Enumerate all physically available cameras via camera_manager.
@@ -513,10 +474,18 @@ class LiveRepository(DashboardRepository):
             return []
 
         risk_map = {"LOW": "low", "MEDIUM": "moderate", "HIGH": "high"}
+        active_index = getattr(service, "current_camera_index", None)
+        active_source = getattr(service, "current_camera_source", None)
+
         result: list[CameraInfo] = []
         for base in _camera_cache:
             idx = int(base.id.replace("cam-", "")) if base.id.startswith("cam-") else -1
-            if is_running and active_index is not None and idx == active_index:
+            is_active = (
+                is_running
+                and active_source is not None
+                and idx == int(active_source)
+            )
+            if is_active:
                 state = service.get_state_snapshot()
                 worker_id = getattr(service, "current_worker_id", "unknown")
                 camera_id = getattr(service, "current_camera_id", None) or base.id
@@ -532,6 +501,35 @@ class LiveRepository(DashboardRepository):
                 ))
             else:
                 result.append(base)
+
+        # Append configured IP/RTSP cameras (from CAMERA_SOURCES) so they appear
+        # in Settings + Multi-Camera alongside physical USB cameras.
+        from app.core.config import settings
+        for cam in settings.CAMERA_SOURCES:
+            is_active = is_running and active_source == cam["url"]
+            if is_active:
+                state = service.get_state_snapshot()
+                result.append(CameraInfo(
+                    id=cam["id"],
+                    name=cam["name"],
+                    worker=getattr(service, "current_worker_id", "unknown"),
+                    fps=int(state.fps or 0),
+                    risk=risk_map.get(state.risk_level, "low"),
+                    recording=True,
+                    uptime=state.timestamp or "",
+                    status="streaming",
+                ))
+            else:
+                result.append(CameraInfo(
+                    id=cam["id"],
+                    name=cam["name"],
+                    worker="",
+                    fps=0,
+                    risk="low",
+                    recording=False,
+                    uptime="",
+                    status="available",
+                ))
         return result
 
     async def get_workstations(self) -> List[WorkstationInfo]:
@@ -589,11 +587,13 @@ class LiveRepository(DashboardRepository):
         from app.schemas.api import ModelDriftMetrics
         drift = ModelDriftMetrics(**drift_summary)
 
+        from app.core.postgres import pg_enabled
+        database_engine = "PostgreSQL" if pg_enabled() else "SQLite"
         return DeploymentMetrics(
             backendStatus="ok",
             backendVersion=settings.APP_VERSION,
             backendUptimeSeconds=backend_uptime,
-            databaseEngine="SQLite",
+            databaseEngine=database_engine,
             databaseSizeBytes=db_size,
             databaseStatus=db_status,
             cameraCount=camera_count,
@@ -805,6 +805,11 @@ class LiveRepository(DashboardRepository):
 
         guidance = None
         rula_score = None
+        # Must be initialized BEFORE the ``if features:`` block — it is referenced
+        # unconditionally below, so an empty feature dict (no person detected on
+        # the latest frame) previously raised ``UnboundLocalError``, 500-ing the
+        # dashboard + context-snapshot endpoints mid-session.
+        rula_is_partial = False
         features = state.features
         if features:
             from backend.services.guidance import build_guidance
@@ -852,6 +857,14 @@ class LiveRepository(DashboardRepository):
 
         clean_scores = {k: _clean_score(v) for k, v in snapshot.feature_scores.items()}
 
+        # Authoritative standard-method assessment (RULA vs REBA) — what drove
+        # the risk level. Falls back to the computed RULA info when the frame
+        # predates the standard assessment (e.g. empty features / no person).
+        std = snapshot.standard_assessment or {}
+        assessment_method = std.get("method") or None
+        assessment_score = std.get("score")
+        assessment_band = std.get("risk_level") or None
+
         return ContextSnapshotResponse(
             session_id=snapshot.session_id,
             frame_number=snapshot.frame_number,
@@ -872,12 +885,17 @@ class LiveRepository(DashboardRepository):
             guidance=guidance,
             rula_informed_score=rula_score,
             rula_is_partial=rula_is_partial,
+            assessment_method=assessment_method,
+            assessment_score=assessment_score,
+            assessment_band=assessment_band,
             calibrated_band=calibrated_band,
             calibrated_confidence=calibrated_confidence,
             calibrated_agrees=calibrated_agrees,
             unavailable_features=list(snapshot.unavailable_features),
             approximate_features=list(snapshot.approximate_features),
             lower_body_confidence=snapshot.lower_body_confidence,
+            framing=dict(getattr(state, "framing", {}) or {}),
+            person_count=int(getattr(state, "person_count", 1) or 1),
         )
 
     async def get_recommendations(self) -> RecommendationsBundleResponse:
@@ -906,7 +924,10 @@ class LiveRepository(DashboardRepository):
         service = get_live_service()
         export_data = service.history_engine.export()
 
-        snapshots = export_data.get("snapshots", [])
+        # The 2s poll re-serializes the full snapshot list; cap what the chart
+        # needs (last 2000 points keeps multi-hour sessions responsive while
+        # still showing the full trend shape). Statistics stay full-session.
+        snapshots = export_data.get("snapshots", [])[-2000:]
         stats_raw = export_data.get("statistics", {})
 
         points = []

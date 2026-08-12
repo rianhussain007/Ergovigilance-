@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 RiskLevel = Literal["low", "moderate", "high"]
 StatusType = Literal["active", "completed", "interrupted"]
-FeatureStatus = Literal["good", "low", "moderate", "high"]
+FeatureStatus = Literal["good", "low", "moderate", "high", "unavailable"]
 TrendDirection = Literal["improving", "stable", "deteriorating"]
 
 
@@ -147,6 +147,14 @@ class SessionRecord(BaseModel):
     highestRisk: str
     task: str
     status: StatusType
+    highest_risk_level: str = "LOW"
+    # Dominant (plurality) risk level across the session's frames — what the
+    # list/calendar display. ``highest_risk_level`` keeps peak semantics for
+    # reports. Falls back to the peak when a session predates the field.
+    risk_level: str = "LOW"
+    # Frame-level risk percentages (LOW/MEDIUM/HIGH) used for the real
+    # time-weighted average risk — same source the analytics summary uses.
+    risk_percentages: dict = Field(default_factory=dict)
     worker_id: Optional[str] = None
     created_by_user_id: Optional[int] = None
     camera_id: Optional[str] = None
@@ -198,32 +206,6 @@ class SessionDetailResponse(BaseModel):
     video_recording_error: Optional[str] = None
     video_frame_count: Optional[int] = None
     video_codec: Optional[str] = None
-
-
-class WeeklyTrend(BaseModel):
-    week: str
-    averageRisk: float
-    sessions: int
-    incidents: int
-
-
-class FeatureTrend(BaseModel):
-    feature: str
-    current: float
-    previous: float
-    change: float
-
-
-class RiskDistribution(BaseModel):
-    low: int
-    moderate: int
-    high: int
-
-
-class TrendResponse(BaseModel):
-    weeklyTrend: List[WeeklyTrend]
-    featureTrends: List[FeatureTrend]
-    riskDistribution: RiskDistribution
 
 
 # --- Additional API Models ---
@@ -332,14 +314,22 @@ class Alert(BaseModel):
     read: bool = False
 
 
+# Severity/state literals mirroring backend.alerts.models.AlertSeverity /
+# AlertState — uppercase enum values emitted by the AlertEngine. Deliberately
+# distinct from the lowercase `AlertSeverity` literal above, which belongs to
+# the legacy dashboard-facing Alert model.
+EngineAlertSeverity = Literal["LOW", "MEDIUM", "WARNING", "HIGH", "CRITICAL"]
+EngineAlertState = Literal["ACTIVE", "ACKNOWLEDGED", "RESOLVED", "EXPIRED"]
+
+
 class AlertResponse(BaseModel):
     """Alert from AlertEngine — mirrors backend.alerts.models.Alert."""
     id: str
     session_id: str
     frame_number: int
     created_at: str
-    severity: str
-    state: str
+    severity: EngineAlertSeverity
+    state: EngineAlertState
     title: str
     message: str
     trigger_rule: str
@@ -461,12 +451,19 @@ class ContextSnapshotResponse(BaseModel):
     guidance: Optional[GuidanceSnapshot] = None
     rula_informed_score: Optional[int] = None
     rula_is_partial: bool = False
+    # Authoritative standard-method assessment (RULA vs REBA by body visibility)
+    assessment_method: Optional[str] = None
+    assessment_score: Optional[int] = None
+    assessment_band: Optional[str] = None
     calibrated_band: Optional[str] = None
     calibrated_confidence: Optional[float] = None
     calibrated_agrees: Optional[bool] = None
     unavailable_features: List[str] = []
     approximate_features: List[str] = []
     lower_body_confidence: float = 0.0
+    # Tier 3 framing intelligence + person count (optional for legacy payloads)
+    framing: Optional[dict] = None
+    person_count: Optional[int] = None
 
 
 class HistoryPoint(BaseModel):
@@ -506,6 +503,10 @@ class VideoAnalysisFrame(BaseModel):
     lower_body_confidence: float = 0.0
     # Normalized keypoints: [[x, y, z, visibility], ...] where x/y are 0-1
     keypoints: list[list[float]] = Field(default_factory=list)
+    # Worst risk band per body region (head/torso/left_arm/right_arm/
+    # left_leg/right_leg) — same values the live overlay uses, so the
+    # frontend can color each segment identically to the live feed.
+    region_risks: dict[str, str] = Field(default_factory=dict)
 
 
 class VideoAnalysisSummary(BaseModel):

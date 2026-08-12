@@ -179,6 +179,31 @@ class TaskRecognition:
                 "reason": "Degenerate keypoints - no person detected",
             }
 
+        # ── Geometric posture gate (authoritative, model-independent) ──
+        # The trained classifier is trained on synthetic STANDING poses and
+        # confidently mislabels bent-knee geometry (verified on real data:
+        # a sitting worker with knee ~93° read "Neutral Standing" at 98.9%).
+        # Unambiguous seating (knees bent, thighs horizontal, hips low) is
+        # decided geometrically BEFORE the model, mirroring how RULA/REBA
+        # gate posture risk. The model never overrides real geometry.
+        mid_knee = _midpoint(lknee, rknee)
+        mid_ankle = _midpoint(lankle, rankle)
+        thigh_ratio = abs(mid_hip[1] - mid_knee[1]) / torso_height
+        leg_ratio = _dist_2d(mid_hip, mid_ankle) / torso_height
+        # Keypoints are [x, y, z, visibility]; visibility lives at index 3
+        # when present (some callers pass bare [x, y, z] triples — treat
+        # those as visible rather than gating on a missing column).
+        def _vis(p):
+            return p[3] if len(p) > 3 else 1.0
+
+        legs_visible = min(_vis(lhip), _vis(rhip), _vis(lknee), _vis(rknee),
+                           _vis(lankle), _vis(rankle)) > 0.5
+        if legs_visible and 60.0 < knee < 140.0 and thigh_ratio < 0.45 and leg_ratio < 1.2:
+            self._using_model = False
+            return self._finalize(
+                "Seated Work", 95.0,
+                "Knees bent - seated posture detected", kps, force=True)
+
         # ── Model-primary path: confident trained classifier wins ──
         model_pred = self._predict_with_model(features)
         if model_pred is not None:
@@ -212,6 +237,9 @@ class TaskRecognition:
         reasons: Dict[str, List[str]] = {}
 
         # --- Neutral Standing ---
+        # Requires relatively straight legs: a bent-knee pose (sitting,
+        # squatting) must NOT score as standing. High frame-to-frame
+        # movement also rules it out (that is Walking / Moving).
         ns = 0.0
         ns_reasons: List[str] = []
         ns += _gauss(trunk, 0, 8)
@@ -221,7 +249,10 @@ class TaskRecognition:
         r_wrist_side = 0.0 if lsh[0] <= rwr[0] <= rsh[0] else 1.0
         wrists_at_sides = (l_wrist_side + r_wrist_side) / 2.0
         ns += wrists_at_sides
-        ns_score = ns / 4.0
+        ns += _gauss(knee, 175, 10)
+        movement_velocity = features.get("movement_velocity", 0.0)
+        ns -= _gauss(movement_velocity, 110, 55)
+        ns_score = max(0.0, ns) / 5.0
         scores["Neutral Standing"] = ns_score
         if trunk < 12:
             ns_reasons.append("Minimal trunk flexion")
@@ -231,7 +262,45 @@ class TaskRecognition:
             ns_reasons.append("Hands near hip level")
         if wrists_at_sides > 0.7:
             ns_reasons.append("Hands at sides")
+        if knee > 160:
+            ns_reasons.append("Legs straight")
         reasons["Neutral Standing"] = ns_reasons
+
+        # --- Seated Work (desk / assembly at a chair) ---
+        sw = 0.0
+        sw_reasons: List[str] = []
+        sw += _gauss(knee, 100, 22)
+        sw += _gauss(thigh_ratio, 0.15, 0.15)
+        sw += _gauss(trunk, 5, 10)
+        sw += _gauss(wrist_height_ratio, 0.45, 0.25)
+        sw_score = sw / 4.0
+        scores["Seated Work"] = sw_score
+        if knee < 140:
+            sw_reasons.append("Knees bent")
+        if thigh_ratio < 0.45:
+            sw_reasons.append("Thighs horizontal (seated)")
+        if trunk < 15:
+            sw_reasons.append("Upright trunk")
+        if 0.15 < wrist_height_ratio < 0.75:
+            sw_reasons.append("Hands at desk level")
+        reasons["Seated Work"] = sw_reasons
+
+        # --- Walking / Moving ---
+        wk = 0.0
+        wk_reasons: List[str] = []
+        wk += _gauss(movement_velocity, 110, 55)
+        wk += _gauss(knee, 175, 10)
+        wk += _gauss(trunk, 5, 10)
+        wk += _gauss(wrist_height_ratio, 0.9, 0.35)
+        wk_score = wk / 4.0
+        scores["Walking / Moving"] = wk_score
+        if movement_velocity > 60:
+            wk_reasons.append("Continuous movement")
+        if knee > 160:
+            wk_reasons.append("Legs moving through stride")
+        if trunk < 15:
+            wk_reasons.append("Upright trunk")
+        reasons["Walking / Moving"] = wk_reasons
 
         # --- Assembly Work ---
         aw = 0.0
@@ -321,11 +390,14 @@ class TaskRecognition:
         return self._finalize(self._current_task, self._confidence, self._reason, kps)
 
     def _finalize(self, task: str, confidence: float, reason: str,
-                  kps: np.ndarray) -> Dict:
+                  kps: np.ndarray, force: bool = False) -> Dict:
         """Apply window smoothing + dwell tracking and build the result dict.
 
         Shared by the model-primary path and the Gaussian fallback so both
-        get identical temporal behavior.
+        get identical temporal behavior. ``force=True`` (used by the
+        geometric posture gate) skips the smoothing override so an
+        authoritative geometric decision (e.g. seated) cannot be smoothed
+        away by recent standing predictions.
         """
         self._current_task = task
         self._confidence = confidence
@@ -335,7 +407,7 @@ class TaskRecognition:
         # ── Temporal smoothing: confidence-weighted sliding window ──
         self._window.append((self._current_task, self._confidence))
 
-        if len(self._window) >= 2:
+        if len(self._window) >= 2 and not force:
             weights: Dict[str, float] = {}
             for t, c in self._window:
                 weights[t] = weights.get(t, 0.0) + c
