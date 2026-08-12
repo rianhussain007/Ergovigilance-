@@ -3,16 +3,12 @@ import { Camera, Eye, EyeOff, Monitor, VideoOff } from 'lucide-react';
 import { SectionHeader, LoadingCard, ErrorCard, EmptyState } from '@/src/components/common';
 import { getCameras } from '@/src/services/dashboardService';
 import { getStoredToken } from '@/src/auth/AuthContext';
-import { useDemo } from '@/src/demo/DemoProvider';
-import { DEMO_CAMERAS } from '@/src/demo/demoConstants';
 import type { CameraInfo } from '@/src/types/api';
 
 const riskColors: Record<string, string> = { low: 'text-green-400', moderate: 'text-orange-400', high: 'text-red-400' };
 const riskDots: Record<string, string> = { low: 'bg-green-500', moderate: 'bg-orange-500', high: 'bg-red-500' };
 
-const DEMO_BANNER = 'SAMPLE DATA — Demo Camera Grid, not live feeds';
-
-function CameraTile({ cam, demo }: { cam: CameraInfo; demo?: boolean }) {
+function CameraTile({ cam }: { cam: CameraInfo }) {
   const [feedError, setFeedError] = useState(false);
   const [feedLoaded, setFeedLoaded] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
@@ -22,7 +18,7 @@ function CameraTile({ cam, demo }: { cam: CameraInfo; demo?: boolean }) {
 
   // Only attempt live feed for streaming cameras (not available/idle)
   const isStreaming = cam.status === 'streaming';
-  const showFeed = isStreaming && !demo && !feedError;
+  const showFeed = isStreaming && !feedError;
 
   return (
     <div className={`relative rounded-xl overflow-hidden border group ${isStreaming ? 'bg-black border-outline-variant' : 'bg-surface-container border-outline-variant/50'}`}>
@@ -38,7 +34,7 @@ function CameraTile({ cam, demo }: { cam: CameraInfo; demo?: boolean }) {
         )}
 
         {/* Skeleton / idle placeholder */}
-        {(!showFeed && !demo) && (
+        {!showFeed && (
           <div className="absolute inset-0 flex items-center justify-center">
             {isStreaming ? (
               <svg viewBox="0 0 200 280" className="w-24 h-32 md:w-28 md:h-36 opacity-20">
@@ -60,14 +56,6 @@ function CameraTile({ cam, demo }: { cam: CameraInfo; demo?: boolean }) {
                 </div>
               </div>
             )}
-          </div>
-        )}
-
-        {demo && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="bg-amber-500/20 backdrop-blur-sm px-lg py-sm rounded border border-amber-400/40">
-              <p className="text-[10px] font-bold text-amber-300 uppercase tracking-widest text-center">{DEMO_BANNER}</p>
-            </div>
           </div>
         )}
 
@@ -109,14 +97,12 @@ function CameraTile({ cam, demo }: { cam: CameraInfo; demo?: boolean }) {
 }
 
 export default function MultiCameraView() {
-  const { state: demoState } = useDemo();
   const [cameras, setCameras] = useState<CameraInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [gridSize, setGridSize] = useState<'2x2' | '3x3'>('3x3');
 
   useEffect(() => {
-    if (demoState.active) { setLoading(false); return; }
     let cancelled = false;
     const fetchCameras = async () => {
       try {
@@ -131,50 +117,71 @@ export default function MultiCameraView() {
     fetchCameras();
     const interval = setInterval(fetchCameras, 30000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [demoState.active]);
+  }, []);
 
   if (error) return <div className="flex items-center justify-center h-full p-lg"><ErrorCard message={error} onRetry={() => { setLoading(true); setError(null); }} /></div>;
 
-  const isDemo = demoState.active;
-  const sourceCams = isDemo ? DEMO_CAMERAS : cameras;
-  const displayCams = isDemo ? sourceCams : gridSize === '3x3' ? sourceCams.slice(0, 9) : sourceCams.slice(0, 4);
+  const sourceCams = cameras;
+  const gridSlots = gridSize === '3x3' ? 9 : 4;
+  const displayCams = sourceCams.slice(0, gridSlots);
   const cols = gridSize === '3x3' ? 'grid-cols-2 md:grid-cols-3' : 'grid-cols-2';
+  const emptySlots = Math.max(0, gridSlots - displayCams.length);
+
+  // With a single camera the page shouldn't look empty — center the tile and
+  // point at what's missing rather than scattering one small card in a grid.
+  const singleCam = displayCams.length === 1;
 
   return (
     <div className="p-lg space-y-lg pb-32">
       <div className="flex items-center justify-between flex-wrap gap-md">
         <div>
           <h1 className="text-display-lg font-bold text-on-surface">Multi-Camera View</h1>
-          <p className="text-body-sm text-on-surface-variant mt-xs">{isDemo ? 'Demo — simulated camera feeds' : 'Live feeds from all connected cameras'}</p>
+          <p className="text-body-sm text-on-surface-variant mt-xs">Live feeds from all connected cameras</p>
         </div>
-        {!isDemo && (
-          <div className="flex items-center gap-sm bg-surface-container rounded-lg p-xs border border-outline-variant">
-            <button onClick={() => setGridSize('2x2')} className={`flex items-center gap-1 px-sm py-xs rounded text-[10px] font-bold uppercase transition-colors ${gridSize === '2x2' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}`}>
-              <Grid2x2 className="w-3.5 h-3.5" /> 2×2
-            </button>
-            <button onClick={() => setGridSize('3x3')} className={`flex items-center gap-1 px-sm py-xs rounded text-[10px] font-bold uppercase transition-colors ${gridSize === '3x3' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}`}>
-              <Grid3X3 className="w-3.5 h-3.5" /> 3×3
-            </button>
-          </div>
-        )}
+        <div className="flex items-center gap-sm bg-surface-container rounded-lg p-xs border border-outline-variant">
+          <button onClick={() => setGridSize('2x2')} className={`flex items-center gap-1 px-sm py-xs rounded text-[10px] font-bold uppercase transition-colors ${gridSize === '2x2' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}`}>
+            <Grid2x2 className="w-3.5 h-3.5" /> 2×2
+          </button>
+          <button onClick={() => setGridSize('3x3')} className={`flex items-center gap-1 px-sm py-xs rounded text-[10px] font-bold uppercase transition-colors ${gridSize === '3x3' ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}`}>
+            <Grid3X3 className="w-3.5 h-3.5" /> 3×3
+          </button>
+        </div>
       </div>
-
-      {isDemo && (
-        <div className="bg-amber-500/10 border border-amber-400/30 rounded-lg px-lg py-md">
-          <p className="text-[11px] font-bold text-amber-300 uppercase tracking-widest text-center">{DEMO_BANNER}</p>
-        </div>
-      )}
 
       {loading ? (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-md">
           {Array.from({ length: 6 }).map((_, i) => <LoadingCard key={i} height="h-52" />)}
         </div>
-      ) : sourceCams.length === 0 && !isDemo ? (
+      ) : sourceCams.length === 0 ? (
         <EmptyState title="No cameras" message="No cameras are currently connected." />
+      ) : singleCam ? (
+        <div className="flex flex-col items-center gap-md">
+          <div className="w-full max-w-[560px]">
+            <CameraTile cam={displayCams[0]} />
+          </div>
+          <div className="w-full max-w-[560px] flex flex-col items-center gap-sm rounded-xl border border-dashed border-outline-variant bg-surface-container-low p-lg text-center">
+            <Camera className="w-8 h-8 text-on-surface-variant/50" strokeWidth={1.5} />
+            <p className="text-body-sm font-medium text-on-surface">Add more cameras</p>
+            <p className="text-[11px] text-on-surface-variant max-w-sm">
+              Connect additional cameras to monitor more stations at once.
+            </p>
+          </div>
+        </div>
       ) : (
         <div className={`grid ${cols} gap-md`}>
           {displayCams.map((cam) => (
-            <div key={cam.id}><CameraTile cam={cam} demo={isDemo} /></div>
+            <div key={cam.id}><CameraTile cam={cam} /></div>
+          ))}
+          {Array.from({ length: emptySlots }).map((_, i) => (
+            <div
+              key={`slot-${i}`}
+              className="flex flex-col items-center justify-center gap-sm rounded-xl border border-dashed border-outline-variant/60 bg-surface-container-lowest aspect-[4/3]"
+            >
+              <Camera className="w-8 h-8 text-on-surface-variant/40" strokeWidth={1.5} />
+              <p className="text-[11px] text-on-surface-variant/80 text-center px-md">
+                Add more cameras to monitor additional stations
+              </p>
+            </div>
           ))}
         </div>
       )}

@@ -3,18 +3,19 @@ import { EmptyState } from '@/src/components/common';
 import { useRecommendations } from '@/src/hooks/useRecommendations';
 import type { RecommendationItem } from '@/src/types/api';
 
+// Theme-aware priority colors (light variants defined in index.css).
 const PRIORITY_COLORS: Record<string, string> = {
-  Low: '#22c55e',
-  Medium: '#f97316',
-  High: '#ef4444',
-  Critical: '#dc2626',
+  Low: 'var(--color-chart-green)',
+  Medium: 'var(--color-chart-orange)',
+  High: 'var(--color-chart-red)',
+  Critical: 'var(--color-chart-red)',
 };
 
 const PRIORITY_BG: Record<string, string> = {
-  Low: 'rgba(34,197,94,0.08)',
-  Medium: 'rgba(249,115,22,0.08)',
-  High: 'rgba(239,68,68,0.08)',
-  Critical: 'rgba(220,38,38,0.12)',
+  Low: 'color-mix(in srgb, var(--color-chart-green) 8%, transparent)',
+  Medium: 'color-mix(in srgb, var(--color-chart-orange) 8%, transparent)',
+  High: 'color-mix(in srgb, var(--color-chart-red) 8%, transparent)',
+  Critical: 'color-mix(in srgb, var(--color-chart-red) 12%, transparent)',
 };
 
 const CATEGORY_ICONS: Record<string, typeof Lightbulb> = {
@@ -36,13 +37,13 @@ function targetIcon(target: string) {
 
 function RecItem({ rec }: { rec: RecommendationItem }) {
   const Icon = CATEGORY_ICONS[rec.category] || Lightbulb;
-  const color = PRIORITY_COLORS[rec.priority] || '#6b7280';
-  const bg = PRIORITY_BG[rec.priority] || 'rgba(107,114,128,0.08)';
+  const color = PRIORITY_COLORS[rec.priority] || 'var(--color-outline)';
+  const bg = PRIORITY_BG[rec.priority] || 'color-mix(in srgb, var(--color-outline) 8%, transparent)';
 
   return (
     <div
       className="rounded-lg px-md py-sm border transition-all duration-300"
-      style={{ backgroundColor: bg, borderColor: `${color}30` }}
+      style={{ backgroundColor: bg, borderColor: `color-mix(in srgb, ${color} 19%, transparent)` }}
     >
       <div className="flex items-start gap-sm">
         <Icon className="w-4 h-4 shrink-0 mt-0.5" style={{ color }} />
@@ -77,7 +78,7 @@ function RecItem({ rec }: { rec: RecommendationItem }) {
   );
 }
 
-export default function RecommendationsCard() {
+export default function RecommendationsCard({ idle = false }: { idle?: boolean }) {
   const { data, loading } = useRecommendations();
   const { bundle, total_generated } = data;
 
@@ -118,13 +119,13 @@ export default function RecommendationsCard() {
         <div
           className="rounded-lg px-md py-sm text-center border transition-all duration-500"
           style={{
-            backgroundColor: PRIORITY_BG[bundle.highest_priority] || 'rgba(107,114,128,0.08)',
-            borderColor: `${PRIORITY_COLORS[bundle.highest_priority] || '#6b7280'}40`,
+            backgroundColor: PRIORITY_BG[bundle.highest_priority] || 'color-mix(in srgb, var(--color-outline) 8%, transparent)',
+            borderColor: `color-mix(in srgb, ${PRIORITY_COLORS[bundle.highest_priority] || 'var(--color-outline)'} 25%, transparent)`,
           }}
         >
           <span
             className="font-bold text-sm tracking-wider"
-            style={{ color: PRIORITY_COLORS[bundle.highest_priority] || '#6b7280' }}
+            style={{ color: PRIORITY_COLORS[bundle.highest_priority] || 'var(--color-on-surface-variant)' }}
           >
             {bundle.highest_priority}
           </span>
@@ -138,6 +139,11 @@ export default function RecommendationsCard() {
             <RecItem key={rec.id} rec={rec} />
           ))}
         </div>
+      ) : idle ? (
+        <EmptyState
+          title="No recommendations yet"
+          message="Start monitoring to see recommendations."
+        />
       ) : (
         <EmptyState
           title="No recommendations"

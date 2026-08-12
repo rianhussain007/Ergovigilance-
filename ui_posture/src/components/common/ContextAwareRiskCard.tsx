@@ -2,13 +2,14 @@ import { Brain, ArrowDown, X, CheckCircle, Clock } from 'lucide-react';
 import { EmptyState } from '@/src/components/common';
 import { useContextSnapshot } from '@/src/hooks/useContextSnapshot';
 import type { ContextSnapshot } from '@/src/types/api';
+import { formatISTTime } from '@/src/utils/formatTime';
 
 function riskColor(level: string): string {
   switch (level.toLowerCase()) {
-    case 'low': return '#22c55e';
-    case 'medium': return '#f97316';
-    case 'high': return '#ef4444';
-    default: return '#94a3b8';
+    case 'low': return 'var(--color-chart-green)';
+    case 'medium': return 'var(--color-chart-orange)';
+    case 'high': return 'var(--color-chart-red)';
+    default: return 'var(--color-outline)';
   }
 }
 
@@ -21,19 +22,15 @@ function riskLabel(level: string): string {
 }
 
 function riskFill(level: string): string {
-  switch (level.toLowerCase()) {
-    case 'low': return 'rgba(34,197,94,0.08)';
-    case 'medium': return 'rgba(249,115,22,0.08)';
-    case 'high': return 'rgba(239,68,68,0.08)';
-    default: return 'rgba(148,163,184,0.08)';
-  }
+  const c = riskColor(level);
+  return `color-mix(in srgb, ${c} 8%, transparent)`;
 }
 
 function rulaColor(score: number): string {
-  if (score <= 2) return '#22c55e';
-  if (score <= 4) return '#eab308';
-  if (score <= 6) return '#f97316';
-  return '#ef4444';
+  if (score <= 2) return 'var(--color-chart-green)';
+  if (score <= 4) return 'var(--color-chart-orange)';
+  if (score <= 6) return 'var(--color-chart-orange)';
+  return 'var(--color-chart-red)';
 }
 
 function SnapshotContent({ snapshot }: { snapshot: ContextSnapshot }) {
@@ -57,10 +54,10 @@ function SnapshotContent({ snapshot }: { snapshot: ContextSnapshot }) {
                 style={{
                   width: `${Math.min(100, snapshot.fatigue_score)}%`,
                   background: snapshot.fatigue_score > 60
-                    ? 'linear-gradient(90deg, #f97316, #ef4444)'
+                    ? 'linear-gradient(90deg, var(--color-chart-orange), var(--color-chart-red))'
                     : snapshot.fatigue_score > 30
-                      ? 'linear-gradient(90deg, #22c55e, #f97316)'
-                      : '#22c55e',
+                      ? 'linear-gradient(90deg, var(--color-chart-green), var(--color-chart-orange))'
+                      : 'var(--color-chart-green)',
                 }}
               />
             </div>
@@ -76,10 +73,10 @@ function SnapshotContent({ snapshot }: { snapshot: ContextSnapshot }) {
                 style={{
                   width: `${Math.min(100, snapshot.exposure_score)}%`,
                   background: snapshot.exposure_score > 60
-                    ? 'linear-gradient(90deg, #f97316, #ef4444)'
+                    ? 'linear-gradient(90deg, var(--color-chart-orange), var(--color-chart-red))'
                     : snapshot.exposure_score > 30
-                      ? 'linear-gradient(90deg, #22c55e, #f97316)'
-                      : '#22c55e',
+                      ? 'linear-gradient(90deg, var(--color-chart-green), var(--color-chart-orange))'
+                      : 'var(--color-chart-green)',
                 }}
               />
             </div>
@@ -104,20 +101,34 @@ function SnapshotContent({ snapshot }: { snapshot: ContextSnapshot }) {
           <span className="text-[10px] text-on-surface-variant uppercase tracking-wider">Frame</span>
           <p className="text-body-sm text-on-surface font-mono mt-0.5">#{snapshot.frame_number}</p>
         </div>
-        {snapshot.rula_informed_score != null && (
+        {snapshot.assessment_method != null && (
           <div>
             <span className="text-[10px] text-on-surface-variant uppercase tracking-wider flex items-center gap-1">
-              RULA Score
-              <span className="text-[8px] italic font-normal normal-case tracking-normal opacity-50">informed</span>
+              {snapshot.assessment_method} Score
+              <span className="text-[8px] italic font-normal normal-case tracking-normal opacity-50">
+                {snapshot.assessment_method === 'REBA' ? 'full body' : 'upper body'}
+              </span>
             </span>
-            <p className="text-body-sm font-mono mt-0.5" style={{ color: snapshot.rula_is_partial ? '#f59e0b' : rulaColor(snapshot.rula_informed_score) }}>
-              {snapshot.rula_informed_score}/7
-            </p>
-            {snapshot.rula_is_partial && (
+            <div className="flex items-center gap-2 mt-0.5">
+              <p className="text-body-sm font-mono" style={{ color: riskColor(snapshot.assessment_band || 'low') }}>
+                {snapshot.assessment_score}
+                <span className="text-on-surface-variant">/{snapshot.assessment_method === 'REBA' ? '15' : '7'}</span>
+              </p>
+              <span
+                className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+                style={{
+                  color: riskColor(snapshot.assessment_band || 'low'),
+                  backgroundColor: `color-mix(in srgb, ${riskColor(snapshot.assessment_band || 'low')} 13%, transparent)`,
+                }}
+              >
+                {riskLabel(snapshot.assessment_band || 'low')}
+              </span>
+            </div>
+            {snapshot.rula_is_partial && snapshot.assessment_method === 'RULA' && (
               <div className="flex items-center gap-1.5 mt-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1">
                 <span className="text-amber-400 text-[10px]">⚠</span>
                 <span className="text-[10px] font-medium text-amber-400">
-                  Unreliable &mdash; insufficient landmark data
+                  Partial assessment &mdash; some landmarks unavailable
                 </span>
               </div>
             )}
@@ -167,7 +178,7 @@ function SnapshotContent({ snapshot }: { snapshot: ContextSnapshot }) {
         className="rounded-lg px-md py-sm text-center border"
         style={{
           backgroundColor: riskFill(snapshot.risk_level),
-          borderColor: `${riskColor(snapshot.risk_level)}40`,
+          borderColor: `color-mix(in srgb, ${riskColor(snapshot.risk_level)} 25%, transparent)`,
         }}
       >
         <span
@@ -265,7 +276,7 @@ export default function ContextAwareRiskCard() {
           </span>
         </div>
         <span className="text-[9px] font-mono text-on-surface-variant">
-          {new Date(snapshot.captured_at).toLocaleTimeString()}
+          {formatISTTime(new Date(snapshot.captured_at))}
         </span>
       </div>
 

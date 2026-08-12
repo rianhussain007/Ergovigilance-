@@ -4,7 +4,6 @@ import type { ElementType } from 'react';
 import { Server, Database, Camera, Users, Gauge, Zap, BrainCircuit, Activity, AlertTriangle } from 'lucide-react';
 import { getDeployment } from '@/src/services/dashboardService';
 import { getStoredToken } from '@/src/auth/AuthContext';
-import { useDemo } from '@/src/demo/DemoProvider';
 import { ErrorCard, LoadingCard, SectionHeader } from '@/src/components/common';
 import type { DeploymentMetrics } from '@/src/types/api';
 
@@ -25,45 +24,12 @@ const formatDuration = (seconds: number): string => {
 };
 
 export default function DeploymentCenter() {
-  const { state: demoState } = useDemo();
   const [metrics, setMetrics] = useState<DeploymentMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
 
   const fetchDeploymentMetrics = useCallback(async () => {
-    if (demoState.active) {
-      setMetrics({
-        backendStatus: 'ok',
-        backendVersion: '0.1.0',
-        backendUptimeSeconds: 3600,
-        databaseEngine: 'SQLite',
-        databaseSizeBytes: 159744,
-        databaseStatus: 'ok',
-        cameraCount: 1,
-        registeredWorkerCount: 3,
-        activeSessionCount: 0,
-        sessionActive: false,
-        sessionFps: null,
-        sessionInferenceLatencyMs: null,
-        drift: {
-          samples: 1820,
-          window_seconds: 300,
-          model_samples: 1650,
-          gaussian_samples: 170,
-          fallback_rate: 9.3,
-          avg_confidence: 88.4,
-          avg_model_confidence: 91.2,
-          trend: 'stable',
-          trend_delta_pp: 1.2,
-          healthy: true,
-        },
-      });
-      setLoading(false);
-      setError(null);
-      return;
-    }
-
     if (!getStoredToken()) {
       setMetrics(null);
       setLoading(false);
@@ -82,7 +48,7 @@ export default function DeploymentCenter() {
     } finally {
       if (mountedRef.current) setLoading(false);
     }
-  }, [demoState.active]);
+  }, []);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -149,8 +115,8 @@ export default function DeploymentCenter() {
         <MetricCard
           icon={Server}
           label="Backend API"
-          value={metrics.backendVersion}
-          detail={`Status: ${metrics.backendStatus} • Uptime: ${formatDuration(metrics.backendUptimeSeconds)}`}
+          value={metrics.backendStatus === 'ok' ? 'Operational' : 'Attention'}
+          detail={`Version ${metrics.backendVersion} • Uptime: ${formatDuration(metrics.backendUptimeSeconds)}`}
           tone={backendTone}
         />
         <MetricCard
@@ -204,10 +170,12 @@ export default function DeploymentCenter() {
 
       <section className="bg-surface-container border border-outline-variant rounded-xl p-lg">
         <div className="flex items-center gap-md mb-md">
-          <BrainCircuit className="w-5 h-5 text-primary" />
+          <BrainCircuit className="w-5 h-5 text-primary shrink-0" />
           <div>
             <h2 className="text-headline-md font-bold text-on-surface">Model Health</h2>
-            <p className="text-[10px] text-on-surface-variant">Task-classifier drift canary — model usage vs Gaussian fallback</p>
+            <p className="text-[10px] text-on-surface-variant" title="Technical detail: task-classifier drift canary — tracks how often the trained model is used vs. the Gaussian fallback">
+              Tracks whether the trained model or its fallback is being used, to catch model degradation early
+            </p>
           </div>
           {metrics.drift ? (
             <span className={`ml-auto inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider border ${
@@ -257,7 +225,7 @@ export default function DeploymentCenter() {
           </div>
         ) : (
           <p className="text-body-sm text-on-surface-variant">
-            Run a live monitoring session so the canary can measure how often the trained task model is used vs. the Gaussian fallback.
+            Run a live monitoring session to start tracking how often the trained model is used versus the fallback.
           </p>
         )}
       </section>

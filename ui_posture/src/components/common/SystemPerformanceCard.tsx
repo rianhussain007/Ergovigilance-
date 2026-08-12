@@ -1,4 +1,22 @@
-import type { SystemPerformanceData } from '@/src/demo/types';
+export interface SystemPerformanceData {
+  systemHealth: 'healthy' | 'degraded' | 'critical';
+  cpuUsage: number;
+  memoryUsage: number;
+  fps: number;
+  cameraStatus: 'active' | 'degraded' | 'offline';
+  cameraLatency: number;
+  detectionLatency: number;
+  processedFrames: number;
+  droppedFrames: number;
+  avgProcessingTime: number;
+  peakMemory: number;
+  uptime: number;
+  gpuUtilization: number;
+  aiModelConfidence: number;
+  inferenceTime: number;
+  lastModelUpdate: string;
+  timeline: { time: string; value: number; label: string }[];
+}
 
 interface SystemPerformanceCardProps {
   data: SystemPerformanceData;

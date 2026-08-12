@@ -49,13 +49,13 @@ export default function TimelineBar({ timeline, seekTime, seekTo, alerts }: Prop
           <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-red-400" /> High</span>
         </div>
       </div>
-      <div ref={containerRef} className="relative h-8 rounded overflow-hidden cursor-pointer" onClick={handleClick} style={{ background: '#111722' }}>
+      <div ref={containerRef} className="relative h-8 rounded overflow-hidden cursor-pointer" onClick={handleClick} style={{ background: 'var(--color-surface-container-high)' }}>
         <div className="absolute inset-0 flex">
           {timeline.map((entry, i) => {
             if (i === timeline.length - 1) return null;
             const x1 = (entry.timestamp / maxTime) * 100;
             const x2 = (timeline[i + 1].timestamp / maxTime) * 100;
-            const color = entry.risk_level === 'HIGH' ? '#ef4444' : entry.risk_level === 'MEDIUM' ? '#f59e0b' : '#22c55e';
+            const color = entry.risk_level === 'HIGH' ? 'var(--color-chart-red)' : entry.risk_level === 'MEDIUM' ? 'var(--color-chart-orange)' : 'var(--color-chart-green)';
             return <div key={i} style={{ position: 'absolute', left: `${x1}%`, width: `${x2 - x1}%`, height: '100%', backgroundColor: color, opacity: 0.8 }} />;
           })}
         </div>

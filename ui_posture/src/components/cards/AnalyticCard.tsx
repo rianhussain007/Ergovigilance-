@@ -23,7 +23,7 @@ export function AnalyticCard({ label, value, subtext, accent, tone = 'neutral', 
   const textSizeClass = isUrgent ? 'text-headline-lg' : 'text-headline-md';
   
   return (
-    <div className={`${bgClass} border-l-4 ${leftBorderClass} ${otherBorderClass} rounded-xl p-md`}>
+    <div className={`${bgClass} border-l-4 ${leftBorderClass} ${otherBorderClass} rounded-xl p-md hover:shadow-sm transition-shadow`}>
       <span className="font-label-caps text-label-caps text-on-surface-variant block mb-xs uppercase tracking-widest">{label}</span>
       <span className={`${textSizeClass} font-bold ${textColorClass}`}>{value}</span>
       {subtext && <p className="text-body-sm text-on-surface-variant mt-xs">{subtext}</p>}

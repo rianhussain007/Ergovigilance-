@@ -3,6 +3,7 @@ import { Clock, AlertTriangle, CheckCircle, FileText, Download, Camera, User, Se
 import { EmptyState } from '@/src/components/common';
 import { getAuditLog } from '@/src/services/dashboardService';
 import type { AuditEntry } from '@/src/types/api';
+import { formatISTDateLong, formatISTTimeWithSeconds } from '@/src/utils/formatTime';
 
 const iconMap: Record<string, React.ElementType> = {
   session_started: User,
@@ -120,16 +121,36 @@ export default function AuditTrail() {
     return label;
   }
 
-  function getEntryDescription(entry: AuditEntry) {
-    let desc = `Performed by ${entry.actor_email} (${entry.actor_role})`;
-    if (entry.details) {
-      try {
-        const details = JSON.parse(entry.details);
-        desc += ` — ${JSON.stringify(details)}`;
-      } catch {
-        desc += ` — ${entry.details}`;
-      }
+  /** Render audit details as plain text instead of raw JSON — e.g.
+   *  {"worker_id":"worker-001","worker_name":"Asha Patel"} renders as
+   *  "Worker: Asha Patel (worker-001)". Unknown keys become "key: value". */
+  function formatDetails(raw: string | null): string {
+    if (!raw) return '';
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return raw;
     }
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const obj = parsed as Record<string, unknown>;
+      if (obj.worker_name || obj.worker_id) {
+        return `Worker: ${obj.worker_name || 'Unknown'} (${obj.worker_id || '—'})`;
+      }
+      const parts: string[] = [];
+      for (const [k, v] of Object.entries(obj)) {
+        if (v === null || v === undefined || v === '') continue;
+        parts.push(`${k.replace(/_/g, ' ')}: ${String(v)}`);
+      }
+      return parts.join(' · ');
+    }
+    return String(parsed);
+  }
+
+  function getEntryDescription(entry: AuditEntry) {
+    let desc = `Performed by ${entry.actor_email}`;
+    const details = formatDetails(entry.details);
+    if (details) desc += ` — ${details}`;
     return desc;
   }
 
@@ -141,7 +162,7 @@ export default function AuditTrail() {
           <div className="h-4 bg-surface-container-high rounded w-1/2 animate-pulse" />
         </div>
         <div className="flex items-center gap-md flex-wrap">
-          <div className="h-10 bg-surface-container-highest rounded-lg flex-1 min-w-[200px] max-w-md animate-pulse" />
+          <div className="h-10 bg-surface-container-highest rounded-lg flex-1 min-w-[200px] max-w-[28rem] animate-pulse" />
           <div className="h-10 bg-surface-container-highest rounded-lg w-32 animate-pulse" />
         </div>
         <div className="flex items-center gap-xs flex-wrap">
@@ -188,7 +209,7 @@ export default function AuditTrail() {
       </div>
 
       <div className="flex items-center gap-md flex-wrap">
-        <div className="relative flex-1 min-w-[200px] max-w-md">
+        <div className="relative flex-1 min-w-[200px] max-w-[28rem]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-on-surface-variant" />
           <input
             value={search}
@@ -242,7 +263,7 @@ export default function AuditTrail() {
                   <div className="flex items-center gap-md py-md">
                     <div className="h-px flex-1 bg-outline-variant/30" />
                     <span className="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant">
-                      {new Date(entry.timestamp).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' })}
+                      {formatISTDateLong(new Date(entry.timestamp))}
                     </span>
                     <div className="h-px flex-1 bg-outline-variant/30" />
                   </div>
@@ -260,7 +281,7 @@ export default function AuditTrail() {
                     <p className="text-body-sm text-on-surface-variant mt-0.5">{getEntryDescription(entry)}</p>
                     <div className="flex items-center gap-md mt-sm">
                       <Clock className="w-3 h-3 text-on-surface-variant" />
-                      <span className="text-[10px] font-label-mono text-on-surface-variant">{new Date(entry.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })}</span>
+                      <span className="text-[10px] font-label-mono text-on-surface-variant">{formatISTTimeWithSeconds(new Date(entry.timestamp))}</span>
                       <User className="w-3 h-3 text-on-surface-variant" />
                       <span className="text-[10px] font-label-mono text-on-surface-variant">{entry.actor_email}</span>
                     </div>

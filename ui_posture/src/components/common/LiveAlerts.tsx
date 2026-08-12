@@ -1,5 +1,6 @@
 import { X, AlertTriangle, TrendingUp, RefreshCw } from 'lucide-react';
 import type { Issue, RiskLevel } from '@/src/types/api';
+import { formatISTTime } from '@/src/utils/formatTime';
 
 type AlertSeverity = RiskLevel;
 
@@ -55,7 +56,7 @@ export function LiveAlerts({ issues, onClose }: LiveAlertsProps) {
                     </div>
                     <p className="text-[10px] text-on-surface-variant mt-0.5">{issue.detail}</p>
                     <p className="text-[9px] text-on-surface-variant mt-1 opacity-60">
-                      {new Date(issue.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}
+                      {formatISTTime(new Date(issue.timestamp))}
                     </p>
                   </div>
                 </div>

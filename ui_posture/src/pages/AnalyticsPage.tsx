@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
-import { BarChart3, TrendingUp, AlertTriangle, CheckCircle } from 'lucide-react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
-import { LoadingCard, ErrorCard, SectionHeader, EmptyState } from '@/src/components/common';
+import { BarChart3, TrendingUp, TrendingDown, AlertTriangle, CheckCircle } from 'lucide-react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from 'recharts';
+import { LoadingCard, ErrorCard, SectionHeader, EmptyState, PredictiveInsightsCard } from '@/src/components/common';
 import { getAnalytics } from '@/src/services/dashboardService';
+import { NeckTrunkTrendChart } from '@/src/components/charts/NeckTrunkTrendChart';
+import { chartTooltipStyle, chartTick, chartColors, riskLevelColor } from '@/src/components/charts/chartTheme';
 import type { AnalyticsResponse } from '@/src/types/api';
-
-const tooltipStyle = { background: '#1d2027', border: '1px solid #424754', borderRadius: '8px', fontSize: '12px', color: '#e1e2ec' };
 
 export default function AnalyticsPage() {
   const [analytics, setAnalytics] = useState<AnalyticsResponse | null>(null);
@@ -35,6 +35,13 @@ export default function AnalyticsPage() {
   const issueFreq = analytics?.issue_frequency ?? [];
   const neckTrunkTrend = analytics?.neck_trunk_trend ?? [];
 
+  // Sessions started this week vs the previous week (from real weekly data) —
+  // gives the Sessions card a genuine comparison, or nothing when unavailable.
+  const sessionsDelta =
+    weeklyRiskTrend.length >= 2
+      ? (weeklyRiskTrend[weeklyRiskTrend.length - 1].sessions ?? 0) - (weeklyRiskTrend[weeklyRiskTrend.length - 2].sessions ?? 0)
+      : null;
+
   return (
     <div className="p-lg space-y-lg pb-32">
       <div>
@@ -42,13 +49,24 @@ export default function AnalyticsPage() {
         <p className="text-body-sm text-on-surface-variant mt-xs">Comprehensive ergonomic data overview</p>
       </div>
 
+      {/* Predictive forecast for the most recent session (advisory) */}
+      <PredictiveInsightsCard mode="session" />
+
       <div className="grid grid-cols-1 md:grid-cols-4 gap-md">
         <div className="bg-surface-container border border-outline-variant rounded-xl p-md">
           <div className="flex items-center justify-between mb-sm"><span className="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest">Avg Risk Score</span><BarChart3 className="w-5 h-5 text-primary" /></div>
           <span className="text-display-lg font-bold text-on-surface">{summary ? `${summary.avg_risk_score.toFixed(1)}` : '—'}</span>
         </div>
         <div className="bg-surface-container border border-outline-variant rounded-xl p-md">
-          <div className="flex items-center justify-between mb-sm"><span className="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest">Sessions</span><TrendingUp className="w-5 h-5 text-primary" /></div>
+          <div className="flex items-center justify-between mb-sm">
+            <span className="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest">Sessions</span>
+            {sessionsDelta !== null && sessionsDelta !== 0 ? (
+              <span className={`flex items-center gap-1 text-[11px] font-bold ${sessionsDelta > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {sessionsDelta > 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
+                {sessionsDelta > 0 ? '+' : ''}{sessionsDelta} vs last week
+              </span>
+            ) : null}
+          </div>
           <span className="text-display-lg font-bold text-on-surface">{summary?.total_sessions || '—'}</span>
         </div>
         <div className="bg-surface-container border border-orange-500/30 rounded-xl p-md">
@@ -68,10 +86,11 @@ export default function AnalyticsPage() {
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={weeklyRiskTrend}>
-                  <XAxis dataKey="week" tick={{ fill: '#8c909f', fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: '#8c909f', fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="averageRisk" fill="#4d8eff" radius={[4, 4, 0, 0]} />
+                  <XAxis dataKey="week" tick={chartTick} axisLine={false} tickLine={false} />
+                  <YAxis tick={chartTick} axisLine={false} tickLine={false} />
+                  {/* Explicit cursor keeps hover from flashing the default gray rectangle */}
+                  <Tooltip contentStyle={chartTooltipStyle} cursor={{ fill: 'rgba(77, 142, 255, 0.12)' }} />
+                  <Bar dataKey="averageRisk" name="Average Risk" fill={chartColors.blue} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -85,9 +104,9 @@ export default function AnalyticsPage() {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie data={distData} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                    {distData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                    {distData.map((entry, i) => <Cell key={i} fill={riskLevelColor(entry.name)} />)}
                   </Pie>
-                  <Tooltip contentStyle={tooltipStyle} />
+                  <Tooltip contentStyle={chartTooltipStyle} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -100,10 +119,10 @@ export default function AnalyticsPage() {
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={issueFreq} layout="vertical">
-                  <XAxis type="number" tick={{ fill: '#8c909f', fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <YAxis dataKey="name" type="category" tick={{ fill: '#8c909f', fontSize: 10 }} axisLine={false} tickLine={false} width={100} />
-                  <Tooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="count" fill="#f97316" radius={[0, 4, 4, 0]} />
+                  <XAxis type="number" tick={chartTick} axisLine={false} tickLine={false} />
+                  <YAxis dataKey="name" type="category" tick={chartTick} axisLine={false} tickLine={false} width={100} />
+                  <Tooltip contentStyle={chartTooltipStyle} />
+                  <Bar dataKey="count" name="Occurrences" fill={chartColors.orange} radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -114,19 +133,7 @@ export default function AnalyticsPage() {
           <SectionHeader title="Neck & Trunk Trend" />
           {loading ? <LoadingCard height="h-64" /> : neckTrunkTrend.length === 0 ? <EmptyState message="No trend data available" /> : (
             <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={neckTrunkTrend}>
-                  <defs>
-                    <linearGradient id="neckGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4d8eff" stopOpacity={0.3} /><stop offset="100%" stopColor="#4d8eff" stopOpacity={0} /></linearGradient>
-                    <linearGradient id="trunkGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f97316" stopOpacity={0.3} /><stop offset="100%" stopColor="#f97316" stopOpacity={0} /></linearGradient>
-                  </defs>
-                  <XAxis dataKey="week" tick={{ fill: '#8c909f', fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fill: '#8c909f', fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <Tooltip contentStyle={tooltipStyle} />
-                  <Area type="monotone" dataKey="neck" name="Neck" stroke="#4d8eff" strokeWidth={2} fill="url(#neckGrad)" />
-                  <Area type="monotone" dataKey="trunk" name="Trunk" stroke="#f97316" strokeWidth={2} fill="url(#trunkGrad)" />
-                </AreaChart>
-              </ResponsiveContainer>
+              <NeckTrunkTrendChart data={neckTrunkTrend} />
             </div>
           )}
         </div>

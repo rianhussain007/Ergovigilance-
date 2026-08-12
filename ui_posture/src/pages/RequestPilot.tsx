@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router';
 import { ChevronRight } from 'lucide-react';
+import { IndustrialBackdrop } from '@/src/components/common';
 
 export default function RequestPilot() {
   const [formData, setFormData] = useState({
@@ -57,7 +58,9 @@ export default function RequestPilot() {
   if (submitted) {
     return (
       <div className="min-h-screen bg-surface text-on-surface flex items-center justify-center px-8">
-        <div className="max-w-3xl w-full bg-surface-container border border-outline-variant rounded-xl p-12 text-center">
+        {/* Industrial backdrop — shared with every public page */}
+        <IndustrialBackdrop accentLine />
+        <div className="relative max-w-3xl w-full bg-surface-container border border-outline-variant rounded-xl p-12 text-center animate-fade-in">
           <h2 className="text-4xl font-bold mb-8">Thank You!</h2>
           <p className="text-xl text-on-surface-variant mb-12 leading-relaxed">
             Your pilot request has been submitted successfully. We will contact you shortly.
@@ -72,6 +75,8 @@ export default function RequestPilot() {
 
   return (
     <div className="min-h-screen bg-surface text-on-surface">
+      {/* Industrial backdrop — shared with every public page */}
+      <IndustrialBackdrop accentLine />
       <nav className="sticky top-0 z-50 bg-surface/80 backdrop-blur-lg border-b border-outline-variant">
         <div className="max-w-6xl mx-auto px-lg py-md flex items-center justify-between">
           <Link to="/" className="flex items-center gap-sm">
@@ -187,6 +192,10 @@ export default function RequestPilot() {
             </button>
           </div>
         </form>
+
+        <p className="mt-12 text-center text-[11px] text-on-surface-variant/80">
+          Heuristic risk thresholds · Not a medical device · Video never leaves your building
+        </p>
       </div>
     </div>
   );

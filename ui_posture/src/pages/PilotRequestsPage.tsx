@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { apiFetch } from '@/src/services/apiClient';
 import { useAuth } from '@/src/auth/AuthContext';
 import { Navigate } from 'react-router';
+import { formatISTFull } from '@/src/utils/formatTime';
 
 interface PilotRequest {
   id: number;
@@ -73,7 +74,7 @@ export default function PilotRequestsPage() {
                 <div className="text-right">
                   <span className="text-body-sm font-medium text-primary">{req.role}</span>
                   <p className="text-xs text-on-surface-variant mt-xs">
-                    {new Date(req.created_at).toLocaleString()}
+                    {formatISTFull(new Date(req.created_at))}
                   </p>
                 </div>
               </div>

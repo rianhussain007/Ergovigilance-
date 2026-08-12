@@ -16,13 +16,16 @@ export interface UseDashboardReturn {
 
 /**
  * Default hook — reads from the real API.
- * Pages that need demo support should use useDashboardWithDemo instead.
  *
  * Dashboard data polls at settings.refreshInterval.
  * Sessions load once on mount and only refetch on explicit action (refetchSessions).
  * This avoids scanning 140 session files on every poll cycle.
+ *
+ * Pass enabled=false to skip the fetch, poll, and WebSocket entirely —
+ * prevents duplicate polls/sockets per page from Layout + page subscribing
+ * independently.
  */
-export function useDashboard(): UseDashboardReturn {
+export function useDashboard(enabled: boolean = true): UseDashboardReturn {
   const { settings } = useSettings();
   const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
   const [sessions, setSessions] = useState<SessionRecord[]>([]);
@@ -30,7 +33,7 @@ export function useDashboard(): UseDashboardReturn {
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
   const sessionsLoadedRef = useRef(false);
-  const { data: wsData } = useDashboardWS();
+  const { data: wsData } = useDashboardWS(enabled);
 
   const fetchDashboard = useCallback(async () => {
     if (!getStoredToken()) {
@@ -94,6 +97,10 @@ export function useDashboard(): UseDashboardReturn {
   }, [wsData]);
 
   useEffect(() => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
     mountedRef.current = true;
     // Load dashboard immediately, sessions once
     fetchDashboard();
@@ -106,7 +113,7 @@ export function useDashboard(): UseDashboardReturn {
       mountedRef.current = false;
       clearInterval(interval);
     };
-  }, [fetchDashboard, fetchSessions, settings.refreshInterval]);
+  }, [fetchDashboard, fetchSessions, settings.refreshInterval, enabled]);
 
   return {
     dashboard,

@@ -10,6 +10,13 @@ interface ExportsCenterProps {
   dashboard?: DashboardResponse | null;
 }
 
+// Standard limitation disclosure appended to every exported artifact (CSV/JSON/
+// email/share). Heuristic thresholds are not clinically validated.
+const EXPORT_DISCLAIMER =
+  'ErgoVigilance export — heuristic posture-risk thresholds, not clinically validated. ' +
+  'Screening and awareness tool only; not a medical device; not a professional ergonomic assessment. ' +
+  'Risk scores are estimates for prioritization and do not establish causation of injury.';
+
 export function ExportsCenter({ onClose, timeline, dashboard }: ExportsCenterProps) {
   const { addToast } = useToast();
   const [exporting, setExporting] = useState<string | null>(null);
@@ -35,7 +42,7 @@ export function ExportsCenter({ onClose, timeline, dashboard }: ExportsCenterPro
       const vals = featureKeys.map((k) => e.features[k] ?? '');
       return [e.timestamp, e.risk_score, e.risk_level, e.confidence, ...vals].join(',');
     });
-    const csv = [headers.join(','), ...rows].join('\n');
+    const csv = ['# ' + EXPORT_DISCLAIMER.replace(/\s+/g, ' ').trim(), headers.join(','), ...rows].join('\n');
     downloadBlob(csv, `export-${Date.now()}.csv`, 'text/csv');
     addToast('success', 'CSV exported', `${timeline.length} rows`);
   };
@@ -49,6 +56,7 @@ export function ExportsCenter({ onClose, timeline, dashboard }: ExportsCenterPro
       exportedAt: new Date().toISOString(),
       sessionId: dashboard?.session?.id || null,
       workerName: dashboard?.session?.workerName || null,
+      _disclaimer: EXPORT_DISCLAIMER,
       entries: timeline,
     };
     const json = JSON.stringify(payload, null, 2);
@@ -100,6 +108,8 @@ export function ExportsCenter({ onClose, timeline, dashboard }: ExportsCenterPro
         `Timeline entries: ${entries}`,
         `High-risk readings: ${highRisk}`,
         '',
+        EXPORT_DISCLAIMER,
+        '',
         'Full data is available in the ErgoVigilance dashboard.',
       ].join('\n'),
     };
@@ -121,6 +131,7 @@ export function ExportsCenter({ onClose, timeline, dashboard }: ExportsCenterPro
       exportedAt: new Date().toISOString(),
       sessionId: dashboard?.session?.id || null,
       workerName: dashboard?.session?.workerName || null,
+      _disclaimer: EXPORT_DISCLAIMER,
       entries: timeline,
     };
     const json = JSON.stringify(payload, null, 2);
@@ -179,6 +190,12 @@ export function ExportsCenter({ onClose, timeline, dashboard }: ExportsCenterPro
           </button>
         )}
       </div>
+      {(!timeline || timeline.length === 0) && (
+        <div className="mb-md rounded-lg border border-amber-500/30 bg-amber-500/10 px-md py-sm">
+          <p className="text-body-sm font-medium text-amber-400">No session data yet</p>
+          <p className="text-[11px] text-amber-400/80 mt-0.5">Start monitoring first — exports need live session data.</p>
+        </div>
+      )}
       <div className="space-y-sm">
         <ExportButton
           icon={FileDown}

@@ -1,5 +1,29 @@
 import { useState } from 'react';
-import type { ExecutiveDashboardData } from '@/src/demo/types';
+interface WeeklyTrend { week: string; averageRisk: number; sessions: number; alerts?: number }
+interface DepartmentData { name: string; risk: number; fatigue: number; compliance: number }
+interface TopIssue { name: string; count: number; severity: string }
+
+export interface ExecutiveDashboardData {
+  safetyScore: number;
+  workersMonitored: number;
+  highRiskWorkers: number;
+  mediumRiskWorkers: number;
+  lowRiskWorkers: number;
+  activeCameras: number;
+  currentSessions: number;
+  weeklyTrends: WeeklyTrend[];
+  departments: DepartmentData[];
+  topIssues: TopIssue[];
+  executiveSummary: string;
+  recommendedActions: string[];
+  overallSafety: number;
+  compliance: number;
+  productivity: number;
+  cameraAvailability: number;
+  systemHealth: number;
+  avgRisk: number;
+  avgFatigue: number;
+}
 
 interface ExecutiveDashboardCardProps {
   data: ExecutiveDashboardData;
@@ -9,11 +33,11 @@ function SafetyGauge({ score }: { score: number }) {
   const r = 48;
   const circ = 2 * Math.PI * r;
   const offset = circ * (1 - score / 100);
-  const color = score >= 80 ? '#22c55e' : score >= 65 ? '#f97316' : '#ef4444';
+  const color = score >= 80 ? 'var(--color-chart-green)' : score >= 65 ? 'var(--color-chart-orange)' : 'var(--color-chart-red)';
   return (
     <div className="relative inline-flex items-center justify-center">
       <svg width="120" height="120" viewBox="0 0 120 120">
-        <circle cx="60" cy="60" r={r} fill="none" stroke="oklch(0.279 0.041 260.031)" strokeWidth="8" />
+        <circle cx="60" cy="60" r={r} fill="none" stroke="var(--color-outline-variant)" strokeWidth="8" />
         <circle cx="60" cy="60" r={r} fill="none" stroke={color} strokeWidth="8"
           strokeDasharray={circ} strokeDashoffset={offset}
           strokeLinecap="round" transform="rotate(-90 60 60)" style={{ transition: 'stroke-dashoffset 0.6s ease, stroke 0.3s ease' }} />
@@ -199,7 +223,7 @@ export default function ExecutiveDashboardCard({ data }: ExecutiveDashboardCardP
       {/* Architecture Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowModal(false)}>
-          <div className="bg-surface-container w-full max-w-lg mx-lg rounded-xl border border-outline-variant shadow-2xl p-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-surface-container w-full max-w-[32rem] mx-lg rounded-xl border border-outline-variant shadow-2xl p-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
 
             <div className="flex items-center justify-between mb-md">
               <h2 className="text-body-sm font-bold text-on-surface">Project Architecture</h2>

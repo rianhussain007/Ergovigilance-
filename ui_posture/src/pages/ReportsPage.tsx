@@ -6,7 +6,16 @@ import { EmptyState, SectionHeader, LoadingCard } from '@/src/components/common'
 import { getReports, getSessionDetail, getRiskTrend, getSafetyReport, getWorkerTrends } from '@/src/services/dashboardService';
 import { apiFetch } from '@/src/services/apiClient';
 import { getStoredToken } from '@/src/auth/AuthContext';
+import { normalizeReportId } from '@/src/utils/sessionId';
+import { formatISTFull, formatISTDate } from '@/src/utils/formatTime';
 import type { ReportRecord, SessionDetail, RiskTrendResponse, SafetyReportResponse, WorkerTrendsResponse, WorkerRecord } from '@/src/types/api';
+
+// Standard limitation disclosure appended to every exported artifact. Heuristic
+// thresholds are not clinically validated; screening aid, not a medical device.
+const EXPORT_DISCLAIMER =
+  'ErgoVigilance export — heuristic posture-risk thresholds, not clinically validated. ' +
+  'Screening and awareness tool only; not a medical device; not a professional ergonomic assessment. ' +
+  'Risk scores are estimates for prioritization and do not establish causation of injury.';
 
 const TYPE_CONFIG: Record<string, { icon: typeof Shield; color: string; label: string }> = {
   safety: { icon: Shield, color: 'text-red-400', label: 'Safety' },
@@ -36,15 +45,27 @@ function formatTimestamp(iso: string): string {
   if (!iso) return '—';
   try {
     const d = new Date(iso);
-    return d.toLocaleString();
+    return formatISTFull(d);
   } catch {
     return iso;
   }
 }
 
+const PAGE_SIZE = 20;
+
+/** Report titles are "<Type> Report — <session id>" — show only the type. */
+function reportDisplayTitle(title: string): string {
+  const typePart = title.split(' — ')[0];
+  return typePart.trim() || title;
+}
+
 export default function ReportsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [page, setPage] = useState(1);
   const [reports, setReports] = useState<ReportRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -173,7 +194,22 @@ export default function ReportsPage() {
     downloadPdf(`/api/reports/session/${sessionId}/pdf`, `session-report-${tsPart}.pdf`, addToast);
   };
 
-  const filtered = reports.filter((r) => r.title.toLowerCase().includes(search.toLowerCase()));
+  const filtered = reports.filter((r) => {
+    if (search.trim() && !r.title.toLowerCase().includes(search.toLowerCase())) return false;
+    if (typeFilter !== 'all' && r.type !== typeFilter) return false;
+    if (dateFrom && r.date < dateFrom) return false;
+    if (dateTo && r.date > dateTo) return false;
+    return true;
+  });
+
+  // Reset to the first page whenever the visible set changes.
+  useEffect(() => { setPage(1); }, [search, typeFilter, dateFrom, dateTo]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const shownStart = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const shownEnd = Math.min(safePage * PAGE_SIZE, filtered.length);
 
   if (safetyReportData) {
     return <SafetyReportView data={safetyReportData} onBack={handleBackFromSafety} addToast={addToast} />;
@@ -242,9 +278,34 @@ export default function ReportsPage() {
 
       <section>
         <SectionHeader title="Session Reports" />
-        <div className="mb-md flex h-8 w-full max-w-[340px] items-center gap-md rounded-lg border border-outline-variant bg-surface-container-high px-md">
-          <Search className="w-4 h-4 shrink-0 text-on-surface-variant/60" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search reports..." className="h-full min-w-0 flex-1 bg-transparent text-body-sm text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none" />
+
+        <div className="mb-md flex flex-wrap items-center gap-md">
+          <div className="flex h-8 w-full max-w-[340px] items-center gap-md rounded-lg border border-outline-variant bg-surface-container-high px-md">
+            <Search className="w-4 h-4 shrink-0 text-on-surface-variant/60" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search reports..." className="h-full min-w-0 flex-1 bg-transparent text-body-sm text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none" />
+          </div>
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="h-8 px-md bg-surface-container border border-outline-variant rounded-lg text-body-sm text-on-surface focus:outline-none"
+          >
+            <option value="all">All report types</option>
+            <option value="safety">Safety</option>
+            <option value="session">Session</option>
+            <option value="summary">Summary</option>
+          </select>
+          <label className="flex items-center gap-sm text-[11px] text-on-surface-variant">
+            From
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-8 px-md bg-surface-container border border-outline-variant rounded-lg text-body-sm text-on-surface focus:outline-none" />
+          </label>
+          <label className="flex items-center gap-sm text-[11px] text-on-surface-variant">
+            To
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-8 px-md bg-surface-container border border-outline-variant rounded-lg text-body-sm text-on-surface focus:outline-none" />
+          </label>
+        </div>
+
+        <div className="mb-md text-[11px] text-on-surface-variant">
+          {filtered.length} report{filtered.length === 1 ? '' : 's'} available
         </div>
 
         {loading ? (
@@ -254,35 +315,62 @@ export default function ReportsPage() {
         ) : filtered.length === 0 ? (
           <EmptyState title="No reports found" message="Run a monitoring session to generate reports." />
         ) : (
-          <div className="space-y-sm">
-            {filtered.map((r) => {
-              const cfg = TYPE_CONFIG[r.type] || TYPE_CONFIG.summary;
-              const Icon = cfg.icon;
-              return (
-                <button
-                  key={r.id}
-                  onClick={() => handleViewReport(r)}
-                  disabled={selectedId === r.id && loadingDetail}
-                  className="w-full bg-surface-container border border-outline-variant rounded-lg p-md flex items-center gap-md hover:border-primary/30 transition-colors group text-left"
-                >
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                    <Icon className={`w-5 h-5 ${cfg.color}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-body-sm font-medium text-on-surface">{r.title}</p>
-                    <div className="flex items-center gap-md mt-0.5">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-primary">{cfg.label}</span>
-                      <span className="flex items-center gap-xs text-[10px] text-on-surface-variant"><Clock className="w-3 h-3" />{r.date}</span>
-                      <span className="text-[10px] text-on-surface-variant">{r.size}</span>
+          <>
+            <div className="space-y-sm">
+              {paged.map((r) => {
+                const cfg = TYPE_CONFIG[r.type] || TYPE_CONFIG.summary;
+                const Icon = cfg.icon;
+                return (
+                  <button
+                    key={r.id}
+                    onClick={() => handleViewReport(r)}
+                    disabled={selectedId === r.id && loadingDetail}
+                    className="w-full bg-surface-container border border-outline-variant rounded-lg p-md flex items-center gap-md hover:border-primary/30 transition-colors group text-left"
+                  >
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <Icon className={`w-5 h-5 ${cfg.color}`} />
                     </div>
-                  </div>
-                  <span className="text-[10px] text-on-surface-variant/60 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {selectedId === r.id && loadingDetail ? 'Loading...' : 'View →'}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-body-sm font-medium text-on-surface">{reportDisplayTitle(r.title)}</p>
+                      <div className="flex flex-wrap items-center gap-md mt-0.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-primary">{cfg.label}</span>
+                        <span className="flex items-center gap-xs text-[10px] text-on-surface-variant"><Clock className="w-3 h-3" />{r.date}</span>
+                        <span className="font-label-mono text-[10px] text-on-surface-variant/70" title={r.id}>{normalizeReportId(r.id)}</span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] text-on-surface-variant/60 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      {selectedId === r.id && loadingDetail ? 'Loading...' : 'View →'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {filtered.length > PAGE_SIZE && (
+              <div className="mt-md flex flex-wrap items-center justify-between gap-md">
+                <span className="text-[11px] text-on-surface-variant">
+                  Showing {shownStart}–{shownEnd} of {filtered.length}
+                </span>
+                <div className="flex items-center gap-sm">
+                  <button
+                    disabled={safePage <= 1}
+                    onClick={() => setPage(safePage - 1)}
+                    className="px-md py-sm rounded-lg border border-outline-variant bg-surface-container text-body-sm text-on-surface-variant hover:text-on-surface transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    ← Prev
+                  </button>
+                  <span className="text-[11px] text-on-surface-variant">Page {safePage} of {pageCount}</span>
+                  <button
+                    disabled={safePage >= pageCount}
+                    onClick={() => setPage(safePage + 1)}
+                    className="px-md py-sm rounded-lg border border-outline-variant bg-surface-container text-body-sm text-on-surface-variant hover:text-on-surface transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </section>
     </div>
@@ -308,6 +396,8 @@ function ReportView({ detail, onBack, onPrint, addToast }: { detail: SessionDeta
 
   const handleExportCsv = () => {
     const rows: string[] = [];
+    rows.push('# ' + EXPORT_DISCLAIMER.replace(/\s+/g, ' ').trim());
+    rows.push('');
     rows.push('Field,Value');
     rows.push(`Session ID,${detail.id}`);
     rows.push(`Session Timestamp,${detail.session_timestamp}`);
@@ -340,7 +430,8 @@ function ReportView({ detail, onBack, onPrint, addToast }: { detail: SessionDeta
   };
 
   const handleExportJson = () => {
-    const blob = new Blob([JSON.stringify(detail, null, 2)], { type: 'application/json' });
+    const payload = { _disclaimer: EXPORT_DISCLAIMER, ...detail };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -364,7 +455,7 @@ function ReportView({ detail, onBack, onPrint, addToast }: { detail: SessionDeta
 
       <div className="print-only mb-4">
         <h1 className="text-2xl font-bold">ErgoVigilance — Session Report</h1>
-        <p className="text-sm text-gray-500">Generated {new Date().toLocaleString()}</p>
+        <p className="text-sm text-gray-500">Generated {formatISTFull(new Date())}</p>
       </div>
 
       {/* Controls */}
@@ -432,7 +523,7 @@ function ReportView({ detail, onBack, onPrint, addToast }: { detail: SessionDeta
             <p className="font-medium text-on-surface mt-0.5">—</p>
           </div>
         </div>
-        {!hasWorkerData && <p className="text-[10px] text-on-surface-variant/50">* Placeholder — no worker database connected</p>}
+        {!hasWorkerData && <p className="text-[10px] text-on-surface-variant/50">* Worker data will appear once sessions are assigned to workers</p>}
       </section>
 
       {/* Risk Breakdown */}

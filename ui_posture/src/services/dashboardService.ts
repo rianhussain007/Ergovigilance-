@@ -47,6 +47,34 @@ export async function startVideoAnalysis(file: File): Promise<import('@/src/type
   return res.json();
 }
 
+export async function startRecordingAnalysis(sessionId: string): Promise<import('@/src/types/api').VideoAnalysisJobStart> {
+  const res = await apiFetch(`/api/video/analyze/recording/${encodeURIComponent(sessionId)}`, {
+    method: 'POST',
+  });
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({ detail: `Recording analysis failed: ${res.status}` }));
+    throw new Error(payload.detail || `Recording analysis failed: ${res.status}`);
+  }
+  return res.json();
+}
+
+export async function downloadVideoWithOverlay(jobId: string, filename: string): Promise<void> {
+  const res = await apiFetch(`/api/video/analyze/${encodeURIComponent(jobId)}/download`);
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({ detail: `Download failed: ${res.status}` }));
+    throw new Error(payload.detail || `Download failed: ${res.status}`);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export async function getVideoAnalysisJob(jobId: string): Promise<import('@/src/types/api').VideoAnalysisJob> {
   const res = await apiFetch(`/api/video/analyze/${encodeURIComponent(jobId)}`);
   if (res.status === 404) {

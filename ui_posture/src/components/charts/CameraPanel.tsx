@@ -20,10 +20,10 @@ export function CameraPanel({ status, workerName, task, onCaptureReady }: Camera
   const [fullscreen, setFullscreen] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
   const [retryKey, setRetryKey] = useState(0);
+  const [streamKey, setStreamKey] = useState(0);
   const imgRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const stallTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const frameCountRef = useRef<number>(0);
   const { addToast } = useToast();
   const isActive = status === 'active';
@@ -35,16 +35,31 @@ export function CameraPanel({ status, workerName, task, onCaptureReady }: Camera
     return () => clearInterval(interval);
   }, [isActive]);
 
-  // Reset stream state when session starts/stops or overlay changes.
+  // Reset stream state when session starts/stops. Bump the stream key so the
+  // <img> remounts fresh — otherwise React keeps the already-loaded DOM node
+  // (same key + same src), the `load` event never fires again, and
+  // streamReady stays false, leaving "Waiting for camera…" over a live feed.
   useEffect(() => {
     setStreamLoading(true);
     setStreamError(false);
     setStreamReady(false);
     frameCountRef.current = 0;
-    setRetryKey((k) => k + 1);
-  }, [isActive, showOverlay]);
+    if (isActive) {
+      setStreamKey((k) => k + 1);
+    }
+  }, [isActive]);
 
-  // Retry when stream breaks (with exponential back-off, max 5 retries).
+  // Remount the stream only on error retries — NOT on overlay toggle
+  // (the img naturally re-fetches when the src URL changes).
+
+  // Retry when the stream errors (with exponential back-off, max 5 retries).
+  // Note: Chromium fires the img `load` event only once per multipart MJPEG
+  // stream (not per frame), so liveness is *not* inferred from repeated load
+  // events — a stale-frame watchdog that unmounts the feed would kill a
+  // perfectly healthy stream every few seconds. Real failures surface as
+  // `error` events (network drop, HTTP error) and are handled here; a frozen
+  // stream keeps its last frame visible, which is far better UX than a
+  // "Waiting for camera…" placeholder over a live session.
   useEffect(() => {
     if (!streamError || !isActive) return;
     const attempt = retryKey;
@@ -57,25 +72,10 @@ export function CameraPanel({ status, workerName, task, onCaptureReady }: Camera
       setStreamError(false);
       setStreamLoading(true);
       setRetryKey((k) => k + 1);
+      setStreamKey((k) => k + 1);
     }, delay);
     return () => clearTimeout(retryTimerRef.current);
   }, [streamError, isActive, retryKey]);
-
-  // Stall detection: if the img fires onLoad but no new frames arrive for 4s,
-  // the MJPEG stream has stalled — force a reconnect.
-  useEffect(() => {
-    if (!streamReady || !isActive) {
-      clearTimeout(stallTimerRef.current);
-      return;
-    }
-    stallTimerRef.current = setTimeout(() => {
-      // Stream loaded but hasn't updated in 4 s — treat as stalled.
-      setStreamReady(false);
-      setStreamError(true);
-      setStreamLoading(true);
-    }, 4000);
-    return () => clearTimeout(stallTimerRef.current);
-  }, [streamReady, isActive, retryKey]);
 
   useEffect(() => {
     const onFsChange = () => setFullscreen(!!document.fullscreenElement);
@@ -121,15 +121,19 @@ export function CameraPanel({ status, workerName, task, onCaptureReady }: Camera
     onCaptureReady?.(handleCapture);
   }, [handleCapture, onCaptureReady]);
 
-  const showStream = isActive && !streamError;
-  const showPlaceholder = !isActive || streamError || (!streamReady && streamLoading);
+  // Keep the <img> mounted for the whole session so the last good frame stays
+  // visible; only show the placeholder when the stream has never produced a
+  // frame (or no session is active).
+  const showImg = isActive;
+  const showPlaceholder = !isActive || (streamLoading && !streamReady);
+  const showReconnecting = isActive && streamError && frameCountRef.current > 0;
 
   const handleManualRetry = useCallback(() => {
     setStreamError(false);
     setStreamLoading(true);
     setStreamReady(false);
     frameCountRef.current = 0;
-    setRetryKey((k) => k + 1);
+    setStreamKey((k) => k + 1);
   }, []);
   const streamToken = getStoredToken();
   const overlayParam = showOverlay ? 'overlay=true' : 'overlay=false';
@@ -180,17 +184,17 @@ export function CameraPanel({ status, workerName, task, onCaptureReady }: Camera
           <span className="text-on-surface-variant">{fps.toFixed(1)}</span>
           <span className="text-[8px] text-on-surface-variant">FPS</span>
         </div>
-        <div className={`flex items-center gap-xs px-md py-sm rounded backdrop-blur-md border font-label-mono text-label-mono ${isActive ? 'bg-green-500/10 border-green-400/35 text-green-300' : 'bg-red-500/10 border-red-500/30 text-red-400'}`}>
-          <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`} />
-          LIVE
+        <div className={`flex items-center gap-xs px-md py-sm rounded backdrop-blur-md border font-label-mono text-label-mono ${isActive ? 'bg-green-500/10 border-green-400/35 text-green-300' : 'bg-surface-container-high border-outline-variant text-on-surface-variant'}`}>
+          <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-green-400 animate-pulse' : 'bg-outline'}`} />
+          {isActive ? 'LIVE' : 'Not monitoring'}
         </div>
       </div>
 
       <div className="w-full aspect-video bg-black flex items-center justify-center relative overflow-hidden">
-        {showStream && (
+        {showImg && (
           <img
             ref={imgRef}
-            key={retryKey}
+            key={streamKey}
             src={streamSrc}
             alt="Live camera feed"
             className="absolute inset-0 w-full h-full object-cover contrast-[1.08] saturate-[0.95]"
@@ -199,21 +203,18 @@ export function CameraPanel({ status, workerName, task, onCaptureReady }: Camera
               setStreamLoading(false);
               setStreamReady(true);
               setStreamError(false);
-              // Reset stall timer on each successful load
-              clearTimeout(stallTimerRef.current);
-              stallTimerRef.current = setTimeout(() => {
-                setStreamReady(false);
-                setStreamError(true);
-                setStreamLoading(true);
-              }, 4000);
             }}
             onError={() => {
-              // Only set error if this is a real failure (not a stale 503 from
-              // before the session started). The retry logic will handle recovery.
               setStreamError(true);
               setStreamLoading(false);
             }}
           />
+        )}
+        {showReconnecting && (
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 flex items-center gap-xs px-md py-sm rounded bg-black/70 backdrop-blur-md border border-amber-400/30 text-amber-200 text-[11px] font-medium uppercase tracking-wider">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            Reconnecting…
+          </div>
         )}
         <div className="absolute inset-x-0 bottom-0 z-10 h-24 pointer-events-none bg-gradient-to-t from-black/70 via-black/15 to-transparent" />          {showPlaceholder && (
           <div className="relative z-10 flex flex-col items-center gap-md text-on-surface-variant">
@@ -232,7 +233,10 @@ export function CameraPanel({ status, workerName, task, onCaptureReady }: Camera
                 )}
               </>
             ) : (
-              <span className="text-body-sm">Camera Offline</span>
+              <>
+                <span className="text-body-sm">Camera not in use</span>
+                <span className="text-[11px] text-on-surface-variant/70">Start monitoring to connect the camera</span>
+              </>
             )}
           </div>
         )}

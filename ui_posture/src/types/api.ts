@@ -24,6 +24,7 @@ export interface LiveStatus {
   riskScore: number;
   confidence: number;
   currentTask: string;
+  taskConfidence?: number;
   taskDurationSeconds: number;
   workerStatus: string;
 }
@@ -190,6 +191,10 @@ export interface SessionRecord {
   date: string;
   duration: string;
   highestRisk: string;
+  highest_risk_level?: string;
+  // Dominant (plurality) risk level across the session's frames — what the
+  // list/calendar display. Falls back to the peak when absent.
+  risk_level?: string;
   task: string;
   status: StatusType;
   worker_id?: string | null;
@@ -238,6 +243,7 @@ export interface SessionDetail {
   most_frequent_issue: string | null;
   most_frequent_issue_count: number;
   highest_risk_level: string;
+  risk_level?: string;
   highest_risk_timestamp: string | null;
   avg_neck_flexion: number;
   avg_trunk_flexion: number;
@@ -405,12 +411,27 @@ export interface ContextSnapshot {
   feature_scores: Record<string, number>;
   rula_informed_score?: number;
   rula_is_partial?: boolean;
+  assessment_method?: string | null;
+  assessment_score?: number | null;
+  assessment_band?: string | null;
   calibrated_band?: string | null;
   calibrated_confidence?: number | null;
   calibrated_agrees?: boolean | null;
   unavailable_features?: string[];
   approximate_features?: string[];
   lower_body_confidence?: number;
+  // Tier 3 framing intelligence + person count
+  framing?: {
+    framing_state?: string;
+    profile_view?: boolean;
+    cropped_edges?: string[];
+    occluded_joints?: string[];
+    guidance?: string[];
+    quality_score?: number;
+    joint_uncertainty?: Record<string, number>;
+    detail?: string;
+  };
+  person_count?: number;
 }
 
 export interface AlertData {
@@ -507,6 +528,8 @@ export interface VideoAnalysisFrame {
   unavailable_features: string[];
   lower_body_confidence: number;
   keypoints: number[][]; // [[x, y, z, visibility], x/y 0-1]
+  // Worst risk band per body region (head/torso/left_arm/right_arm/left_leg/right_leg)
+  region_risks: Record<string, string>;
 }
 
 export interface VideoAnalysisSummary {
@@ -559,6 +582,11 @@ export interface TimelineEntry {
   task_duration_seconds: number;
   recommendations: { id: string; title: string; category: string; priority: string }[];
   alerts: { id: string; severity: string; title: string; message: string; trigger_rule: string }[];
+  // Tier 3 framing intelligence + person count (optional for legacy entries)
+  framing_state?: string;
+  framing_guidance?: string[];
+  framing_quality?: number;
+  person_count?: number;
 }
 
 export interface RecordingSummary {
@@ -592,6 +620,7 @@ export interface RecordingListItem {
   duration_seconds: number;
   total_frames: number;
   highest_risk_level: string;
+  risk_level?: string;
   risk_percentages: Record<string, number>;
   has_video: boolean;
   has_timeline: boolean;

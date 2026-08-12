@@ -17,7 +17,6 @@ import {
   Lightbulb,
   Server,
   ShieldAlert,
-  Sparkles,
   TrendingUp,
   TrendingDown,
   Minus,
@@ -25,10 +24,11 @@ import {
   Users,
   Zap,
 } from 'lucide-react';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
-import { useDashboardWithDemo } from '@/src/hooks/useDashboardWithDemo';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from 'recharts';
+import { NeckTrunkTrendChart } from '@/src/components/charts/NeckTrunkTrendChart';
+import { chartTooltipStyle, chartTick, chartColors, riskLevelColor } from '@/src/components/charts/chartTheme';
+import { useDashboard } from '@/src/hooks/useDashboard';
 import { useContextSnapshot } from '@/src/hooks/useContextSnapshot';
-import { apiFetch } from '@/src/services/apiClient';
 import { useAlerts } from '@/src/hooks/useAlerts';
 import { useRecommendations } from '@/src/hooks/useRecommendations';
 import { useAuth } from '@/src/auth/AuthContext';
@@ -39,6 +39,7 @@ import {
   getSupervisorDashboardSummary,
 } from '@/src/services/dashboardService';
 import { EmptyState, ErrorCard, LoadingCard, SectionHeader } from '@/src/components/common';
+import { formatISTSessionLabel } from '@/src/utils/formatTime';
 import type {
   AdminDashboardSummary,
   AnalyticsResponse,
@@ -53,7 +54,7 @@ const elevatedRoles = new Set(['supervisor', 'safety_mgr', 'admin']);
 
 export default function DashboardPage() {
   const { user } = useAuth();
-  const { dashboard, sessions, loading, error, refetch } = useDashboardWithDemo();
+  const { dashboard, sessions, loading, error, refetch } = useDashboard();
   const { snapshot } = useContextSnapshot();
   const { alerts } = useAlerts();
   const { data: recommendations } = useRecommendations();
@@ -164,19 +165,17 @@ export default function DashboardPage() {
   ] : [];
 
   return (
-    <div className="p-lg space-y-lg pb-32">
+    <div className="p-lg space-y-lg pb-xl">
       <div className="flex flex-wrap items-end justify-between gap-md">
         <div>
-          <h1 className="text-display-lg font-bold text-on-surface">Dashboard</h1>
+          <h1 className="text-display-lg font-bold text-on-surface">
+            {user?.role === 'operator' ? 'My Dashboard' : 'Dashboard'}
+          </h1>
           <p className="text-body-sm text-on-surface-variant mt-xs">
-            {user?.role === 'operator' && 'What is happening to me right now.'}
-            {(user?.role === 'supervisor' || user?.role === 'safety_mgr') && 'What is happening across visible workers right now.'}
-            {user?.role === 'admin' && 'Operational, user, database, and monitoring status from live sources.'}
+            {user?.role === 'operator' && ('Welcome back, ' + user.email.split('@')[0] + '. Here is your current posture status.')}
+            {(user?.role === 'supervisor' || user?.role === 'safety_mgr') && "Real-time visibility across your team's ergonomic risk."}
+            {user?.role === 'admin' && 'System health, monitoring activity, and team performance at a glance.'}
           </p>
-        </div>
-        <div className="rounded-lg border border-outline-variant bg-surface-container px-md py-sm text-right">
-          <p className="font-label-caps text-[10px] text-on-surface-variant">Signed In Role</p>
-          <p className="font-label-mono text-body-sm text-primary">{user?.role ?? 'unknown'}</p>
         </div>
       </div>
 
@@ -205,7 +204,6 @@ export default function DashboardPage() {
               sessionId={currentSessionActive ? session?.id : null}
               snapshot={snapshot}
               task={dashboard.liveStatus.currentTask}
-              taskConfidence={dashboard.liveStatus.confidence}
               workerStatus={dashboard.liveStatus.workerStatus}
               ownAlerts={alerts.history.slice(0, 5)}
               trendAnalysis={dashboard.trendAnalysis}
@@ -221,6 +219,7 @@ export default function DashboardPage() {
               analytics={analytics}
               snapshot={snapshot}
               setNotifOpen={setNotifOpen}
+              liveSessionActive={session?.cameraStatus === 'active'}
             />
           )}
         </>
@@ -244,7 +243,6 @@ function OperatorDashboard({
   sessionId,
   snapshot,
   task,
-  taskConfidence,
   workerStatus,
   trendAnalysis,
   analytics,
@@ -263,7 +261,6 @@ function OperatorDashboard({
   sessionId: string | null | undefined;
   snapshot: { fatigue_score: number; exposure_score: number; final_risk: number } | null;
   task: string;
-  taskConfidence?: number;
   workerStatus: string;
   trendAnalysis: { trend: string; sessionsAnalyzed: number; improving: number; stable: number; deteriorating: number; averageRisk: number };
   analytics: AnalyticsResponse | null;
@@ -272,10 +269,10 @@ function OperatorDashboard({
   return (
     <>
       <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-md">
-        <MetricCard icon={Gauge} label="My Current Risk" value={formatMaybeNumber(riskScore, 0)} detail={riskLevel.toUpperCase()} tone={riskLevel === 'high' ? 'danger' : riskLevel === 'moderate' ? 'warning' : 'good'} onClick={() => navigate('/monitoring')} isUrgent={true} />
-        <MetricCard icon={Activity} label="My Current Task" value={task || 'Unavailable'} detail={workerStatus || 'No worker status'} onClick={() => navigate('/monitoring')} />
-        <MetricCard icon={Clock3} label="Today's Monitoring" value={currentSessionActive ? (sessionDuration ?? 'Calculating') : 'No active session'} detail={sessionId ?? 'Start monitoring to begin'} onClick={() => navigate('/sessions')} />
-        <MetricCard icon={ShieldAlert} label="My Alerts" value={String(alertCount)} detail={`${activeAlertCount} active`} tone={activeAlertCount > 0 ? 'warning' : 'good'} onClick={() => navigate('/monitoring')} isUrgent={true} />
+        <div className="animate-stagger"><MetricCard icon={Gauge} label="My Current Risk" value={formatMaybeNumber(riskScore, 0)} detail={riskLevel.toUpperCase()} tone={riskLevel === 'high' ? 'danger' : riskLevel === 'moderate' ? 'warning' : 'good'} onClick={() => navigate('/monitoring')} isUrgent={true} /></div>
+        <div className="animate-stagger"><MetricCard icon={Activity} label="My Current Task" value={task || 'Unavailable'} detail={workerStatus || 'No worker status'} onClick={() => navigate('/monitoring')} /></div>
+        <div className="animate-stagger"><MetricCard icon={Clock3} label="Today's Monitoring" value={currentSessionActive ? (sessionDuration ?? 'Calculating') : 'No active session'} detail={sessionId ?? 'Start monitoring to begin'} onClick={() => navigate('/sessions')} /></div>
+        <div className="animate-stagger"><MetricCard icon={ShieldAlert} label="My Alerts" value={String(alertCount)} detail={`${activeAlertCount} active`} tone={activeAlertCount > 0 ? 'warning' : 'good'} onClick={() => navigate('/monitoring')} isUrgent={true} /></div>
       </section>
 
       <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-lg">
@@ -333,7 +330,7 @@ function OperatorDashboard({
             <p className="text-body-sm text-on-surface-variant">No completed sessions are visible for your account yet.</p>
           ) : operatorRecentSessions.map((session) => (
             <div key={session.id}>
-              <FeedRow title={session.id} meta={`${session.status} - ${session.duration} - ${session.highestRisk}`} />
+              <FeedRow title={formatSessionLabel(session.date, session.id)} meta={`${session.status} - ${session.duration} - ${session.highestRisk}`} />
             </div>
           ))}
         </FeedCard>
@@ -341,10 +338,9 @@ function OperatorDashboard({
         <TopIssuesCard analytics={analytics} />
       </section>
 
-      <section className="grid grid-cols-1 xl:grid-cols-3 gap-lg">
-        <TaskRecognitionCard task={task} taskDuration={sessionDuration} taskConfidence={taskConfidence} snapshot={snapshot} />
+      <section className="grid grid-cols-1 xl:grid-cols-2 gap-lg">
+        <TaskRecognitionCard task={task} taskDuration={sessionDuration} />
         <AIInsightsCard snapshot={snapshot} />
-        <ModelPerformanceCard />
       </section>
     </>
   );
@@ -359,6 +355,7 @@ function ElevatedDashboard({
   analytics,
   snapshot,
   setNotifOpen,
+  liveSessionActive,
 }: {
   adminSummary: AdminDashboardSummary | null;
   isAdmin: boolean;
@@ -368,6 +365,7 @@ function ElevatedDashboard({
   analytics: AnalyticsResponse | null;
   snapshot: { fatigue_score: number; exposure_score: number; final_risk: number; rula_informed_score?: number; feature_scores?: Record<string, number> } | null;
   setNotifOpen: (v: boolean) => void;
+  liveSessionActive: boolean;
 }) {
   const navigate = useNavigate();
   if (summaryError) {
@@ -387,18 +385,18 @@ function ElevatedDashboard({
   return (
     <>
       <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-md">
-        <MetricCard icon={Users} label="Visible Workers" value={String(summary.worker_count)} detail="COUNT(workers) from SQLite" onClick={() => navigate('/workers')} />
-        <MetricCard icon={Clock3} label="Sessions Today" value={String(summary.sessions_today)} detail="Visible session rows dated today" onClick={() => navigate('/sessions')} />
-        <MetricCard icon={ShieldAlert} label="Open Alerts" value={String(summary.open_alerts)} detail="Active AlertEngine alerts" tone={summary.open_alerts > 0 ? 'warning' : 'good'} onClick={() => setNotifOpen(true)} isUrgent={true} />
-        <MetricCard icon={Gauge} label="Average Risk" value={summary.average_risk === null ? 'Not enough data' : summary.average_risk.toFixed(1)} detail="Computed from visible sessions" onClick={() => navigate('/reports')} isUrgent={true} tone={(summary.average_risk && summary.average_risk >= 60) ? 'danger' : (summary.average_risk && summary.average_risk >= 30) ? 'warning' : 'good'} />
+        <div className="animate-stagger"><MetricCard icon={Users} label="Visible Workers" value={String(summary.worker_count)} detail="Workers currently tracked" onClick={() => navigate('/workers')} /></div>
+        <div className="animate-stagger"><MetricCard icon={Clock3} label="Sessions Today" value={String(summary.sessions_today)} detail="Sessions run today" onClick={() => navigate('/sessions')} /></div>
+        <div className="animate-stagger"><MetricCard icon={ShieldAlert} label="Open Alerts" value={String(summary.open_alerts)} detail="Alerts awaiting action" tone={summary.open_alerts > 0 ? 'warning' : 'good'} onClick={() => setNotifOpen(true)} isUrgent={true} /></div>
+        <div className="animate-stagger"><MetricCard icon={Gauge} label="Average Risk" value={summary.average_risk === null ? 'Not enough data' : summary.average_risk.toFixed(1)} detail="Average across visible sessions" onClick={() => navigate('/reports')} isUrgent={true} tone={(summary.average_risk && summary.average_risk >= 60) ? 'danger' : (summary.average_risk && summary.average_risk >= 30) ? 'warning' : 'good'} /></div>
       </section>
 
       {isAdmin && adminSummary && (
         <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-md">
-          <MetricCard icon={UserCog} label="Total Users" value={String(adminSummary.total_users)} detail="COUNT(users) from SQLite" onClick={() => navigate('/users')} />
-          <MetricCard icon={BarChart3} label="Total Sessions" value={String(adminSummary.total_sessions)} detail="Saved session files plus active session" onClick={() => navigate('/sessions')} />
-          <MetricCard icon={Server} label="Backend Health" value={adminSummary.backend_status} detail={`Database ${adminSummary.database_status}`} tone={adminSummary.backend_status === 'healthy' && adminSummary.database_status === 'healthy' ? 'good' : 'warning'} onClick={() => navigate('/settings')} />
-          <MetricCard icon={Camera} label="Camera Status" value={adminSummary.connected_camera_status || 'unknown'} detail="LiveMonitoringService state" onClick={() => navigate('/monitoring')} />
+          <div className="animate-stagger"><MetricCard icon={UserCog} label="Total Users" value={String(adminSummary.total_users)} detail="Registered users" onClick={() => navigate('/users')} /></div>
+          <div className="animate-stagger"><MetricCard icon={BarChart3} label="Total Sessions" value={String(adminSummary.total_sessions)} detail="All recorded sessions" onClick={() => navigate('/sessions')} /></div>
+          <div className="animate-stagger"><MetricCard icon={Server} label="System Health" value={adminSummary.backend_status === 'healthy' ? 'Operational' : adminSummary.backend_status} detail={`Database: ${adminSummary.database_status}`} tone={adminSummary.backend_status === 'healthy' && adminSummary.database_status === 'healthy' ? 'good' : 'warning'} onClick={() => navigate('/settings')} /></div>
+          <div className="animate-stagger"><MetricCard icon={Camera} label="Camera Status" value={adminSummary.connected_camera_status === 'active' ? 'Connected' : 'Disconnected'} detail={adminSummary.connected_camera_status === 'active' ? 'Streaming this session' : liveSessionActive ? 'Connection lost — check cable or network' : 'No camera connected — start a session to connect'} tone={adminSummary.connected_camera_status === 'active' ? 'good' : liveSessionActive ? 'danger' : 'warning'} onClick={() => navigate('/monitoring')} /></div>
         </section>
       )}
 
@@ -411,7 +409,7 @@ function ElevatedDashboard({
                 <p className="text-body-sm text-on-surface-variant">No sessions are visible for this role yet.</p>
               ) : summary.recent_sessions.map((session) => (
                 <div key={session.id}>
-                  <FeedRow title={session.id} meta={`${session.status} - ${session.duration} - ${session.worker_id ?? 'unassigned worker'}`} />
+                  <FeedRow title={formatSessionLabel(session.date, session.id)} meta={`${session.status} - ${session.duration} - ${session.worker_id ?? 'No worker assigned'}`} />
                 </div>
               ))}
             </FeedCard>
@@ -465,10 +463,9 @@ function ElevatedDashboard({
         <SessionSummaryCard analytics={analytics} />
       </section>
 
-      <section className="grid grid-cols-1 xl:grid-cols-3 gap-lg">
-        <TaskRecognitionCard task="Unknown" taskDuration="—" snapshot={snapshot} />
+      <section className="grid grid-cols-1 xl:grid-cols-2 gap-lg">
+        <TaskRecognitionCard task="No active session" taskDuration="—" />
         <AIInsightsCard snapshot={snapshot} />
-        <ModelPerformanceCard />
       </section>
     </>
   );
@@ -484,9 +481,10 @@ function MetricCard({ icon: Icon, label, value, detail, tone = 'neutral', onClic
   // Left border
   const leftBorderClass = tone === 'danger' ? 'border-l-red-500' : tone === 'warning' ? 'border-l-orange-500' : tone === 'good' ? 'border-l-green-500' : 'border-l-outline-variant';
   
-  // Background
-  const bgClass = hasNonZeroUrgent 
-    ? (tone === 'danger' ? 'bg-red-500/10' : tone === 'warning' ? 'bg-orange-500/10' : 'bg-green-500/10')
+  // Background: neutral card in light mode (status colour carried by the
+  // left border + icon); pastel tint only in dark mode where it reads well.
+  const bgClass = hasNonZeroUrgent
+    ? (tone === 'danger' ? 'bg-surface-container dark:bg-red-500/10' : tone === 'warning' ? 'bg-surface-container dark:bg-orange-500/10' : 'bg-surface-container dark:bg-green-500/10')
     : 'bg-surface-container';
   
   // Other borders
@@ -498,7 +496,7 @@ function MetricCard({ icon: Icon, label, value, detail, tone = 'neutral', onClic
   
   const Tag = onClick ? 'button' : 'div';
   return (
-    <Tag onClick={onClick} className={`${bgClass} border-l-4 ${leftBorderClass} ${otherBorderClass} rounded-lg p-md ${sizeClass} text-left w-full ${onClick ? 'cursor-pointer hover:shadow-sm transition-all duration-150' : ''}`}>
+    <Tag onClick={onClick} className={`${bgClass} border-l-4 ${leftBorderClass} ${otherBorderClass} rounded-xl p-md ${sizeClass} text-left w-full ${onClick ? 'cursor-pointer hover:shadow-md hover:shadow-black/5 hover:-translate-y-0.5 transition-all duration-200' : ''}`}>
       <div className="flex items-center justify-between mb-sm gap-sm">
         <span className="font-label-caps text-[10px] text-on-surface-variant">{label}</span>
         <Icon className={`w-5 h-5 ${iconClass} shrink-0`} />
@@ -511,7 +509,7 @@ function MetricCard({ icon: Icon, label, value, detail, tone = 'neutral', onClic
 
 function ContextTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-outline-variant bg-surface-container-low p-md min-h-[96px]">
+    <div className="rounded-xl border border-outline-variant/60 bg-surface-container-low p-md min-h-[96px] hover:border-primary/20 transition-colors">
       <p className="font-label-caps text-[10px] text-on-surface-variant">{label}</p>
       <p className="mt-sm text-display-sm font-bold text-on-surface break-words">{value}</p>
     </div>
@@ -521,13 +519,13 @@ function ContextTile({ label, value }: { label: string; value: string }) {
 function FeatureAverageBar({ label, value, unit }: { label: string; value: number; unit: string }) {
   const width = Math.max(4, Math.min(100, unit === '%' ? value : value / 1.8));
   return (
-    <div>
+    <div className="group">
       <div className="flex justify-between text-body-sm mb-xs gap-md">
-        <span className="text-on-surface-variant">{label}</span>
+        <span className="text-on-surface-variant group-hover:text-on-surface transition-colors">{label}</span>
         <span className="font-label-mono text-on-surface">{value.toFixed(1)} {unit}</span>
       </div>
       <div className="h-2 rounded-full bg-surface-container-highest overflow-hidden">
-        <div className="h-full rounded-full bg-primary" style={{ width: `${width}%` }} />
+        <div className="h-full rounded-full bg-primary transition-all duration-500 ease-out" style={{ width: `${width}%` }} />
       </div>
     </div>
   );
@@ -535,7 +533,7 @@ function FeatureAverageBar({ label, value, unit }: { label: string; value: numbe
 
 function FeedCard({ children, icon: Icon, title }: { children: ReactNode; icon: ElementType; title: string }) {
   return (
-    <div className="bg-surface-container border border-outline-variant rounded-lg p-lg min-h-[220px]">
+    <div className="bg-surface-container border border-outline-variant rounded-xl p-lg min-h-[220px]">
       <div className="flex items-center gap-sm mb-md">
         <Icon className="w-4 h-4 text-primary" />
         <SectionHeader title={title} />
@@ -554,27 +552,21 @@ function FeedRow({ title, meta }: { title: string; meta: string }) {
   );
 }
 
-function ComingSoon({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="bg-surface-container border border-dashed border-outline-variant rounded-lg p-lg min-h-[180px]">
-      <div className="flex items-start gap-md">
-        <Sparkles className="w-5 h-5 text-on-surface-variant shrink-0 mt-0.5" />
-        <div>
-          <p className="font-label-caps text-[10px] text-on-surface-variant">{title} - Coming Soon</p>
-          <p className="text-body-sm text-on-surface-variant mt-sm">{description}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function TrendSummaryCard({ trendAnalysis, analytics }: { trendAnalysis: { trend: string; sessionsAnalyzed: number; improving: number; stable: number; deteriorating: number; averageRisk: number }; analytics: AnalyticsResponse | null }) {
   const navigate = useNavigate();
-  const TrendIcon = trendAnalysis.trend === 'improving' ? TrendingUp : trendAnalysis.trend === 'deteriorating' ? TrendingDown : Minus;
-  const trendColor = trendAnalysis.trend === 'improving' ? 'text-green-400' : trendAnalysis.trend === 'deteriorating' ? 'text-red-400' : 'text-on-surface-variant';
-  const trendBg = trendAnalysis.trend === 'improving' ? 'bg-green-500/10 border-green-500/30' : trendAnalysis.trend === 'deteriorating' ? 'bg-red-500/10 border-red-500/30' : 'bg-surface-container-low border-outline-variant';
+  // The headline must match the underlying counts: if more sessions are
+  // deteriorating than improving, the trend is Declining — never "Stable".
+  const improving = analytics?.summary.improving ?? trendAnalysis.improving;
+  const deteriorating = analytics?.summary.deteriorating ?? trendAnalysis.deteriorating;
+  const effectiveTrend = deteriorating > improving && deteriorating > 0
+    ? 'declining'
+    : improving > deteriorating && improving > 0
+      ? 'improving'
+      : 'stable';
+  const TrendIcon = effectiveTrend === 'improving' ? TrendingUp : effectiveTrend === 'declining' ? TrendingDown : Minus;
+  const trendColor = effectiveTrend === 'improving' ? 'text-green-400' : effectiveTrend === 'declining' ? 'text-red-400' : 'text-on-surface-variant';
+  const trendBg = effectiveTrend === 'improving' ? 'bg-green-500/10 border-green-500/30' : effectiveTrend === 'declining' ? 'bg-red-500/10 border-red-500/30' : 'bg-surface-container-low border-outline-variant';
   const weeklyData = analytics?.weekly_risk_trend ?? [];
-  const tooltipStyle = { background: '#1d2027', border: '1px solid #424754', borderRadius: '8px', fontSize: '11px', color: '#e1e2ec' };
 
   return (
     <div className={`border rounded-lg p-lg min-h-[180px] flex flex-col justify-between ${trendBg}`}>
@@ -584,24 +576,25 @@ function TrendSummaryCard({ trendAnalysis, analytics }: { trendAnalysis: { trend
           <span className="font-label-caps text-[10px] text-on-surface-variant">Cross-Session Trend</span>
         </div>
         <p className={`text-display-sm font-bold ${trendColor}`}>
-          {trendAnalysis.trend === 'improving' ? 'Improving' : trendAnalysis.trend === 'deteriorating' ? 'Deteriorating' : 'Stable'}
+          {effectiveTrend === 'improving' ? 'Improving' : effectiveTrend === 'declining' ? 'Declining' : 'Stable'}
         </p>
         <p className="text-body-sm text-on-surface-variant mt-xs">
           Based on {analytics?.summary.total_sessions ?? trendAnalysis.sessionsAnalyzed} session{((analytics?.summary.total_sessions ?? trendAnalysis.sessionsAnalyzed) !== 1) ? 's' : ''}
         </p>
         <div className="flex gap-md mt-sm text-[11px]">
-          <span className="text-green-400">{analytics?.summary.improving ?? trendAnalysis.improving} improving</span>
+          <span className="text-green-400">{improving} improving</span>
           <span className="text-on-surface-variant">{analytics?.summary.stable ?? trendAnalysis.stable} stable</span>
-          <span className="text-red-400">{analytics?.summary.deteriorating ?? trendAnalysis.deteriorating} deteriorating</span>
+          <span className="text-red-400">{deteriorating} deteriorating</span>
         </div>
       </div>
       {weeklyData.length > 0 && (
         <div className="h-16 mt-sm">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={weeklyData}>
-              <XAxis dataKey="week" tick={{ fill: '#8c909f', fontSize: 9 }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={tooltipStyle} />
-              <Bar dataKey="averageRisk" fill="#4d8eff" radius={[3, 3, 0, 0]} />
+              <XAxis dataKey="week" tick={{ fill: 'var(--color-outline)', fontSize: 9 }} axisLine={false} tickLine={false} />
+              {/* Explicit cursor keeps hover from flashing the default gray rectangle */}
+              <Tooltip contentStyle={chartTooltipStyle} cursor={{ fill: 'rgba(77, 142, 255, 0.12)' }} />
+              <Bar dataKey="averageRisk" name="Average Risk" fill={chartColors.blue} radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -648,7 +641,6 @@ function TopIssuesCard({ analytics }: { analytics: AnalyticsResponse | null }) {
 
 function RiskDistributionCard({ analytics }: { analytics: AnalyticsResponse | null }) {
   const distData = analytics?.risk_distribution ?? [];
-  const tooltipStyle = { background: '#1d2027', border: '1px solid #424754', borderRadius: '8px', fontSize: '11px', color: '#e1e2ec' };
   return (
     <div className="bg-surface-container border border-outline-variant rounded-lg p-lg min-h-[180px]">
       <div className="flex items-center gap-sm mb-md">
@@ -662,9 +654,9 @@ function RiskDistributionCard({ analytics }: { analytics: AnalyticsResponse | nu
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie data={distData} cx="50%" cy="50%" outerRadius={60} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                {distData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                {distData.map((entry, i) => <Cell key={i} fill={riskLevelColor(entry.name)} />)}
               </Pie>
-              <Tooltip contentStyle={tooltipStyle} />
+              <Tooltip contentStyle={chartTooltipStyle} />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -675,7 +667,6 @@ function RiskDistributionCard({ analytics }: { analytics: AnalyticsResponse | nu
 
 function NeckTrunkTrendCard({ analytics }: { analytics: AnalyticsResponse | null }) {
   const neckTrunkData = analytics?.neck_trunk_trend ?? [];
-  const tooltipStyle = { background: '#1d2027', border: '1px solid #424754', borderRadius: '8px', fontSize: '11px', color: '#e1e2ec' };
   return (
     <div className="bg-surface-container border border-outline-variant rounded-lg p-lg min-h-[180px]">
       <div className="flex items-center gap-sm mb-md">
@@ -686,18 +677,7 @@ function NeckTrunkTrendCard({ analytics }: { analytics: AnalyticsResponse | null
         <p className="text-body-sm text-on-surface-variant">No trend data available.</p>
       ) : (
         <div className="h-40">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={neckTrunkData}>
-              <defs>
-                <linearGradient id="dashNeckGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#4d8eff" stopOpacity={0.3} /><stop offset="100%" stopColor="#4d8eff" stopOpacity={0} /></linearGradient>
-                <linearGradient id="dashTrunkGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#f97316" stopOpacity={0.3} /><stop offset="100%" stopColor="#f97316" stopOpacity={0} /></linearGradient>
-              </defs>
-              <XAxis dataKey="week" tick={{ fill: '#8c909f', fontSize: 9 }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={tooltipStyle} />
-              <Area type="monotone" dataKey="neck" name="Neck" stroke="#4d8eff" strokeWidth={2} fill="url(#dashNeckGrad)" />
-              <Area type="monotone" dataKey="trunk" name="Trunk" stroke="#f97316" strokeWidth={2} fill="url(#dashTrunkGrad)" />
-            </AreaChart>
-          </ResponsiveContainer>
+          <NeckTrunkTrendChart data={neckTrunkData} />
         </div>
       )}
     </div>
@@ -745,93 +725,51 @@ function formatMaybeNumber(value: number | undefined, digits: number) {
   return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(digits) : 'Unavailable';
 }
 
-const TASK_MODIFIERS: Record<string, number> = {
-  'Neutral Standing': 0,
-  'Assembly Work': 5,
-  'Reaching': 8,
-  'Lifting / Picking': 12,
-  'Inspection': 3,
-};
+/** Human-readable session label in IST with the raw ID on hover. */
+function formatSessionLabel(date: string, rawId: string): string {
+  const d = date ? new Date(date) : null;
+  if (d && !Number.isNaN(d.getTime())) {
+    return formatISTSessionLabel(d);
+  }
+  return rawId;
+}
 
 const TASK_ICONS: Record<string, typeof Activity> = {
   'Neutral Standing': Activity,
+  'Walking / Moving': Activity,
+  'Inspection': Gauge,
+  'Seated Work': Cpu,
   'Assembly Work': Cpu,
   'Reaching': Zap,
   'Lifting / Picking': ShieldAlert,
-  'Inspection': Gauge,
 };
 
-function TaskRecognitionCard({ task, taskDuration, taskConfidence, snapshot }: { task: string; taskDuration?: string; taskConfidence?: number; snapshot: { fatigue_score: number; exposure_score: number; final_risk: number; rula_informed_score?: number; feature_scores?: Record<string, number> } | null }) {
-  const [modifiers, setModifiers] = useState<Record<string, number>>(TASK_MODIFIERS);
-
-  useEffect(() => {
-    let cancelled = false;
-    apiFetch('/api/task-modifiers')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data: Record<string, number> | null) => {
-        if (!cancelled && data) setModifiers(data);
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
-
-  const TaskIcon = TASK_ICONS[task] || Cog;
-  const riskImpact = modifiers[task] ?? 0;
-  const riskLabel = riskImpact === 0 ? 'Low' : riskImpact <= 5 ? 'Moderate' : riskImpact <= 8 ? 'Elevated' : 'High';
-  const riskColor = riskImpact === 0 ? 'text-green-400' : riskImpact <= 5 ? 'text-orange-400' : riskImpact <= 8 ? 'text-yellow-400' : 'text-red-400';
-  const riskBg = riskImpact === 0 ? 'bg-green-500/10' : riskImpact <= 5 ? 'bg-orange-500/10' : riskImpact <= 8 ? 'bg-yellow-500/10' : 'bg-red-500/10';
-  const confidence = taskConfidence ?? 0;
+function TaskRecognitionCard({ task, taskDuration }: { task: string; taskDuration?: string }) {
+  const TaskIcon = TASK_ICONS[task] || Activity;
 
   return (
     <div className="bg-surface-container border border-outline-variant rounded-lg p-lg min-h-[180px]">
       <div className="flex items-center gap-sm mb-md">
         <Cpu className="w-4 h-4 text-primary" />
-        <SectionHeader title="Task Recognition" />
+        <SectionHeader title="Current Task" />
       </div>
       <div className="space-y-sm">
         <div className="flex items-center justify-between rounded-lg bg-surface-container-low border border-outline-variant/60 px-md py-sm">
           <div className="flex items-center gap-sm">
             <TaskIcon className="w-4 h-4 text-primary" />
-            <span className="text-body-sm text-on-surface font-medium">{task || 'Unknown'}</span>
+            <span className="text-body-sm text-on-surface font-medium">{task || 'No active session'}</span>
           </div>
-          <span className="font-label-mono text-on-surface">{taskDuration || '—'}</span>
+          {taskDuration && taskDuration !== '—' && (
+            <span className="font-label-mono text-on-surface">{taskDuration}</span>
+          )}
         </div>
-        <div className={`flex items-center justify-between rounded-lg ${riskBg} border border-outline-variant/60 px-md py-sm`}>
-          <span className="text-body-sm text-on-surface-variant">Risk Impact</span>
-          <span className={`font-label-mono ${riskColor}`}>+{riskImpact} ({riskLabel})</span>
-        </div>
-        {confidence > 0 && (
-          <div className="rounded-lg bg-surface-container-low border border-outline-variant/60 px-md py-sm">
-            <div className="flex justify-between text-body-sm mb-xs">
-              <span className="text-on-surface-variant">Confidence</span>
-              <span className="font-label-mono text-on-surface">{confidence}%</span>
-            </div>
-            <div className="h-1.5 rounded-full bg-surface-container-highest overflow-hidden">
-              <div className="h-full rounded-full bg-primary" style={{ width: `${confidence}%` }} />
-            </div>
-          </div>
-        )}
-        <div className="rounded-lg bg-surface-container-low border border-outline-variant/60 px-md py-sm">
-          <p className="font-label-caps text-[9px] text-on-surface-variant mb-xs">Task Risk Modifiers</p>
-          <div className="space-y-xs">
-            {Object.entries(modifiers).map(([name, impact]) => (
-              <div key={name} className="flex items-center justify-between text-[10px]">
-                <span className="text-on-surface-variant">{name}</span>
-                <span className={`font-mono ${impact === 0 ? 'text-green-400' : impact <= 5 ? 'text-orange-400' : 'text-red-400'}`}>+{impact}</span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <p className="text-[11px] text-on-surface-variant leading-relaxed">
+          The activity recognized from the live camera feed (e.g. lifting, reaching, seated work).
+        </p>
       </div>
     </div>
   );
 }
-
-const Cog = ({ className }: { className?: string }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-  </svg>
-);
 
 function AIInsightsCard({ snapshot }: { snapshot: { fatigue_score: number; exposure_score: number; final_risk: number; rula_informed_score?: number; feature_scores?: Record<string, number> } | null }) {
   const insights: { icon: typeof AlertTriangle; color: string; bg: string; title: string; desc: string }[] = [];
@@ -889,100 +827,6 @@ function AIInsightsCard({ snapshot }: { snapshot: { fatigue_score: number; expos
           );
         })}
       </div>
-    </div>
-  );
-}
-
-interface ModelMetrics {
-  accuracy: number;
-  labels: string[];
-  confusion_matrix: number[][];
-  per_class_accuracy: Record<string, number>;
-  classification_report: Record<string, { precision: number; recall: number; 'f1-score': number; support: number }>;
-  best_params: Record<string, number>;
-  train_rows: number;
-  test_rows: number;
-  model_name: string;
-  model_comparison: Record<string, { accuracy: number; best_params: Record<string, number>; per_class_accuracy: Record<string, number> }>;
-}
-
-function ModelPerformanceCard() {
-  const [metrics, setMetrics] = useState<ModelMetrics | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/results/best_model_metrics.json')
-      .then((r) => r.json())
-      .then((data) => { if (!cancelled) setMetrics(data); })
-      .catch(() => { if (!cancelled) setMetrics(null); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, []);
-
-  const accuracy = metrics ? (metrics.accuracy * 100).toFixed(1) : '—';
-  const modelName = metrics?.model_name?.replace('_', ' ') ?? '—';
-  const trainRows = metrics?.train_rows ?? 0;
-  const testRows = metrics?.test_rows ?? 0;
-  const perClass: Record<string, number> = metrics?.per_class_accuracy ?? {};
-  const svmAccuracy = metrics?.model_comparison?.svm?.accuracy;
-  const perClassValues = Object.values(perClass).map((v) => Number(v) * 100);
-  const maxPerClass = perClassValues.length > 0 ? Math.max(...perClassValues) : 1;
-
-  return (
-    <div className="bg-surface-container border border-outline-variant rounded-lg p-lg min-h-[180px]">
-      <div className="flex items-center gap-sm mb-md">
-        <Brain className="w-4 h-4 text-primary" />
-        <SectionHeader title="Risk Model" />
-      </div>
-      {loading ? (
-        <div className="space-y-sm">
-          <div className="h-4 bg-surface-container-higher rounded animate-pulse" />
-          <div className="h-4 bg-surface-container-higher rounded animate-pulse w-3/4" />
-        </div>
-      ) : metrics ? (
-        <div className="space-y-sm">
-          <div className="flex items-center justify-between rounded-lg bg-surface-container-low border border-outline-variant/60 px-md py-sm">
-            <span className="text-body-sm text-on-surface-variant">Accuracy</span>
-            <span className="font-label-mono text-on-surface">{accuracy}%</span>
-          </div>
-          <div className="rounded-lg bg-surface-container-low border border-outline-variant/60 px-md py-sm">
-            <p className="font-label-caps text-[9px] text-on-surface-variant mb-xs">Per-Class Accuracy</p>
-            <div className="space-y-xs">
-              {Object.entries(perClass).map(([label, val]) => {
-                const value = Number(val);
-                return (
-                <div key={label}>
-                  <div className="flex justify-between text-[10px] mb-0.5">
-                    <span className="text-on-surface-variant">{label}</span>
-                    <span className="font-mono text-on-surface">{(value * 100).toFixed(1)}%</span>
-                  </div>
-                  <div className="h-1 rounded-full bg-surface-container-highest overflow-hidden">
-                    <div className="h-full rounded-full bg-primary" style={{ width: `${(value * 100) / maxPerClass * 100}%` }} />
-                  </div>
-                </div>
-                );
-              })}
-            </div>
-          </div>
-          <div className="flex items-center justify-between rounded-lg bg-surface-container-low border border-outline-variant/60 px-md py-sm">
-            <span className="text-body-sm text-on-surface-variant">Model</span>
-            <span className="font-label-mono text-on-surface capitalize">{modelName}</span>
-          </div>
-          <div className="flex items-center justify-between rounded-lg bg-surface-container-low border border-outline-variant/60 px-md py-sm">
-            <span className="text-body-sm text-on-surface-variant">Training / Test</span>
-            <span className="font-label-mono text-on-surface">{trainRows} / {testRows}</span>
-          </div>
-          {svmAccuracy !== undefined && (
-            <div className="flex items-center justify-between rounded-lg bg-surface-container-low border border-outline-variant/60 px-md py-sm">
-              <span className="text-body-sm text-on-surface-variant">vs SVM</span>
-              <span className="font-label-mono text-on-surface-variant">{(svmAccuracy * 100).toFixed(1)}%</span>
-            </div>
-          )}
-        </div>
-      ) : (
-        <p className="text-body-sm text-on-surface-variant">Model metrics unavailable.</p>
-      )}
     </div>
   );
 }

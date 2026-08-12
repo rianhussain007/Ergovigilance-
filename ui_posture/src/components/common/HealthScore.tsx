@@ -22,13 +22,13 @@ export function HealthScore({ liveStatus, trend }: HealthScoreProps) {
       <h3 className="font-label-caps text-label-caps text-on-surface uppercase tracking-widest mb-md self-start">Health Score</h3>
       <div className="relative w-36 h-36">
         <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
-          <circle cx="60" cy="60" r="54" fill="none" stroke="#32353c" strokeWidth="8" />
+          <circle cx="60" cy="60" r="54" fill="none" stroke="var(--color-outline-variant)" strokeWidth="8" />
           <circle cx="60" cy="60" r="54" fill="none" stroke="url(#healthGrad)" strokeWidth="8" strokeLinecap="round"
             strokeDasharray={circumference} strokeDashoffset={offset} style={{ transition: 'stroke-dashoffset 0.8s ease' }} />
           <defs>
             <linearGradient id="healthGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#22c55e" />
-              <stop offset="50%" stopColor="#f97316" />
+              <stop offset="0%" style={{ stopColor: 'var(--color-chart-green)' }} />
+              <stop offset="50%" style={{ stopColor: 'var(--color-chart-orange)' }} />
               <stop offset="100%" stopColor="#ef4444" />
             </linearGradient>
           </defs>

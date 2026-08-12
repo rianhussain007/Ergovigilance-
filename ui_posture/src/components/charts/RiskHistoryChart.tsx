@@ -1,4 +1,5 @@
 import { AreaChart, XAxis, YAxis, Tooltip, ResponsiveContainer, Area } from 'recharts';
+import { chartTooltipStyle, chartTick, chartColors } from './chartTheme';
 import type { RiskDataPoint } from '@/src/types/api';
 
 interface RiskHistoryChartProps {
@@ -20,26 +21,19 @@ export function RiskHistoryChart({ data }: RiskHistoryChartProps) {
           <AreaChart data={data} margin={{ top: 8, right: 8, left: -15, bottom: 4 }}>
             <defs>
               <linearGradient id="riskGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#f97316" stopOpacity={0.3} />
-                <stop offset="100%" stopColor="#f97316" stopOpacity={0} />
+                <stop offset="0%" style={{ stopColor: chartColors.orange }} stopOpacity={0.3} />
+                <stop offset="100%" style={{ stopColor: chartColors.orange }} stopOpacity={0} />
               </linearGradient>
             </defs>
-            <XAxis dataKey="time" tick={{ fill: '#8c909f', fontSize: 10 }} axisLine={false} tickLine={false} dy={4} />
-            <YAxis tick={{ fill: '#8c909f', fontSize: 10 }} axisLine={false} tickLine={false} domain={[0, 60]} dx={-4} />
+            <XAxis dataKey="time" tick={chartTick} axisLine={false} tickLine={false} dy={4} />
+            <YAxis tick={chartTick} axisLine={false} tickLine={false} domain={[0, 60]} dx={-4} />
             <Tooltip
-              contentStyle={{
-                background: '#1d2027',
-                border: '1px solid #424754',
-                borderRadius: '8px',
-                fontSize: '12px',
-                color: '#e1e2ec',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-              }}
+              contentStyle={chartTooltipStyle}
               formatter={(value: number) => [`${value}`, 'Risk Score']}
-              labelStyle={{ color: '#8c909f', fontWeight: 500 }}
-              itemStyle={{ color: '#f97316' }}
+              labelStyle={{ color: 'var(--color-on-surface-variant)', fontWeight: 500 }}
+              itemStyle={{ color: chartColors.orange }}
             />
-            <Area type="monotone" dataKey="value" stroke="#f97316" strokeWidth={2} fill="url(#riskGradient)" animationDuration={400} />
+            <Area type="monotone" dataKey="value" stroke={chartColors.orange} strokeWidth={2} fill="url(#riskGradient)" animationDuration={400} />
           </AreaChart>
         </ResponsiveContainer>
       </div>

@@ -1,7 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, Eye, EyeOff, FileVideo, Sparkles, UploadCloud } from "lucide-react";
-import { startVideoAnalysis, getVideoAnalysisJob } from "@/src/services/dashboardService";
-import type { VideoAnalysisResponse, VideoAnalysisFrame } from "@/src/types/api";
+import { AlertTriangle, CheckCircle2, Download, Eye, EyeOff, FileVideo, History, RotateCcw, Sparkles, UploadCloud } from "lucide-react";
+import {
+  startVideoAnalysis,
+  getVideoAnalysisJob,
+  startRecordingAnalysis,
+  downloadVideoWithOverlay,
+  getRecordings,
+  getRecordingVideoUrl,
+} from "@/src/services/dashboardService";
+import type { VideoAnalysisResponse, VideoAnalysisFrame, RecordingListItem } from "@/src/types/api";
+import SessionCalendar, {
+  aggregateByDay,
+  parseSessionTimestamp,
+  toDateKey,
+} from "@/src/components/common/SessionCalendar";
+import { formatISTFull } from "@/src/utils/formatTime";
 
 const MAX_VIDEO_BYTES = 200 * 1024 * 1024;
 const FEATURE_LABELS: Record<string, string> = {
@@ -64,35 +77,127 @@ const CHART_WIDTH = 835;
 const CHART_HEIGHT = 240;
 const CHART_PADDING = { left: 40, right: 40, top: 30, bottom: 60 };
 
+// Which body region each skeleton connection belongs to (same mapping the
+// live overlay uses in backend_api/app/services/pose_overlay.py).
+const CONNECTION_REGION: Record<string, string> = {
+  "11-12": "torso",
+  "11-13": "left_arm",
+  "13-15": "left_arm",
+  "12-14": "right_arm",
+  "14-16": "right_arm",
+  "11-23": "torso",
+  "12-24": "torso",
+  "23-24": "torso",
+  "23-25": "left_leg",
+  "25-27": "left_leg",
+  "24-26": "right_leg",
+  "26-28": "right_leg",
+  "27-29": "left_leg",
+  "29-31": "left_leg",
+  "28-30": "right_leg",
+  "30-32": "right_leg",
+  "15-17": "left_arm",
+  "15-19": "left_arm",
+  "15-21": "left_arm",
+  "16-18": "right_arm",
+  "16-20": "right_arm",
+  "16-22": "right_arm",
+};
+
+const REGION_RISK_ORDER: Record<string, number> = { LOW: 0, MEDIUM: 1, HIGH: 2 };
+
+function regionForConnection(a: number, b: number): string {
+  return CONNECTION_REGION[`${Math.min(a, b)}-${Math.max(a, b)}`] || "head";
+}
+
+function dimColor(color: string, visibility: number): string {
+  if (visibility >= 0.75) return color;
+  let factor: number;
+  if (visibility >= 0.35) {
+    factor = 0.5 + (0.5 * (visibility - 0.35)) / 0.4;
+  } else {
+    factor = Math.max(0.15, (visibility / 0.35) * 0.35);
+  }
+  // Scale an rgb(...) color by factor.
+  const m = color.match(/rgb\((\d+), (\d+), (\d+)\)/);
+  if (!m) return color;
+  const [r, g, b] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  return `rgb(${Math.round(r * factor)}, ${Math.round(g * factor)}, ${Math.round(b * factor)})`;
+}
+
+/** Displayed content box of the video (handles letterboxing from object-fit). */
+function getContentRect(video: HTMLVideoElement) {
+  const elW = video.clientWidth || 640;
+  const elH = video.clientHeight || 360;
+  const vw = video.videoWidth || elW;
+  const vh = video.videoHeight || elH;
+  const scale = Math.min(elW / vw, elH / vh);
+  const width = vw * scale;
+  const height = vh * scale;
+  return { x: (elW - width) / 2, y: (elH - height) / 2, width, height };
+}
+
 function drawSkeleton(
   ctx: CanvasRenderingContext2D,
   frame: VideoAnalysisFrame,
   canvasWidth: number,
-  canvasHeight: number
+  canvasHeight: number,
+  contentRect: { x: number; y: number; width: number; height: number }
 ): void {
   if (!frame.keypoints || frame.keypoints.length === 0) return;
 
   ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-  const color = RISK_COLORS[frame.risk_level as keyof typeof RISK_COLORS];
 
-  // Draw connections
+  // Per-region risk bands — identical values the live overlay uses (computed
+  // by the backend from the same per-feature thresholds), so a raised arm
+  // turns red while the rest of the skeleton stays green.
+  const regionLevels: Record<string, string> = frame.region_risks || {};
+  const overall = frame.risk_level;
+  const regionColor = (region: string): string => {
+    const level = regionLevels[region] || overall;
+    return RISK_COLORS[level as keyof typeof RISK_COLORS] || RISK_COLORS.LOW;
+  };
+
+  // Joint color = worst-risk region touching that joint.
+  const jointRegions: Record<number, Set<string>> = {};
+  for (const [startIdx, endIdx] of POSE_CONNECTIONS) {
+    const region = regionForConnection(startIdx, endIdx);
+    (jointRegions[startIdx] ||= new Set()).add(region);
+    (jointRegions[endIdx] ||= new Set()).add(region);
+  }
+  const jointColor = (idx: number): string => {
+    const regions = jointRegions[idx];
+    if (!regions || regions.size === 0) return regionColor("head");
+    let worst = "head";
+    for (const r of regions) {
+      const lvl = regionLevels[r] || overall;
+      const cur = regionLevels[worst] || overall;
+      if (REGION_RISK_ORDER[lvl] > REGION_RISK_ORDER[cur]) worst = r;
+    }
+    return regionColor(worst);
+  };
+
+  const px = (kp: number[]): [number, number] => [
+    contentRect.x + kp[0] * contentRect.width,
+    contentRect.y + kp[1] * contentRect.height,
+  ];
+
+  // Draw connections (each segment colored by its own region's risk)
   for (const [startIdx, endIdx] of POSE_CONNECTIONS) {
     if (startIdx < frame.keypoints.length && endIdx < frame.keypoints.length) {
       const startKp = frame.keypoints[startIdx];
       const endKp = frame.keypoints[endIdx];
       if (startKp.length >= 2 && endKp.length >= 2) {
-        const x1 = startKp[0] * canvasWidth;
-        const y1 = startKp[1] * canvasHeight;
-        const x2 = endKp[0] * canvasWidth;
-        const y2 = endKp[1] * canvasHeight;
+        const [x1, y1] = px(startKp);
+        const [x2, y2] = px(endKp);
         const visibility = Math.min(
           startKp[3] !== undefined ? startKp[3] : 1.0,
           endKp[3] !== undefined ? endKp[3] : 1.0
         );
-        ctx.globalAlpha = 0.3 + visibility * 0.7;
+        ctx.globalAlpha = 0.35 + visibility * 0.65;
         ctx.beginPath();
-        ctx.strokeStyle = color;
-        ctx.lineWidth = 3;
+        ctx.strokeStyle = dimColor(regionColor(regionForConnection(startIdx, endIdx)), visibility);
+        ctx.lineWidth = 3.5;
         ctx.lineCap = "round";
         ctx.moveTo(x1, y1);
         ctx.lineTo(x2, y2);
@@ -102,51 +207,55 @@ function drawSkeleton(
     }
   }
 
-  // Draw joints
+  // Draw joints (colored by their worst touching region)
   for (let i = 0; i < Math.min(frame.keypoints.length, 33); i++) {
     const kp = frame.keypoints[i];
     if (kp.length >= 2) {
-      const x = kp[0] * canvasWidth;
-      const y = kp[1] * canvasHeight;
+      const [x, y] = px(kp);
       const visibility = kp[3] !== undefined ? kp[3] : 1.0;
-      ctx.globalAlpha = 0.3 + visibility * 0.7;
+      ctx.globalAlpha = 0.35 + visibility * 0.65;
       ctx.beginPath();
-      ctx.fillStyle = color;
+      ctx.fillStyle = dimColor(jointColor(i), visibility);
       ctx.arc(x, y, 7, 0, 2 * Math.PI);
       ctx.fill();
+      ctx.strokeStyle = "rgba(240, 250, 245, 0.9)";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
       ctx.globalAlpha = 1.0;
     }
   }
 
-  // Draw per-joint angle labels (simplified, just neck, trunk, shoulders, knee)
-  const labelConfigs: Array<[string, number, [number, number]]> = [
-    ["neck_flexion", 0, [-25, -25]],
-    ["trunk_flexion", 23, [25, -15]],
-    ["left_shoulder_elev", 11, [-25, -20]],
-    ["right_shoulder_elev", 12, [25, -20]],
-    ["knee_angle", 25, [25, 10]],
+  // Per-joint angle labels (same joints/labels as the live overlay)
+  const labelConfigs: Array<[string, string, number, [number, number]]> = [
+    ["neck_flexion", "N", 0, [-20, -30]],
+    ["trunk_flexion", "T", 23, [15, -10]],
+    ["left_shoulder_elev", "LS", 11, [-30, -20]],
+    ["right_shoulder_elev", "RS", 12, [10, -20]],
+    ["shoulder_symmetry", "Sym", 11, [-55, -35]],
+    ["knee_angle", "K", 25, [15, 5]],
   ];
 
   ctx.font = "12px sans-serif";
-  ctx.fillStyle = "white";
   ctx.textBaseline = "middle";
 
-  for (const [feat, kpIdx, offset] of labelConfigs) {
-    if (
-      kpIdx >= frame.keypoints.length ||
-      frame.unavailable_features.includes(feat)
-    )
-      continue;
+  for (const [feat, short, kpIdx, offset] of labelConfigs) {
+    if (kpIdx >= frame.keypoints.length) continue;
     const value = frame.features[feat];
-    if (value === undefined || value !== value) continue;
+    // Skip null / undefined / NaN values (NaN may arrive serialized as null).
+    if (value == null || value !== value) continue;
     const kp = frame.keypoints[kpIdx];
-    const x = kp[0] * canvasWidth + offset[0];
-    const y = kp[1] * canvasHeight + offset[1];
+    const [baseX, baseY] = px(kp);
+    const x = Math.max(4, Math.min(baseX + offset[0], canvasWidth - 90));
+    const y = Math.max(14, Math.min(baseY + offset[1], canvasHeight - 4));
+    const text = `${short}:${value.toFixed(1)}`;
+    const labelColor = jointColor(kpIdx);
     ctx.fillStyle = "rgba(8, 12, 18, 0.9)";
-    const text = `${value.toFixed(1)}`;
     const metrics = ctx.measureText(text);
-    ctx.fillRect(x - 4, y - 8, metrics.width + 8, 16);
-    ctx.fillStyle = color;
+    ctx.fillRect(x - 4, y - 9, metrics.width + 8, 17);
+    ctx.strokeStyle = labelColor;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x - 4, y - 9, metrics.width + 8, 17);
+    ctx.fillStyle = labelColor;
     ctx.fillText(text, x, y);
   }
 }
@@ -168,20 +277,28 @@ function RiskLegend() {
 }
 
 function RiskBar({ level, value }: { level: "LOW" | "MEDIUM" | "HIGH"; value: number }) {
+  // A zero value must render as an empty track — never as a filled neutral
+  // bar that reads as if data exists.
+  const pct = Math.max(0, Math.min(100, value));
+  const empty = pct <= 0;
   return (
     <div>
       <div className="mb-1 flex justify-between text-sm">
         <span className="text-on-surface-variant">{level}</span>
         <span className="font-mono text-on-surface">{value.toFixed(1)}%</span>
       </div>
-      <div className="h-2 overflow-hidden rounded bg-surface-container-highest">
-        <div
-          className="h-full rounded transition-all"
-          style={{
-            width: `${Math.max(0, Math.min(100, value))}%`,
-            backgroundColor: RISK_COLORS[level],
-          }}
-        />
+      <div
+        className={`h-2 overflow-hidden rounded ${empty ? "border border-outline-variant/30 bg-transparent" : "bg-surface-container-highest"}`}
+      >
+        {!empty && (
+          <div
+            className="h-full rounded transition-all"
+            style={{
+              width: `${pct}%`,
+              backgroundColor: RISK_COLORS[level],
+            }}
+          />
+        )}
       </div>
     </div>
   );
@@ -237,6 +354,16 @@ export default function VideoReviewPage() {
   const [status, setStatus] = useState<"idle" | "processing" | "complete">("idle");
   const [progress, setProgress] = useState(0);
   const analysisCancelledRef = useRef(false);
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [recordings, setRecordings] = useState<RecordingListItem[]>([]);
+  const [selectedSessionId, setSelectedSessionId] = useState("");
+  const [recordingLoading, setRecordingLoading] = useState(false);
+  const [sortOrder, setSortOrder] = useState<"newest" | "oldest">("newest");
+  const [workerFilter, setWorkerFilter] = useState("");
+  const [riskFilter, setRiskFilter] = useState("");
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [levelFilter, setLevelFilter] = useState<"LOW" | "MEDIUM" | "HIGH" | null>(null);
+  const [downloading, setDownloading] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
   const [currentTime, setCurrentTime] = useState(0);
   const [hoverTime, setHoverTime] = useState<number | null>(null);
@@ -275,8 +402,13 @@ export default function VideoReviewPage() {
     if (!result || !showOverlay) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    // Keep the canvas buffer in sync with the displayed video element so the
+    // skeleton never draws into a stale 300x150 default buffer (which the CSS
+    // would stretch, misaligning the overlay from the person in the video).
+    canvas.width = video.clientWidth || canvas.width;
+    canvas.height = video.clientHeight || canvas.height;
     if (currentFrame) {
-      drawSkeleton(ctx, currentFrame, canvas.width, canvas.height);
+      drawSkeleton(ctx, currentFrame, canvas.width, canvas.height, getContentRect(video));
     } else {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
@@ -286,11 +418,14 @@ export default function VideoReviewPage() {
   // only mounts while the overlay is on, so a fresh frame is needed).
   useEffect(() => {
     if (!showOverlay || !currentFrame) return;
+    const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!video || !canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    drawSkeleton(ctx, currentFrame, canvas.width, canvas.height);
+    canvas.width = video.clientWidth || canvas.width;
+    canvas.height = video.clientHeight || canvas.height;
+    drawSkeleton(ctx, currentFrame, canvas.width, canvas.height, getContentRect(video));
   }, [showOverlay, currentFrame]);
 
   const handleVideoLoadedMetadata = useCallback(() => {
@@ -301,16 +436,28 @@ export default function VideoReviewPage() {
     canvas.height = video.clientHeight;
   }, []);
 
+  // The SVG uses a fixed viewBox (CHART_WIDTH x CHART_HEIGHT) but is scaled to
+  // fill its container, so CSS-pixel x must be scaled back into viewBox units
+  // before mapping to a timestamp — otherwise clicks land at the wrong second.
+  const chartTimeFromEvent = useCallback(
+    (clientX: number, rect: DOMRect): number | null => {
+      if (!result) return null;
+      const viewX = ((clientX - rect.left) / rect.width) * CHART_WIDTH;
+      const chartLeft = CHART_PADDING.left;
+      const chartRight = CHART_WIDTH - CHART_PADDING.right;
+      const maxTime = Math.max(...result.frames.map((f) => f.timestamp_seconds), 1);
+      const ratio = (viewX - chartLeft) / (chartRight - chartLeft);
+      return Math.max(0, Math.min(maxTime, ratio * maxTime));
+    },
+    [result]
+  );
+
   const handleChartClick = (e: React.MouseEvent<SVGSVGElement>) => {
     if (!videoRef.current || !result) return;
     const svg = e.currentTarget;
     const rect = svg.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const chartLeft = CHART_PADDING.left;
-    const chartRight = CHART_WIDTH - CHART_PADDING.right;
-    const maxTime = Math.max(...result.frames.map((f) => f.timestamp_seconds), 1);
-    const ratio = (x - chartLeft) / (chartRight - chartLeft);
-    const time = Math.max(0, Math.min(maxTime, ratio * maxTime));
+    const time = chartTimeFromEvent(e.clientX, rect);
+    if (time === null) return;
     videoRef.current.currentTime = time;
     setCurrentTime(time);
   };
@@ -319,12 +466,8 @@ export default function VideoReviewPage() {
     if (!result) return;
     const svg = e.currentTarget;
     const rect = svg.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const chartLeft = CHART_PADDING.left;
-    const chartRight = CHART_WIDTH - CHART_PADDING.right;
-    const maxTime = Math.max(...result.frames.map((f) => f.timestamp_seconds), 1);
-    const ratio = (x - chartLeft) / (chartRight - chartLeft);
-    const time = Math.max(0, Math.min(maxTime, ratio * maxTime));
+    const time = chartTimeFromEvent(e.clientX, rect);
+    if (time === null) return;
     setHoverTime(time);
   };
 
@@ -352,10 +495,99 @@ export default function VideoReviewPage() {
     return () => window.removeEventListener("resize", handleResize);
   }, [handleTimeUpdate]);
 
+  // Load the recorded-session list once so admins can re-analyze past sessions.
+  useEffect(() => {
+    getRecordings()
+      .then((r) => setRecordings(r.recordings.filter((rec) => rec.has_video)))
+      .catch(() => {
+        /* non-fatal: the upload path still works without the session list */
+      });
+  }, []);
+
+  // ── Filters + sorting ────────────────────────────────────────────────
+  const formatSessionTs = useCallback((ts: string): string => {
+    const d = parseSessionTimestamp(ts);
+    if (!d) return ts;
+    return formatISTFull(d);
+  }, []);
+
+  const workerOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const rec of recordings) if (rec.worker_id) set.add(rec.worker_id);
+    return [...set].sort();
+  }, [recordings]);
+
+  // Calendar data: one shared aggregation drives both the calendar heatmap and
+  // the legend's load-level filter, so they always agree.
+  const calendarItems = useMemo(
+    () =>
+      recordings.map((rec) => ({
+        timestamp: rec.session_timestamp,
+        riskLevel: rec.risk_level || rec.highest_risk_level,
+      })),
+    [recordings]
+  );
+
+  // Day keys whose highest risk matches the active legend filter (e.g. the 5
+  // heavy-load days when "Heavy load" is clicked).
+  const levelDayKeys = useMemo(() => {
+    if (!levelFilter) return null;
+    const byDay = aggregateByDay(calendarItems);
+    const keys = new Set<string>();
+    for (const [key, agg] of byDay) if (agg.highestRisk === levelFilter) keys.add(key);
+    return keys;
+  }, [levelFilter, calendarItems]);
+
+  const filteredRecordings = useMemo(() => {
+    let list = recordings;
+    if (workerFilter) list = list.filter((rec) => rec.worker_id === workerFilter);
+    if (riskFilter)
+      list = list.filter(
+        (rec) => (rec.risk_level || rec.highest_risk_level || "LOW").toUpperCase() === riskFilter
+      );
+    if (selectedDate)
+      list = list.filter((rec) => {
+        const d = parseSessionTimestamp(rec.session_timestamp);
+        return d ? toDateKey(d) === selectedDate : false;
+      });
+    if (levelDayKeys)
+      list = list.filter((rec) => {
+        const d = parseSessionTimestamp(rec.session_timestamp);
+        return d ? levelDayKeys.has(toDateKey(d)) : false;
+      });
+    return [...list].sort((a, b) => {
+      const ta = parseSessionTimestamp(a.session_timestamp)?.getTime() ?? 0;
+      const tb = parseSessionTimestamp(b.session_timestamp)?.getTime() ?? 0;
+      return sortOrder === "newest" ? tb - ta : ta - tb;
+    });
+  }, [recordings, workerFilter, riskFilter, selectedDate, sortOrder, levelDayKeys]);
+
+  const clearFilters = useCallback(() => {
+    setSortOrder("newest");
+    setWorkerFilter("");
+    setRiskFilter("");
+    setSelectedDate(null);
+    setLevelFilter(null);
+  }, []);
+
+  const hasActiveFilters =
+    workerFilter !== "" || riskFilter !== "" || selectedDate !== null || levelFilter !== null;
+
+  // If the selected session is hidden by the current filters, drop it.
+  useEffect(() => {
+    if (
+      selectedSessionId &&
+      !filteredRecordings.some((rec) => rec.session_id === selectedSessionId)
+    ) {
+      setSelectedSessionId("");
+    }
+  }, [filteredRecordings, selectedSessionId]);
+
   const chooseFile = (file: File | null) => {
     analysisCancelledRef.current = true;
     setError(null);
     setResult(null);
+    setJobId(null);
     setStatus("idle");
     if (videoUrl) URL.revokeObjectURL(videoUrl);
     if (!file) {
@@ -379,40 +611,45 @@ export default function VideoReviewPage() {
     return () => { analysisCancelledRef.current = true; };
   }, []);
 
-  const handleAnalyze = async () => {
-    if (!selectedFile || status === "processing") return;
+  // Shared poll loop for both uploads and recorded-session analyses.
+  const pollJob = useCallback(async (job_id: string) => {
     analysisCancelledRef.current = false;
-    setError(null);
-    setResult(null);
     setStatus("processing");
     setProgress(0);
+    setError(null);
+    setResult(null);
+    for (let attempt = 0; attempt < 600; attempt++) {
+      await new Promise((r) => setTimeout(r, 1000));
+      if (analysisCancelledRef.current) return;
+      const job = await getVideoAnalysisJob(job_id);
+      if (analysisCancelledRef.current) return;
+      if (job.progress && typeof job.progress.percent === "number") {
+        setProgress(Math.min(99, job.progress.percent));
+      }
+      if (job.status === "complete") {
+        setJobId(job_id);
+        setResult(job.result);
+        setProgress(100);
+        setStatus("complete");
+        return;
+      }
+      if (job.status === "error") {
+        setStatus("idle");
+        setError(job.error || "Video analysis failed");
+        return;
+      }
+    }
+    if (analysisCancelledRef.current) return;
+    setStatus("idle");
+    setError("Analysis timed out. Please try again.");
+  }, []);
+
+  const handleAnalyze = async () => {
+    if (!selectedFile || status === "processing") return;
+    setError(null);
     try {
       const { job_id } = await startVideoAnalysis(selectedFile);
-      // Poll the background job until it completes (the request no longer
-      // blocks for the full pose/context processing).
-      for (let attempt = 0; attempt < 600; attempt++) {
-        await new Promise((r) => setTimeout(r, 1000));
-        if (analysisCancelledRef.current) return;
-        const job = await getVideoAnalysisJob(job_id);
-        if (analysisCancelledRef.current) return;
-        if (job.progress && typeof job.progress.percent === "number") {
-          setProgress(Math.min(99, job.progress.percent));
-        }
-        if (job.status === "complete") {
-          setResult(job.result);
-          setProgress(100);
-          setStatus("complete");
-          return;
-        }
-        if (job.status === "error") {
-          setStatus("idle");
-          setError(job.error || "Video analysis failed");
-          return;
-        }
-      }
-      if (analysisCancelledRef.current) return;
-      setStatus("idle");
-      setError("Analysis timed out. Please try again.");
+      await pollJob(job_id);
     } catch (err) {
       if (analysisCancelledRef.current) return;
       setStatus("idle");
@@ -420,26 +657,52 @@ export default function VideoReviewPage() {
     }
   };
 
+  const handleAnalyzeRecording = async () => {
+    if (!selectedSessionId || status === "processing") return;
+    setError(null);
+    setRecordingLoading(true);
+    try {
+      const { job_id } = await startRecordingAnalysis(selectedSessionId);
+      // Play the session's stored video from the server while the job runs.
+      setVideoUrl(getRecordingVideoUrl(selectedSessionId));
+      setSelectedFile(null);
+      await pollJob(job_id);
+    } catch (err) {
+      if (analysisCancelledRef.current) return;
+      setStatus("idle");
+      setError(err instanceof Error ? err.message : "Recording analysis failed");
+    } finally {
+      setRecordingLoading(false);
+    }
+  };
+
+  const downloadJson = () => {
+    if (!result) return;
+    const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${result.filename.replace(/\.[^.]+$/, "")}_analysis.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="p-lg space-y-lg pb-32">
-      <div className="flex flex-wrap items-end justify-between gap-md">
-        <div>
-          <h1 className="text-display-lg font-bold text-on-surface">Video Analysis</h1>
-          <p className="mt-xs text-body-sm text-on-surface-variant">
-            Upload a video to compute real posture risk over time from the existing pose pipeline.
-          </p>
-        </div>
-        <a
-          href="/sessions"
-          className="rounded-lg border border-dashed border-outline-variant bg-surface-container px-md py-sm text-right no-underline transition hover:bg-surface-container-low"
-        >
-          <p className="font-label-caps text-[10px] text-on-surface-variant">Live Session Replay</p>
-          <p className="font-label-mono text-body-sm text-primary">Go to Sessions →</p>
-        </a>
-      </div>
+      {/* Single page title — no competing cards in the header. */}
+      <header className="min-w-0">
+        <h1 className="text-display-lg font-bold text-on-surface">Video Analysis</h1>
+        <p className="mt-xs text-body-sm text-on-surface-variant">
+          Upload a video to compute real posture risk over time from the existing pose pipeline.
+        </p>
+      </header>
 
-      <section className="grid grid-cols-1 gap-lg xl:grid-cols-[420px_minmax(0,1fr)]">
-        <div className="flex flex-col rounded-lg border border-outline-variant bg-surface-container p-lg">
+      <section className="grid grid-cols-1 gap-lg xl:grid-cols-[420px_minmax(0,1fr)] items-start">
+        {/* LEFT: actions — upload + recorded-session review */}
+        <div className="flex flex-col space-y-lg">
+          <div className="rounded-lg border border-outline-variant bg-surface-container p-lg">
           <div
             className="flex-1 rounded-lg border border-dashed border-outline-variant bg-surface-container-low p-xl text-center"
             onDragOver={(event) => event.preventDefault()}
@@ -510,9 +773,127 @@ export default function VideoReviewPage() {
               {error}
             </div>
           )}
+          </div>
+
+          <div className="rounded-lg border border-outline-variant bg-surface-container p-lg">
+            <div className="mb-sm flex items-center gap-sm">
+              <History className="h-4 w-4 text-primary" />
+              <h3 className="text-body-sm font-bold text-on-surface">Review a Recorded Session</h3>
+            </div>
+
+            <div className="grid grid-cols-1 gap-sm sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-xs block text-[10px] font-semibold uppercase text-on-surface-variant">
+                  Sort order
+                </span>
+                <select
+                  className="w-full rounded-lg border border-outline-variant bg-surface-container px-md py-sm text-body-sm text-on-surface"
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value as "newest" | "oldest")}
+                >
+                  <option value="newest">Newest first</option>
+                  <option value="oldest">Oldest first</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-xs block text-[10px] font-semibold uppercase text-on-surface-variant">
+                  Worker
+                </span>
+                <select
+                  className="w-full rounded-lg border border-outline-variant bg-surface-container px-md py-sm text-body-sm text-on-surface"
+                  value={workerFilter}
+                  onChange={(e) => setWorkerFilter(e.target.value)}
+                >
+                  <option value="">All workers</option>
+                  {workerOptions.map((wid) => (
+                    <option key={wid} value={wid}>
+                      {wid}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-xs block text-[10px] font-semibold uppercase text-on-surface-variant">
+                  Highest risk
+                </span>
+                <select
+                  className="w-full rounded-lg border border-outline-variant bg-surface-container px-md py-sm text-body-sm text-on-surface"
+                  value={riskFilter}
+                  onChange={(e) => setRiskFilter(e.target.value)}
+                >
+                  <option value="">Any level</option>
+                  <option value="LOW">LOW</option>
+                  <option value="MEDIUM">MEDIUM</option>
+                  <option value="HIGH">HIGH</option>
+                </select>
+              </label>
+              <div className="flex items-end">
+                {hasActiveFilters && (
+                  <button
+                    className="flex h-10 w-full items-center justify-center gap-sm rounded-lg border border-outline-variant px-md text-body-sm text-on-surface hover:bg-surface-container"
+                    onClick={clearFilters}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-sm flex items-center justify-between text-[10px] text-on-surface-variant">
+              <span>
+                {filteredRecordings.length} session{filteredRecordings.length === 1 ? "" : "s"}
+                {hasActiveFilters ? " match the filters" : " available"}
+              </span>
+              <span className="flex items-center gap-sm">
+                {levelFilter && <span>Load: {levelFilter === "HIGH" ? "Heavy" : levelFilter === "MEDIUM" ? "Medium" : "Low"}</span>}
+                {selectedDate && <span>{selectedDate}</span>}
+              </span>
+            </div>
+
+            <select
+              className="mt-sm w-full rounded-lg border border-outline-variant bg-surface-container px-md py-sm text-body-sm text-on-surface"
+              value={selectedSessionId}
+              onChange={(e) => setSelectedSessionId(e.target.value)}
+            >
+              <option value="">Select a session with a recording…</option>
+              {filteredRecordings.map((rec) => (
+                <option key={rec.session_id} value={rec.session_id}>
+                  {formatSessionTs(rec.session_timestamp)} · {rec.worker_id} · {(rec.duration_seconds ?? 0).toFixed(0)}s · {rec.risk_level || rec.highest_risk_level}
+                </option>
+              ))}
+            </select>
+            <button
+              className="mt-md h-10 w-full rounded-lg bg-tertiary px-md text-body-sm font-bold text-on-tertiary disabled:opacity-60"
+              disabled={!selectedSessionId || status === "processing" || recordingLoading}
+              onClick={handleAnalyzeRecording}
+            >
+              {recordingLoading ? "Analyzing recorded session…" : "Analyze Recorded Session"}
+            </button>
+            <p className="mt-sm text-[10px] text-on-surface-variant">
+              Runs the same ML pose pipeline on the session's stored video — full keypoints, features,
+              risk timeline, and a downloadable overlay video.
+            </p>
+            <a
+              href="/sessions"
+              className="mt-md inline-flex items-center gap-sm rounded-lg border border-dashed border-outline-variant bg-surface-container-low px-md py-sm no-underline transition hover:bg-surface-container"
+            >
+              <p className="font-label-caps text-[10px] text-on-surface-variant">Looking for a live session instead?</p>
+              <p className="font-label-mono text-body-sm text-primary">Go to Sessions →</p>
+            </a>
+          </div>
         </div>
 
-        <div className="flex flex-col rounded-lg border border-outline-variant bg-surface-container p-lg min-h-[480px]">
+        {/* RIGHT: calendar above the analysis results — one connected column */}
+        <div className="flex flex-col space-y-lg min-w-0">
+          <SessionCalendar
+            items={calendarItems}
+            selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
+            levelFilter={levelFilter}
+            onLevelFilterChange={setLevelFilter}
+          />
+          <div className="flex flex-col rounded-lg border border-outline-variant bg-surface-container p-lg min-h-[480px]">
           {!result ? (
             <div className="flex flex-1 flex-col items-center justify-center text-center">
               <Sparkles className="h-12 w-12 text-on-surface-variant" />
@@ -523,22 +904,6 @@ export default function VideoReviewPage() {
             </div>
           ) : (
             <div className="space-y-lg">
-              {result.summary.all_unavailable_features.length > 0 && (
-                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-md">
-                  <div className="flex items-start gap-sm">
-                    <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
-                    <div>
-                      <h3 className="text-body-sm font-semibold text-amber-500">Partial Analysis</h3>
-                      <p className="text-body-sm text-on-surface-variant mt-1">
-                        This video's framing didn't capture the full body. {result.summary.frames_with_unavailable_features.toFixed(0)}% of frames have missing features.
-                        <br />
-                        Unavailable: {result.summary.all_unavailable_features.map(f => FEATURE_LABELS[f] || f).join(", ")}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               <div className="flex flex-wrap items-start justify-between gap-md">
                 <div>
                   <p className="font-label-caps text-[10px] text-on-surface-variant">Analyzed File</p>
@@ -552,12 +917,67 @@ export default function VideoReviewPage() {
                     {showOverlay ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     {showOverlay ? "Hide Overlay" : "Show Overlay"}
                   </button>
-                  <div className="flex items-center gap-sm rounded-lg border border-green-400/30 bg-green-400/10 px-md py-sm text-body-sm text-green-400">
-                    <CheckCircle2 className="h-4 w-4" />
-                    Real computed results
-                  </div>
+                  <button
+                    className="flex items-center gap-sm rounded-lg bg-primary px-md py-sm text-body-sm font-semibold text-on-primary disabled:opacity-50"
+                    disabled={!jobId || downloading || status !== "complete"}
+                    onClick={async () => {
+                      if (!jobId || !result) return;
+                      setDownloading(true);
+                      try {
+                        await downloadVideoWithOverlay(jobId, `${result.filename.replace(/\.[^.]+$/, "")}_overlay.mp4`);
+                      } catch (err) {
+                        setError(err instanceof Error ? err.message : "Download failed");
+                      } finally {
+                        setDownloading(false);
+                      }
+                    }}
+                  >
+                    <Download className="h-4 w-4" />
+                    {downloading ? "Preparing…" : "Download with Overlay"}
+                  </button>
+                  <button
+                    className="flex items-center gap-sm rounded-lg border border-outline-variant px-md py-sm text-body-sm text-on-surface hover:bg-surface-container-low"
+                    onClick={downloadJson}
+                  >
+                    <Download className="h-4 w-4" />
+                    Download Data (JSON)
+                  </button>
                 </div>
               </div>
+
+              {/* Honest status line — directly under "Analyzed File", before any
+                  numbers, so data completeness is the first thing reviewers see.
+                  One consistent status (amber when partial, neutral when complete)
+                  replaces the old green badge that contradicted the warning. */}
+              {(() => {
+                const unavailable = result.summary.all_unavailable_features;
+                const total = Object.keys(result.summary.average_features).length;
+                if (unavailable.length === 0) {
+                  return (
+                    <div className="flex items-center gap-sm rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm">
+                      <CheckCircle2 className="h-4 w-4 shrink-0 text-on-surface-variant" />
+                      <p className="text-body-sm text-on-surface-variant">
+                        Computed from real pipeline output — all {total} features available.
+                      </p>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-md">
+                    <div className="flex items-start gap-sm">
+                      <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-body-sm font-medium text-amber-500">
+                          Computed from real pipeline output — {unavailable.length} of {total} features unavailable due to incomplete framing.
+                        </p>
+                        <p className="text-[11px] text-on-surface-variant mt-1">
+                          {result.summary.frames_with_unavailable_features.toFixed(0)}% of frames have missing features · Unavailable: {unavailable.map(f => FEATURE_LABELS[f] || f).join(", ")}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* ------------------------------ */}
               {/* PART 1 & PART 2: Video Player + Skeleton + Current Frame Panel */}
@@ -571,7 +991,7 @@ export default function VideoReviewPage() {
                         ref={videoRef}
                         src={videoUrl}
                         controls
-                        className="w-full max-h-[500px]"
+                        className="w-full max-h-[500px] object-contain"
                         onTimeUpdate={handleTimeUpdate}
                         onLoadedMetadata={handleVideoLoadedMetadata}
                         onSeeked={handleTimeUpdate}
@@ -581,7 +1001,6 @@ export default function VideoReviewPage() {
                         <canvas
                           ref={canvasRef}
                           className="absolute top-0 left-0 w-full h-full pointer-events-none"
-                          style={{ objectFit: "contain" }}
                         />
                       )}
                     </>
@@ -600,14 +1019,22 @@ export default function VideoReviewPage() {
                           className="flex items-center justify-between border-b border-outline-variant/60 last:border-0 pb-1 last:pb-0"
                         >
                           <span className="text-sm text-on-surface-variant">{label}</span>
-                          {currentFrame.unavailable_features.includes(feat) ||
-                          currentFrame.features[feat] !== currentFrame.features[feat] ? (
-                            <span className="text-sm text-on-surface-variant font-mono">—</span>
-                          ) : (
-                            <span className="text-sm text-on-surface font-mono">
-                              {currentFrame.features[feat].toFixed(1)}
-                            </span>
-                          )}
+                          {(() => {
+                            const v = currentFrame.features[feat];
+                            // A feature listed in the session-level "Partial
+                            // Analysis" set is unavailable in the aggregate
+                            // result — dash it here too, so this panel can
+                            // never show a real number beside a warning that
+                            // says the feature was unavailable (the Wrist
+                            // Deviation 24.4-vs-unavailable contradiction).
+                            const sessionUnavailable = (result.summary.all_unavailable_features || []).includes(feat);
+                            const usable = !sessionUnavailable && v != null && v === v;
+                            return usable ? (
+                              <span className="text-sm text-on-surface font-mono">{v.toFixed(1)}</span>
+                            ) : (
+                              <span className="text-sm text-on-surface-variant font-mono">—</span>
+                            );
+                          })()}
                         </div>
                       ))}
                     </div>
@@ -641,20 +1068,20 @@ export default function VideoReviewPage() {
                     onMouseLeave={handleChartMouseLeave}
                   >
                     {/* Background Grid & Y-Axis */}
-                    <line x1={CHART_PADDING.left} y1={CHART_PADDING.top} x2={CHART_PADDING.left} y2={CHART_HEIGHT - CHART_PADDING.bottom} stroke="#424754" />
-                    <line x1={CHART_PADDING.left} y1={CHART_HEIGHT - CHART_PADDING.bottom} x2={CHART_WIDTH - CHART_PADDING.right} y2={CHART_HEIGHT - CHART_PADDING.bottom} stroke="#424754" />
-                    <text x={CHART_PADDING.left - 10} y={CHART_PADDING.top + 5} fill="#c2c6d6" fontSize="12" textAnchor="end">HIGH</text>
-                    <text x={CHART_PADDING.left - 10} y={(CHART_HEIGHT - CHART_PADDING.bottom - CHART_PADDING.top)/2 + CHART_PADDING.top + 5} fill="#c2c6d6" fontSize="12" textAnchor="end">MED</text>
-                    <text x={CHART_PADDING.left - 10} y={CHART_HEIGHT - CHART_PADDING.bottom - 5} fill="#c2c6d6" fontSize="12" textAnchor="end">LOW</text>
+                    <line x1={CHART_PADDING.left} y1={CHART_PADDING.top} x2={CHART_PADDING.left} y2={CHART_HEIGHT - CHART_PADDING.bottom} stroke="var(--color-outline-variant)" />
+                    <line x1={CHART_PADDING.left} y1={CHART_HEIGHT - CHART_PADDING.bottom} x2={CHART_WIDTH - CHART_PADDING.right} y2={CHART_HEIGHT - CHART_PADDING.bottom} stroke="var(--color-outline-variant)" />
+                    <text x={CHART_PADDING.left - 10} y={CHART_PADDING.top + 5} fill="var(--color-on-surface-variant)" fontSize="12" textAnchor="end">HIGH</text>
+                    <text x={CHART_PADDING.left - 10} y={(CHART_HEIGHT - CHART_PADDING.bottom - CHART_PADDING.top)/2 + CHART_PADDING.top + 5} fill="var(--color-on-surface-variant)" fontSize="12" textAnchor="end">MED</text>
+                    <text x={CHART_PADDING.left - 10} y={CHART_HEIGHT - CHART_PADDING.bottom - 5} fill="var(--color-on-surface-variant)" fontSize="12" textAnchor="end">LOW</text>
 
                     {/* Risk Path */}
-                    {riskPath && <path d={riskPath} fill="none" stroke="#adc6ff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />}
+                    {riskPath && <path d={riskPath} fill="none" stroke="var(--color-primary)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />}
 
                     {/* Time Labels */}
                     {timeLabels.map((tick, i) => (
                       <g key={i}>
-                        <line x1={tick.x} y1={CHART_HEIGHT - CHART_PADDING.bottom} x2={tick.x} y2={CHART_HEIGHT - CHART_PADDING.bottom + 10} stroke="#424754" strokeWidth="1" />
-                        <text x={tick.x} y={CHART_HEIGHT - CHART_PADDING.bottom + 25} fill="#c2c6d6" fontSize="10" textAnchor="middle">{tick.label}</text>
+                        <line x1={tick.x} y1={CHART_HEIGHT - CHART_PADDING.bottom} x2={tick.x} y2={CHART_HEIGHT - CHART_PADDING.bottom + 10} stroke="var(--color-outline-variant)" strokeWidth="1" />
+                        <text x={tick.x} y={CHART_HEIGHT - CHART_PADDING.bottom + 25} fill="var(--color-on-surface-variant)" fontSize="10" textAnchor="middle">{tick.label}</text>
                       </g>
                     ))}
 
@@ -666,7 +1093,7 @@ export default function VideoReviewPage() {
                           y1={CHART_PADDING.top}
                           x2={CHART_PADDING.left + (hoverTime / Math.max(...result.frames.map(f => f.timestamp_seconds), 1)) * (CHART_WIDTH - CHART_PADDING.left - CHART_PADDING.right)}
                           y2={CHART_HEIGHT - CHART_PADDING.bottom}
-                          stroke="#ffffff"
+                          stroke="var(--color-on-surface)"
                           strokeWidth="2"
                           strokeDasharray="4 4"
                         />
@@ -742,15 +1169,25 @@ export default function VideoReviewPage() {
                 <div className="rounded-lg border border-outline-variant bg-surface-container-low p-md">
                   <h3 className="text-body-sm font-bold text-on-surface">Feature Averages</h3>
                   <div className="mt-md space-y-sm">
-                    {Object.entries(result.summary.average_features).map(([name, value]) => (
-                      <div
-                        key={name}
-                        className="flex items-center justify-between gap-md border-b border-outline-variant/60 pb-xs"
-                      >
-                        <span className="text-body-sm text-on-surface-variant">{FEATURE_LABELS[name] || name}</span>
-                        <span className="font-label-mono text-body-sm text-on-surface">{(value ?? 0).toFixed(1)}</span>
-                      </div>
-                    ))}
+                    {Object.entries(result.summary.average_features).map(([name, value]) => {
+                      // Any feature listed as unavailable in this session's
+                      // status line must show a dash here too — never a numeric
+                      // 0.0 that implies a real reading was taken.
+                      const isUnavailable = result.summary.all_unavailable_features.includes(name);
+                      return (
+                        <div
+                          key={name}
+                          className="flex items-center justify-between gap-md border-b border-outline-variant/60 pb-xs"
+                        >
+                          <span className="text-body-sm text-on-surface-variant">{FEATURE_LABELS[name] || name}</span>
+                          {isUnavailable ? (
+                            <span className="font-label-mono text-body-sm text-on-surface-variant/60">—</span>
+                          ) : (
+                            <span className="font-label-mono text-body-sm text-on-surface">{(value ?? 0).toFixed(1)}</span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -793,6 +1230,7 @@ export default function VideoReviewPage() {
               </section>
             </div>
           )}
+          </div>
         </div>
       </section>
     </div>

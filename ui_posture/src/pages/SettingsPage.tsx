@@ -1,10 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { Sun, Moon, Monitor, Camera, RefreshCw, Bell, Save, HardDrive, AlertTriangle } from 'lucide-react';
+import { 
+  Sun, Moon, Monitor, Camera, RefreshCw, Bell, Save, HardDrive, 
+  AlertTriangle, Brain, Activity, Cpu, Zap, FileText, BarChart3, 
+  Users, Settings as SettingsIcon, ToggleLeft, ToggleRight
+} from 'lucide-react';
 import { useTheme } from '@/src/hooks/useTheme';
 import { useToast } from '@/src/hooks/useToast';
 import { useAuth } from '@/src/auth/AuthContext';
 import { useSettings } from '@/src/hooks/useSettings';
 import { getCameras, getRetentionStats, updateRetentionConfig } from '@/src/services/dashboardService';
+import ModelDiagnosticsCard from '@/src/components/common/ModelDiagnosticsCard';
 import type { CameraInfo } from '@/src/types/api';
 
 export default function SettingsPage() {
@@ -57,7 +62,7 @@ export default function SettingsPage() {
   }, [canEditSystemSettings]);
 
   const handleSave = async () => {
-    setMode(settings.theme);
+    // Theme is already applied in real-time via setMode() in the onClick handler.
     saveSettings();
 
     // Push the retention policy to the backend when the admin changed it.
@@ -78,25 +83,71 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="p-lg space-y-lg pb-32 max-w-3xl">
+    <div className="p-lg space-y-lg pb-32 max-w-4xl">
       <div>
         <h1 className="text-display-lg font-bold text-on-surface">Settings</h1>
-        <p className="text-body-sm text-on-surface-variant mt-xs">Configure your dashboard and deployment preferences</p>
+        <p className="text-body-sm text-on-surface-variant mt-xs">Configure your dashboard, monitoring, and deployment preferences</p>
       </div>
 
       <div className="space-y-md">
+        {/* ── Appearance Section ──────────────────────────────── */}
+        <div className="border-b border-outline-variant/30 pb-md">
+          <div className="flex items-center gap-sm mb-md">
+            <SettingsIcon className="w-5 h-5 text-primary" />
+            <h2 className="text-headline-md font-bold text-on-surface">Appearance</h2>
+          </div>
+        </div>
+
         <SettingSection icon={Sun} title="Theme">
           <div className="flex gap-sm flex-wrap">
             {(['dark', 'light', 'system'] as const).map((t) => {
               const Icon = t === 'dark' ? Moon : t === 'light' ? Sun : Monitor;
               return (
-                <button key={t} onClick={() => updateSetting('theme', t)} className={`flex items-center gap-sm px-md py-sm rounded-lg border text-body-sm font-medium transition-all ${settings.theme === t ? 'border-primary/50 bg-primary/10 text-primary' : 'border-outline-variant text-on-surface-variant hover:text-on-surface'}`}>
+                <button key={t} onClick={() => {
+                  updateSetting('theme', t);
+                  setMode(t);  // Apply theme immediately
+                }} className={`flex items-center gap-sm px-md py-sm rounded-lg border text-body-sm font-medium transition-all ${settings.theme === t ? 'border-primary/50 bg-primary/10 text-primary' : 'border-outline-variant text-on-surface-variant hover:text-on-surface'}`}>
                   <Icon className="w-4 h-4" />{t.charAt(0).toUpperCase() + t.slice(1)}
                 </button>
               );
             })}
           </div>
         </SettingSection>
+
+        <SettingSection icon={BarChart3} title="Display">
+          <div className="space-y-sm w-full">
+            <div className="flex items-center justify-between">
+              <span className="text-body-sm text-on-surface-variant">Chart Animations</span>
+              <button onClick={() => updateSetting('chartAnimation', !settings.chartAnimation)} className="relative w-12 h-6 rounded-full transition-colors">
+                {settings.chartAnimation ? (
+                  <ToggleRight className="w-12 h-6 text-primary" />
+                ) : (
+                  <ToggleLeft className="w-12 h-6 text-on-surface-variant" />
+                )}
+              </button>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-body-sm text-on-surface-variant">Timeline Granularity</span>
+              <select
+                value={settings.timelineGranularity}
+                onChange={(e) => updateSetting('timelineGranularity', e.target.value as 'seconds' | 'minutes' | 'hours')}
+                className="bg-surface-container-high border border-outline-variant rounded-lg px-md py-sm text-body-sm text-on-surface outline-none focus:border-primary/50"
+              >
+                <option value="seconds">Seconds</option>
+                <option value="minutes">Minutes</option>
+                <option value="hours">Hours</option>
+              </select>
+            </div>
+          </div>
+        </SettingSection>
+
+        {/* ── Monitoring Section ──────────────────────────────── */}
+        <div className="border-b border-outline-variant/30 pt-md pb-md">
+          <div className="flex items-center gap-sm mb-md">
+            <Camera className="w-5 h-5 text-primary" />
+            <h2 className="text-headline-md font-bold text-on-surface">Monitoring</h2>
+          </div>
+        </div>
 
         <SettingSection icon={Camera} title="Camera">
           {loadingCameras ? (
@@ -116,6 +167,50 @@ export default function SettingsPage() {
           )}
         </SettingSection>
 
+        <SettingSection icon={Activity} title="Performance">
+          <div className="space-y-sm w-full">
+            <div className="flex items-center justify-between">
+              <span className="text-body-sm text-on-surface-variant">Target FPS</span>
+              <select
+                value={settings.targetFps}
+                onChange={(e) => updateSetting('targetFps', Number(e.target.value))}
+                className="bg-surface-container-high border border-outline-variant rounded-lg px-md py-sm text-body-sm text-on-surface outline-none focus:border-primary/50"
+              >
+                <option value={5}>5 FPS (Low CPU)</option>
+                <option value={10}>10 FPS (Balanced)</option>
+                <option value={15}>15 FPS (Default)</option>
+                <option value={20}>20 FPS (High)</option>
+                <option value={30}>30 FPS (Maximum)</option>
+              </select>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-body-sm text-on-surface-variant">Feature Smoothing</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min="0.1"
+                  max="1.0"
+                  step="0.1"
+                  value={settings.featureSmoothing}
+                  onChange={(e) => updateSetting('featureSmoothing', Number(e.target.value))}
+                  className="w-24 accent-primary"
+                />
+                <span className="text-body-sm text-on-surface-variant w-8">{settings.featureSmoothing}</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-body-sm text-on-surface-variant">Kalman Filter</span>
+              <button onClick={() => updateSetting('kalmanFilter', !settings.kalmanFilter)} className="relative w-12 h-6 rounded-full transition-colors">
+                {settings.kalmanFilter ? (
+                  <ToggleRight className="w-12 h-6 text-primary" />
+                ) : (
+                  <ToggleLeft className="w-12 h-6 text-on-surface-variant" />
+                )}
+              </button>
+            </div>
+          </div>
+        </SettingSection>
+
         <SettingSection icon={RefreshCw} title="Refresh Interval">
           <select value={settings.refreshInterval} onChange={(e) => updateSetting('refreshInterval', Number(e.target.value))} className="bg-surface-container-high border border-outline-variant rounded-lg px-md py-sm text-body-sm text-on-surface outline-none focus:border-primary/50">
             <option value={10}>10 seconds</option>
@@ -125,31 +220,154 @@ export default function SettingsPage() {
           </select>
         </SettingSection>
 
-        <SettingSection icon={Bell} title="Notifications">
-          <button onClick={() => updateSetting('notifications', !settings.notifications)} className={`relative w-12 h-6 rounded-full transition-colors ${settings.notifications ? 'bg-primary' : 'bg-surface-container-highest'}`}>
-            <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${settings.notifications ? 'translate-x-6' : 'translate-x-0.5'}`} />
-          </button>
-          <span className="text-body-sm text-on-surface-variant">{settings.notifications ? 'Enabled' : 'Disabled'}</span>
+        {/* ── Notifications Section ──────────────────────────────── */}
+        <div className="border-b border-outline-variant/30 pt-md pb-md">
+          <div className="flex items-center gap-sm mb-md">
+            <Bell className="w-5 h-5 text-primary" />
+            <h2 className="text-headline-md font-bold text-on-surface">Notifications</h2>
+          </div>
+        </div>
+
+        <SettingSection icon={Bell} title="Alerts">
+          <div className="space-y-sm w-full">
+            <div className="flex items-center justify-between">
+              <span className="text-body-sm text-on-surface-variant">Enable Notifications</span>
+              <button onClick={() => updateSetting('notifications', !settings.notifications)} className="relative w-12 h-6 rounded-full transition-colors">
+                {settings.notifications ? (
+                  <ToggleRight className="w-12 h-6 text-primary" />
+                ) : (
+                  <ToggleLeft className="w-12 h-6 text-on-surface-variant" />
+                )}
+              </button>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-body-sm text-on-surface-variant">Alert Threshold</span>
+              <select
+                value={settings.alertThreshold}
+                onChange={(e) => updateSetting('alertThreshold', e.target.value as 'low' | 'moderate' | 'high')}
+                className="bg-surface-container-high border border-outline-variant rounded-lg px-md py-sm text-body-sm text-on-surface outline-none focus:border-primary/50"
+              >
+                <option value="low">Low (All alerts)</option>
+                <option value="moderate">Moderate (Medium+)</option>
+                <option value="high">High (Critical/High only)</option>
+              </select>
+            </div>
+          </div>
         </SettingSection>
 
+        {/* ── AI & Analytics Section ──────────────────────────────── */}
+        <div className="border-b border-outline-variant/30 pt-md pb-md">
+          <div className="flex items-center gap-sm mb-md">
+            <Brain className="w-5 h-5 text-primary" />
+            <h2 className="text-headline-md font-bold text-on-surface">AI & Analytics</h2>
+          </div>
+        </div>
+
+        <SettingSection icon={Brain} title="AI Assistant">
+          <div className="space-y-sm w-full">
+            <div className="flex items-center justify-between">
+              <span className="text-body-sm text-on-surface-variant">Enable AI Explanations</span>
+              <button onClick={() => updateSetting('aiExplanation', !settings.aiExplanation)} className="relative w-12 h-6 rounded-full transition-colors">
+                {settings.aiExplanation ? (
+                  <ToggleRight className="w-12 h-6 text-primary" />
+                ) : (
+                  <ToggleLeft className="w-12 h-6 text-on-surface-variant" />
+                )}
+              </button>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-body-sm text-on-surface-variant">Ollama Model</span>
+              <select
+                value={settings.ollamaModel}
+                onChange={(e) => updateSetting('ollamaModel', e.target.value)}
+                className="bg-surface-container-high border border-outline-variant rounded-lg px-md py-sm text-body-sm text-on-surface outline-none focus:border-primary/50"
+              >
+                <option value="qwen2.5:1.5b">Qwen 2.5 1.5B (Fast)</option>
+                <option value="qwen2.5:7b">Qwen 2.5 7B (Balanced)</option>
+                <option value="llama3.2:3b">Llama 3.2 3B (Balanced)</option>
+                <option value="gemma2:2b">Gemma 2 2B (Fast)</option>
+              </select>
+            </div>
+          </div>
+        </SettingSection>
+
+        {/* ── Export Section ──────────────────────────────── */}
+        <div className="border-b border-outline-variant/30 pt-md pb-md">
+          <div className="flex items-center gap-sm mb-md">
+            <FileText className="w-5 h-5 text-primary" />
+            <h2 className="text-headline-md font-bold text-on-surface">Export</h2>
+          </div>
+        </div>
+
+        <SettingSection icon={FileText} title="Export Options">
+          <div className="space-y-sm w-full">
+            <div className="flex items-center justify-between">
+              <span className="text-body-sm text-on-surface-variant">Default Format</span>
+              <select
+                value={settings.defaultExportFormat}
+                onChange={(e) => updateSetting('defaultExportFormat', e.target.value as 'pdf' | 'csv' | 'json')}
+                className="bg-surface-container-high border border-outline-variant rounded-lg px-md py-sm text-body-sm text-on-surface outline-none focus:border-primary/50"
+              >
+                <option value="pdf">PDF Report</option>
+                <option value="csv">CSV Data</option>
+                <option value="json">JSON Raw</option>
+              </select>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-body-sm text-on-surface-variant">Auto-Export After Session</span>
+              <button onClick={() => updateSetting('autoExport', !settings.autoExport)} className="relative w-12 h-6 rounded-full transition-colors">
+                {settings.autoExport ? (
+                  <ToggleRight className="w-12 h-6 text-primary" />
+                ) : (
+                  <ToggleLeft className="w-12 h-6 text-on-surface-variant" />
+                )}
+              </button>
+            </div>
+          </div>
+        </SettingSection>
+
+        {/* ── Worker Section ──────────────────────────────── */}
+        <div className="border-b border-outline-variant/30 pt-md pb-md">
+          <div className="flex items-center gap-sm mb-md">
+            <Users className="w-5 h-5 text-primary" />
+            <h2 className="text-headline-md font-bold text-on-surface">Worker</h2>
+          </div>
+        </div>
+
+        <SettingSection icon={Users} title="Worker Settings">
+          <div className="space-y-sm w-full">
+            <div className="flex items-center justify-between">
+              <span className="text-body-sm text-on-surface-variant">Default Worker ID</span>
+              <input
+                type="text"
+                value={settings.defaultWorkerId}
+                onChange={(e) => updateSetting('defaultWorkerId', e.target.value)}
+                placeholder="e.g., EMP-001"
+                className="bg-surface-container-high border border-outline-variant rounded-lg px-md py-sm text-body-sm text-on-surface outline-none focus:border-primary/50 w-32"
+              />
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-body-sm text-on-surface-variant">Auto-Assign Worker</span>
+              <button onClick={() => updateSetting('autoAssignWorker', !settings.autoAssignWorker)} className="relative w-12 h-6 rounded-full transition-colors">
+                {settings.autoAssignWorker ? (
+                  <ToggleRight className="w-12 h-6 text-primary" />
+                ) : (
+                  <ToggleLeft className="w-12 h-6 text-on-surface-variant" />
+                )}
+              </button>
+            </div>
+          </div>
+        </SettingSection>
+
+        {/* ── Admin Section ──────────────────────────────── */}
         {canEditSystemSettings && (
           <>
-            <div className="border-t border-outline-variant/30 pt-md">
-              <div className="flex items-center gap-sm">
-                <h2 className="text-headline-md font-bold text-on-surface">Workplace Controls</h2>
+            <div className="border-b border-outline-variant/30 pt-md pb-md">
+              <div className="flex items-center gap-sm mb-md">
+                <HardDrive className="w-5 h-5 text-primary" />
+                <h2 className="text-headline-md font-bold text-on-surface">System (Admin)</h2>
               </div>
             </div>
-
-            <SettingSection icon={AlertTriangle} title="Alert Threshold">
-              <p className="text-[10px] text-on-surface-variant w-full mb-xs">Sets the minimum severity shown in the Live Monitoring alerts panel.</p>
-              <div className="flex gap-sm">
-                {(['low', 'moderate', 'high'] as const).map((t) => (
-                  <button key={t} onClick={() => updateSetting('alertThreshold', t)} className={`px-md py-sm rounded-lg border text-body-sm font-medium transition-all ${settings.alertThreshold === t ? 'border-primary/50 bg-primary/10 text-primary' : 'border-outline-variant text-on-surface-variant hover:text-on-surface'}`}>
-                    {t.charAt(0).toUpperCase() + t.slice(1)}
-                  </button>
-                ))}
-              </div>
-            </SettingSection>
 
             <SettingSection icon={HardDrive} title="Data Retention">
               <p className="text-[10px] text-on-surface-variant w-full mb-xs">How long session files and recordings are kept before automatic cleanup.</p>
@@ -170,6 +388,17 @@ export default function SettingsPage() {
                 <span className="text-[10px] text-amber-400 w-full">Save to apply the new retention policy.</span>
               )}
             </SettingSection>
+
+            <div className="rounded-xl border border-outline-variant bg-surface-container p-lg">
+              <div className="flex items-center gap-md mb-md">
+                <Brain className="w-5 h-5 text-primary" />
+                <h3 className="text-headline-md font-bold text-on-surface">Model Diagnostics</h3>
+              </div>
+              <p className="text-[11px] text-on-surface-variant mb-md">
+                Internal training metrics for the deployed risk model — visible to admins only.
+              </p>
+              <ModelDiagnosticsCard />
+            </div>
           </>
         )}
       </div>

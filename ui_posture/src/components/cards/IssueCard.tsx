@@ -1,6 +1,7 @@
 import React from 'react';
 import { AlertTriangle, Shield, Info } from 'lucide-react';
 import type { Issue } from '@/src/types/api';
+import { formatISTTime } from '@/src/utils/formatTime';
 
 interface IssueCardProps {
   issue: Issue;
@@ -16,7 +17,7 @@ export const IssueCard: React.FC<IssueCardProps> = ({ issue }) => {
   const cfg = severityConfig[issue.severity] || severityConfig.low;
   const Icon = cfg.icon;
 
-  const time = new Date(issue.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+  const time = formatISTTime(new Date(issue.timestamp));
 
   return (
     <div className={`flex gap-md p-sm bg-surface-container-low border ${cfg.border} rounded-xl hover:border-opacity-60 transition-colors`}>

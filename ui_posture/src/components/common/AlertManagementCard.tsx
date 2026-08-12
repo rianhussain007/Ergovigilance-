@@ -2,19 +2,21 @@ import { Bell, X, CheckCircle, Clock, AlertTriangle, Eye } from 'lucide-react';
 import { EmptyState } from '@/src/components/common';
 import { useAlertsContext } from '@/src/hooks/useAlertsContext';
 import type { AlertData } from '@/src/types/api';
+import { formatISTTime } from '@/src/utils/formatTime';
 
+// Theme-aware severity colors (light variants defined in index.css).
 const SEVERITY_COLORS: Record<string, string> = {
-  LOW: '#22c55e',
-  MEDIUM: '#f97316',
-  HIGH: '#ef4444',
-  CRITICAL: '#dc2626',
+  LOW: 'var(--color-chart-green)',
+  MEDIUM: 'var(--color-chart-orange)',
+  HIGH: 'var(--color-chart-red)',
+  CRITICAL: 'var(--color-chart-red)',
 };
 
 const SEVERITY_BG: Record<string, string> = {
-  LOW: 'rgba(34,197,94,0.08)',
-  MEDIUM: 'rgba(249,115,22,0.08)',
-  HIGH: 'rgba(239,68,68,0.08)',
-  CRITICAL: 'rgba(220,38,38,0.12)',
+  LOW: 'color-mix(in srgb, var(--color-chart-green) 8%, transparent)',
+  MEDIUM: 'color-mix(in srgb, var(--color-chart-orange) 8%, transparent)',
+  HIGH: 'color-mix(in srgb, var(--color-chart-red) 8%, transparent)',
+  CRITICAL: 'color-mix(in srgb, var(--color-chart-red) 12%, transparent)',
 };
 
 const SEVERITY_LABELS: Record<string, string> = {
@@ -25,7 +27,7 @@ const SEVERITY_LABELS: Record<string, string> = {
 };
 
 function severityColor(severity: string): string {
-  return SEVERITY_COLORS[severity] || '#6b7280';
+  return SEVERITY_COLORS[severity] || 'var(--color-outline)';
 }
 
 function severityPulse(severity: string): string {
@@ -44,7 +46,7 @@ function AlertTimelineItem({ alert }: { alert: AlertData }) {
         style={{ backgroundColor: severityColor(alert.severity) }}
       />
       <span className="text-on-surface-variant font-mono w-14 shrink-0">
-        {new Date(alert.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        {formatISTTime(new Date(alert.created_at))}
       </span>
       <span className="text-on-surface flex-1 truncate">{alert.title}</span>
       <span className="text-[8px] bg-surface-container-higher text-on-surface-variant px-1 rounded shrink-0 font-mono">
@@ -104,7 +106,7 @@ export default function AlertManagementCard() {
         className="rounded-lg px-md py-sm text-center border transition-all duration-500"
         style={{
           backgroundColor: SEVERITY_BG[displaySeverity] || 'rgba(107,114,128,0.08)',
-          borderColor: `${severityColor(displaySeverity)}40`,
+          borderColor: `color-mix(in srgb, ${severityColor(displaySeverity)} 25%, transparent)`,
         }}
       >
         <div className="flex items-center justify-center gap-2">

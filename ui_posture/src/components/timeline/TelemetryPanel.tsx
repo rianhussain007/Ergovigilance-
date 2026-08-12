@@ -1,15 +1,20 @@
 import { Activity, BarChart3, Clock3, HeartPulse, Lightbulb, Thermometer, Timer, TrendingUp } from 'lucide-react';
 import type { TimelineEntry } from '@/src/types/api';
 
+// Some recorded sessions predate fields like context/fatigue/exposure — those
+// values can arrive as null, so format defensively instead of crashing.
+const fmt = (v: number | null | undefined, unit = ''): string =>
+  v == null || v !== v ? '—' : `${v.toFixed(1)}${unit}`;
+
 const ITEMS = (entry: TimelineEntry) => [
-  { icon: Activity, label: 'Current Risk', value: entry.risk_level, color: entry.risk_level === 'HIGH' ? 'text-red-400' : entry.risk_level === 'MEDIUM' ? 'text-orange-400' : 'text-green-400' },
-  { icon: Thermometer, label: 'Risk Score', value: entry.risk_score.toFixed(1) },
-  { icon: BarChart3, label: 'Confidence', value: `${entry.confidence.toFixed(1)}%` },
-  { icon: TrendingUp, label: 'Context Score', value: entry.context_score.toFixed(1) },
-  { icon: HeartPulse, label: 'Fatigue', value: `${entry.fatigue.toFixed(1)}%` },
-  { icon: Clock3, label: 'Exposure', value: `${entry.exposure.toFixed(1)}%` },
-  { icon: Activity, label: 'Task', value: entry.current_task },
-  { icon: Timer, label: 'Duration', value: entry.task_duration_seconds != null ? `${Math.round(entry.task_duration_seconds)}s` : '0s' },
+  { icon: Activity, label: 'Current Risk', value: entry.risk_level || '—', color: entry.risk_level === 'HIGH' ? 'text-red-400' : entry.risk_level === 'MEDIUM' ? 'text-orange-400' : 'text-green-400' },
+  { icon: Thermometer, label: 'Risk Score', value: fmt(entry.risk_score) },
+  { icon: BarChart3, label: 'Confidence', value: fmt(entry.confidence, '%') },
+  { icon: TrendingUp, label: 'Context Score', value: fmt(entry.context_score) },
+  { icon: HeartPulse, label: 'Fatigue', value: fmt(entry.fatigue, '%') },
+  { icon: Clock3, label: 'Exposure', value: fmt(entry.exposure, '%') },
+  { icon: Activity, label: 'Task', value: entry.current_task || '—' },
+  { icon: Timer, label: 'Duration', value: entry.task_duration_seconds != null && entry.task_duration_seconds === entry.task_duration_seconds ? `${Math.round(entry.task_duration_seconds)}s` : '0s' },
 ];
 
 export default function TelemetryPanel({ entry }: { entry: TimelineEntry }) {
@@ -27,7 +32,7 @@ export default function TelemetryPanel({ entry }: { entry: TimelineEntry }) {
           </div>
         ))}
       </div>
-      {entry.recommendations.length > 0 && (
+      {entry.recommendations?.length > 0 && (
         <div className="rounded border border-outline-variant/60 bg-surface-container-low p-sm">
           <div className="flex items-center gap-1 mb-1">
             <Lightbulb className="w-3 h-3 text-tertiary" />

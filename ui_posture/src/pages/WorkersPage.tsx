@@ -191,22 +191,23 @@ export default function WorkersPage() {
           <table className="w-full text-body-sm">
             <thead>
               <tr className="border-b border-outline-variant text-on-surface-variant text-[10px] uppercase tracking-wider">
-                <th className="text-left py-sm px-md font-medium">Employee ID</th>
+                <th className="text-left py-sm px-md font-medium" title="HR-facing employee number">Employee ID</th>
                 <th className="text-left py-sm px-md font-medium">Name</th>
                 <th className="text-left py-sm px-md font-medium">Department</th>
                 <th className="text-left py-sm px-md font-medium">Shift</th>
-                <th className="text-left py-sm px-md font-medium">Worker ID</th>
                 {isManager && <th className="text-right py-sm px-md font-medium">Actions</th>}
               </tr>
             </thead>
             <tbody>
               {filtered.map((w) => (
                 <tr key={w.worker_id} className="border-b border-outline-variant/30 hover:bg-surface-container-higher/50 transition-colors">
-                  <td className="py-sm px-md font-mono text-on-surface">{w.employee_id}</td>
+                  <td className="py-sm px-md" title={`Employee ID: ${w.employee_id} · Internal worker ID: ${w.worker_id}`}>
+                    <span className="font-mono text-on-surface">{w.employee_id}</span>
+                    <span className="block font-mono text-[11px] text-on-surface-variant/70 mt-0.5">{w.worker_id}</span>
+                  </td>
                   <td className="py-sm px-md text-on-surface">{w.name}</td>
                   <td className="py-sm px-md text-on-surface">{w.department}</td>
                   <td className="py-sm px-md text-on-surface">{w.shift}</td>
-                  <td className="py-sm px-md text-on-surface-variant font-mono text-[11px]">{w.worker_id}</td>
                   {isManager && (
                     <td className="py-sm px-md text-right">
                       <div className="flex items-center justify-end gap-sm">
@@ -228,7 +229,7 @@ export default function WorkersPage() {
 
       {showForm && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)' }} onClick={closeForm}>
-          <div style={{ background: '#1d2027', width: '100%', maxWidth: '28rem', margin: '0 24px', borderRadius: '12px', border: '1px solid #424754', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ background: 'var(--color-surface-container)', width: '100%', maxWidth: '28rem', margin: '0 24px', borderRadius: '12px', border: '1px solid var(--color-outline-variant)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
               <h3 className="font-label-caps text-label-caps text-on-surface uppercase tracking-widest">
                 {editingId ? 'Edit Worker' : 'Add Worker'}
@@ -250,7 +251,7 @@ export default function WorkersPage() {
                   value={formData.employee_id}
                   onChange={(e) => setFormData({ ...formData, employee_id: e.target.value })}
                   disabled={!!editingId}
-                  style={{ width: '100%', padding: '8px 16px', borderRadius: '8px', border: '1px solid #424754', background: '#272a31', color: '#e1e2ec', fontSize: '13px' }}
+                  style={{ width: '100%', padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--color-outline-variant)', background: 'var(--color-surface-container-high)', color: 'var(--color-on-surface)', fontSize: '13px' }}
                   className="placeholder:text-on-surface-variant focus:outline-none focus:border-primary"
                   placeholder="e.g. EMP-003"
                 />
@@ -262,7 +263,7 @@ export default function WorkersPage() {
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  style={{ width: '100%', padding: '8px 16px', borderRadius: '8px', border: '1px solid #424754', background: '#272a31', color: '#e1e2ec', fontSize: '13px' }}
+                  style={{ width: '100%', padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--color-outline-variant)', background: 'var(--color-surface-container-high)', color: 'var(--color-on-surface)', fontSize: '13px' }}
                   className="placeholder:text-on-surface-variant focus:outline-none focus:border-primary"
                   placeholder="Full name"
                 />
@@ -273,7 +274,7 @@ export default function WorkersPage() {
                   type="text"
                   value={formData.department}
                   onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                  style={{ width: '100%', padding: '8px 16px', borderRadius: '8px', border: '1px solid #424754', background: '#272a31', color: '#e1e2ec', fontSize: '13px' }}
+                  style={{ width: '100%', padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--color-outline-variant)', background: 'var(--color-surface-container-high)', color: 'var(--color-on-surface)', fontSize: '13px' }}
                   className="placeholder:text-on-surface-variant focus:outline-none focus:border-primary"
                   placeholder="e.g. Assembly, Inspection"
                 />
@@ -284,7 +285,7 @@ export default function WorkersPage() {
                   type="text"
                   value={formData.shift}
                   onChange={(e) => setFormData({ ...formData, shift: e.target.value })}
-                  style={{ width: '100%', padding: '8px 16px', borderRadius: '8px', border: '1px solid #424754', background: '#272a31', color: '#e1e2ec', fontSize: '13px' }}
+                  style={{ width: '100%', padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--color-outline-variant)', background: 'var(--color-surface-container-high)', color: 'var(--color-on-surface)', fontSize: '13px' }}
                   className="placeholder:text-on-surface-variant focus:outline-none focus:border-primary"
                   placeholder="e.g. Day, Evening, Night"
                 />
@@ -295,7 +296,7 @@ export default function WorkersPage() {
               <button onClick={closeForm} style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 500 }} className="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-higher transition-colors">
                 Cancel
               </button>
-              <button onClick={handleSave} disabled={saving} style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 500, background: '#adc6ff', color: '#002e6a', opacity: saving ? 0.5 : 1 }}>
+              <button onClick={handleSave} disabled={saving} style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 500, background: 'var(--color-primary)', color: 'var(--color-on-primary)', opacity: saving ? 0.5 : 1 }}>
                 {saving ? 'Saving...' : editingId ? 'Update Worker' : 'Create Worker'}
               </button>
             </div>
@@ -306,7 +307,7 @@ export default function WorkersPage() {
 
       {deleteTarget && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)' }} onClick={() => !deleting && setDeleteTarget(null)}>
-          <div style={{ background: '#1d2027', width: '100%', maxWidth: '24rem', margin: '0 24px', borderRadius: '12px', border: '1px solid #424754', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ background: 'var(--color-surface-container)', width: '100%', maxWidth: '24rem', margin: '0 24px', borderRadius: '12px', border: '1px solid var(--color-outline-variant)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
             <h3 className="font-label-caps text-label-caps text-on-surface uppercase tracking-widest" style={{ marginBottom: '8px' }}>Delete Worker</h3>
             <p className="text-body-sm text-on-surface-variant" style={{ marginBottom: '16px' }}>
               Are you sure you want to delete <span className="text-on-surface font-medium">{deleteTarget.name}</span> ({deleteTarget.employee_id})?

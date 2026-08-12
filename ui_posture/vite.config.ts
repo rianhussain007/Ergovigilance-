@@ -19,16 +19,19 @@ export default defineConfig(() => {
         // Disable file watching when DISABLE_HMR is true to save CPU during agent edits.
         watch: process.env.DISABLE_HMR === 'true' ? undefined : {},
             proxy: {
+                // Use 127.0.0.1 (IPv4) not localhost — Node resolves localhost to ::1
+                // on some Windows setups, and uvicorn binds IPv4 127.0.0.1 only, which
+                // made the proxy throw ECONNREFUSED and the UI show "Failed to fetch".
                 '/api': {
-                    target: 'http://localhost:8000',
+                    target: 'http://127.0.0.1:8000',
                     changeOrigin: true,
                 },
                 '/video/': {
-                    target: 'http://localhost:8000',
+                    target: 'http://127.0.0.1:8000',
                     changeOrigin: true,
                 },
                 '/ws': {
-                    target: 'http://localhost:8000',
+                    target: 'http://127.0.0.1:8000',
                     ws: true,
                 },
             },

@@ -55,7 +55,7 @@ export function useLiveTimeline(): UseLiveTimelineReturn {
   useEffect(() => {
     mountedRef.current = true;
     fetchData(true);
-    const interval = setInterval(() => fetchData(false), 1500);
+    const interval = setInterval(() => fetchData(false), 3000);
     return () => {
       mountedRef.current = false;
       clearInterval(interval);

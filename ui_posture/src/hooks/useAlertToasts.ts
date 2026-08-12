@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { useAlerts } from './useAlerts';
 import { useToast } from './useToast';
 
@@ -6,16 +6,19 @@ const SEVERITY_TOAST_MAP: Record<string, 'error' | 'warning' | 'info'> = {
   CRITICAL: 'error',
   HIGH: 'warning',
   WARNING: 'info',
+  MEDIUM: 'info',
+  LOW: 'info',
 };
 
-const SUSTAINED_MS = 15_000;
+const SUSTAINED_MS = 10_000;  // Reduced from 15s to 10s for faster response
 const EPISODE_RESET_MS = 5_000;
-const TOAST_DURATION_MS = 6_000;
+const TOAST_DURATION_MS = 8_000;  // Increased from 6s to 8s for better readability
 
 interface Episode {
   firstSeenAt: number;
   lastSeenAt: number;
   toastedThisEpisode: boolean;
+  severity: string;
 }
 
 /**
@@ -23,15 +26,19 @@ interface Episode {
  * alert conditions.
  *
  * Tracks "episodes" per trigger_rule. A toast fires only when the same rule
- * has been continuously present in active alerts for >= 15s. A gap of >= 5s
+ * has been continuously present in active alerts for >= 10s. A gap of >= 5s
  * between sightings resets the episode (the condition cleared and came back).
  * Only one toast per episode — no repeat toasts for the same sustained event.
- * Severity controls toast color; the 15s gate applies uniformly to all.
+ * Severity controls toast color and priority; the 10s gate applies uniformly.
  */
 export function useAlertToasts(onToastClick?: () => void) {
   const { alerts } = useAlerts();
   const { addToast } = useToast();
   const episodes = useRef<Map<string, Episode>>(new Map());
+
+  const handleToastClick = useCallback(() => {
+    onToastClick?.();
+  }, [onToastClick]);
 
   useEffect(() => {
     const now = Date.now();
@@ -44,7 +51,13 @@ export function useAlertToasts(onToastClick?: () => void) {
     }
 
     // ── Process active alerts only ────────────────────────────
-    for (const alert of alerts.active) {
+    // Sort by severity (CRITICAL first) to ensure critical alerts are shown
+    const sortedAlerts = [...alerts.active].sort((a, b) => {
+      const order = { CRITICAL: 0, HIGH: 1, WARNING: 2, MEDIUM: 3, LOW: 4 };
+      return (order[a.severity as keyof typeof order] ?? 5) - (order[b.severity as keyof typeof order] ?? 5);
+    });
+
+    for (const alert of sortedAlerts) {
       const toastType = SEVERITY_TOAST_MAP[alert.severity];
       if (!toastType) continue;
 
@@ -52,17 +65,22 @@ export function useAlertToasts(onToastClick?: () => void) {
 
       if (!ep) {
         // Start a new episode
-        ep = { firstSeenAt: now, lastSeenAt: now, toastedThisEpisode: false };
+        ep = { firstSeenAt: now, lastSeenAt: now, toastedThisEpisode: false, severity: alert.severity };
         episodes.current.set(alert.trigger_rule, ep);
       } else {
         // Extend the ongoing episode
         ep.lastSeenAt = now;
+        // Update severity if it changed (escalation)
+        if (alert.severity !== ep.severity) {
+          ep.severity = alert.severity;
+          ep.toastedThisEpisode = false;  // Re-toast on severity change
+        }
       }
 
       if (!ep.toastedThisEpisode && now - ep.firstSeenAt >= SUSTAINED_MS) {
         ep.toastedThisEpisode = true;
-        addToast(toastType, alert.title, alert.message, TOAST_DURATION_MS, onToastClick);
+        addToast(toastType, alert.title, alert.message, TOAST_DURATION_MS, handleToastClick);
       }
     }
-  }, [alerts, addToast, onToastClick]);
+  }, [alerts, addToast, handleToastClick]);
 }

@@ -35,7 +35,7 @@ export function StatusCard({ riskLevel, riskScore, confidence, currentTask, work
       <div className="flex items-center gap-lg">
         <div className="relative w-28 h-28 flex items-center justify-center shrink-0">
           <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="42" fill="none" stroke="#32353c" strokeWidth="8" />
+            <circle cx="50" cy="50" r="42" fill="none" stroke="var(--color-outline-variant)" strokeWidth="8" />
             <circle cx="50" cy="50" r="42" fill="none" className={gaugeColor} strokeWidth="8" strokeLinecap="round"
               strokeDasharray="264" strokeDashoffset={gaugeOffset} style={{ transition: 'stroke-dashoffset 0.8s ease' }} />
           </svg>

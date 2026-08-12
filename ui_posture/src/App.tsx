@@ -14,6 +14,7 @@ import UsersPage from './pages/UsersPage';
 import PilotRequestsPage from './pages/PilotRequestsPage';
 import { SearchModal } from './components/common/SearchModal';
 import LoginPage from './pages/LoginPage';
+import ForgotPassword from './pages/ForgotPassword';
 import DashboardPage from './pages/DashboardPage';
 import VideoReviewPage from './pages/VideoReviewPage';
 import ReplayPage from './pages/ReplayPage';
@@ -36,6 +37,7 @@ export default function App() {
         <Route path="/" element={<HomeRoute />} />
         <Route path="/request-pilot" element={<RequestPilot />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route element={<Layout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/monitoring" element={<LiveMonitoring />} />

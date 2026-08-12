@@ -3,12 +3,19 @@ import { Users, AlertTriangle, TrendingUp, Activity } from 'lucide-react';
 import { AnalyticCard } from '@/src/components/cards';
 import { SectionHeader, ErrorCard, LoadingCard, EmptyState } from '@/src/components/common';
 import { getManagerSummary } from '@/src/services/dashboardService';
-import { useDemo } from '@/src/demo/DemoProvider';
-import { DEMO_WORKERS } from '@/src/demo/demoConstants';
 import type { ManagerSummary, WorkerSummary } from '@/src/types/api';
 
 const colorMap = { low: 'bg-green-500', moderate: 'bg-orange-500', high: 'bg-red-500' };
 const pulseMap = { low: '', moderate: 'animate-pulse', high: 'animate-pulse' };
+
+/** Avatar initials: first + last initial when available, else first two
+ *  letters of a single-word name ("Asha Patel" -> AP, "Praneeth" -> PR). */
+function workerInitials(name: string): string {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 const gridPositions = [
   { x: '10%', y: '15%' }, { x: '35%', y: '10%' }, { x: '60%', y: '18%' }, { x: '85%', y: '12%' },
@@ -16,23 +23,14 @@ const gridPositions = [
   { x: '25%', y: '70%' }, { x: '55%', y: '75%' },
 ];
 
-const DEMO_BANNER = 'SAMPLE DATA — Demo Factory Floor, not live';
-
 export default function ManagerDashboard() {
-  const { state: demoState } = useDemo();
   const [manager, setManager] = useState<ManagerSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<WorkerSummary | null>(null);
-  const isDemo = demoState.active;
 
-  // ── fetch real data (only when demo is OFF) ───────────────────────
+  // ── fetch real data ───────────────────────────────────────────────
   useEffect(() => {
-    if (isDemo) {
-      setManager(null);
-      setLoading(false);
-      return;
-    }
     let cancelled = false;
     const fetchManager = async () => {
       try {
@@ -47,50 +45,20 @@ export default function ManagerDashboard() {
     fetchManager();
     const interval = setInterval(fetchManager, 30000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [isDemo]);
+  }, []);
 
   if (error) return <div className="flex items-center justify-center h-full p-lg"><ErrorCard message={error} onRetry={() => { setLoading(true); setError(null); }} /></div>;
 
-  // ── Single source of truth — one ternary, one object ──────────────
-  // Never split demo/real across two separate expressions.
-  const data = (() => {
-    if (isDemo) {
-      return {
-        manager: {
-          registeredWorkers: DEMO_WORKERS.length,
-          highRiskWorkers: DEMO_WORKERS.filter((w) => w.status === 'high').length,
-          todayAlerts: 8,
-          sessionsCompleted: 42,
-          mostCommonIssue: 'Neck Flexion',
-          weeklyImprovement: 12.4,
-          averageCompliance: 84.6,
-          healthScore: 78.2,
-          workers: DEMO_WORKERS,
-          departmentHeatmap: [
-            { department: 'Assembly Line A', averageRisk: 33.5, workerCount: 2, highRiskCount: 0, level: 'moderate' },
-            { department: 'Assembly Line B', averageRisk: 42.0, workerCount: 1, highRiskCount: 0, level: 'moderate' },
-            { department: 'Fabrication', averageRisk: 68.0, workerCount: 1, highRiskCount: 1, level: 'high' },
-            { department: 'Welding', averageRisk: 72.0, workerCount: 1, highRiskCount: 1, level: 'high' },
-            { department: 'Quality Control', averageRisk: 12.0, workerCount: 1, highRiskCount: 0, level: 'low' },
-            { department: 'Packaging', averageRisk: 29.0, workerCount: 2, highRiskCount: 0, level: 'moderate' },
-            { department: 'Inspection', averageRisk: 15.0, workerCount: 1, highRiskCount: 0, level: 'low' },
-            { department: 'Loading Dock', averageRisk: 18.0, workerCount: 1, highRiskCount: 0, level: 'low' },
-          ],
-        } as ManagerSummary,
-        workers: DEMO_WORKERS,
-      };
-    }
-    // Real mode — manager is null while first fetch is in flight
-    return {
-      manager: manager ?? {
-        registeredWorkers: 0, highRiskWorkers: 0, todayAlerts: 0,
-        sessionsCompleted: 0, mostCommonIssue: '', workers: [],
-      } as ManagerSummary,
-      workers: manager?.workers ?? [],
-    };
-  })();
+  // Single source of truth — manager is null while first fetch is in flight
+  const data = {
+    manager: manager ?? {
+      registeredWorkers: 0, highRiskWorkers: 0, todayAlerts: 0,
+      sessionsCompleted: 0, mostCommonIssue: '', workers: [],
+    } as ManagerSummary,
+    workers: manager?.workers ?? [],
+  };
 
-  if (!isDemo && loading) {
+  if (loading) {
     return (
       <div className="p-lg space-y-lg pb-32">
         <LoadingCard height="h-24" />
@@ -106,14 +74,8 @@ export default function ManagerDashboard() {
     <div className="p-lg space-y-lg pb-32">
       <div>
         <h1 className="text-display-lg font-bold text-on-surface">Manager Dashboard</h1>
-        <p className="text-body-sm text-on-surface-variant mt-xs">{isDemo ? 'Demo — simulated factory floor' : 'Factory-wide ergonomic overview'}</p>
+        <p className="text-body-sm text-on-surface-variant mt-xs">Factory-wide ergonomic overview</p>
       </div>
-
-      {isDemo && (
-        <div className="bg-amber-500/10 border border-amber-400/30 rounded-lg px-lg py-md">
-          <p className="text-[11px] font-bold text-amber-300 uppercase tracking-widest text-center">{DEMO_BANNER}</p>
-        </div>
-      )}
 
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-md">
         <AnalyticCard label="Registered Workers" value={data.manager.registeredWorkers} accent />
@@ -136,7 +98,7 @@ export default function ManagerDashboard() {
       <div className="bg-surface-container border border-outline-variant rounded-xl p-lg">
         <SectionHeader title="Cross-Session Metrics" />
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-md mt-md">
-          <div className="bg-surface-container-low rounded-lg p-md border border-outline-variant/50 text-center">
+          <div className="bg-surface-container-low rounded-lg p-md border border-outline-variant/50 text-center" title="Average session risk over the last 7 days compared with the 7 days before that. With few sessions yet, this figure can swing widely and is directional, not a precise measurement.">
             <TrendingUp className={`w-5 h-5 mx-auto mb-xs ${data.manager.weeklyImprovement !== null && data.manager.weeklyImprovement !== undefined && data.manager.weeklyImprovement < 0 ? 'text-red-400' : 'text-green-400'}`} />
             <p className={`text-title-lg font-bold ${data.manager.weeklyImprovement === null || data.manager.weeklyImprovement === undefined ? 'text-on-surface-variant' : data.manager.weeklyImprovement < 0 ? 'text-red-400' : 'text-green-400'}`}>
               {data.manager.weeklyImprovement === null || data.manager.weeklyImprovement === undefined
@@ -144,7 +106,7 @@ export default function ManagerDashboard() {
                 : `${data.manager.weeklyImprovement > 0 ? '+' : ''}${data.manager.weeklyImprovement.toFixed(1)}%`}
             </p>
             <p className="text-[9px] font-bold uppercase tracking-widest text-on-surface-variant mt-1">Weekly Improvement</p>
-            <p className="text-[8px] text-on-surface-variant/60 mt-1">Avg risk vs prior 7 days</p>
+            <p className="text-[8px] text-on-surface-variant/60 mt-1">Avg risk this week vs prior 7 days</p>
           </div>
           <div className="bg-surface-container-low rounded-lg p-md border border-outline-variant/50 text-center">
             <Activity className="w-5 h-5 mx-auto text-primary mb-xs" />
@@ -185,7 +147,7 @@ export default function ManagerDashboard() {
                   style={{ left: gridPositions[i % gridPositions.length]?.x, top: gridPositions[i % gridPositions.length]?.y }}
                 >
                   <div className={`w-12 h-12 rounded-full ${colorMap[w.status]} ${w.status === 'high' ? 'ring-4 ring-red-400 ring-offset-3 ring-offset-surface-container-lowest animate-pulse shadow-2xl' : w.status === 'moderate' ? 'ring-2 ring-orange-400 ring-offset-2 ring-offset-surface-container-lowest shadow-lg' : 'shadow-md'} flex items-center justify-center text-white font-bold text-sm`}>
-                    {w.name.split(' ').map(n => n[0]).join('')}
+                    {workerInitials(w.name)}
                   </div>
                   <span className="font-label-mono text-[8px] text-on-surface-variant uppercase">{w.id}</span>
                   {selected?.id === w.id && (

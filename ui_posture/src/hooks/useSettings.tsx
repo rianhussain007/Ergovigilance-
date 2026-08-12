@@ -12,6 +12,22 @@ export interface Settings {
   workstationMapping: string;
   alertThreshold: 'low' | 'moderate' | 'high';
   dataRetention: number;
+  // Live monitoring settings
+  targetFps: number; // target frame rate for pose processing
+  featureSmoothing: number; // EMA smoothing factor (0.1-1.0)
+  kalmanFilter: boolean; // enable/disable Kalman smoothing
+  // AI Assistant settings
+  ollamaModel: string; // Ollama model name
+  aiExplanation: boolean; // enable/disable AI explanations
+  // Export settings
+  defaultExportFormat: 'pdf' | 'csv' | 'json';
+  autoExport: boolean; // auto-export after session
+  // Display settings
+  timelineGranularity: 'seconds' | 'minutes' | 'hours';
+  chartAnimation: boolean; // enable/disable chart animations
+  // Worker settings
+  defaultWorkerId: string; // default worker ID for sessions
+  autoAssignWorker: boolean; // auto-assign worker to session
 }
 
 const STORAGE_KEY = 'ergo_settings';
@@ -24,6 +40,22 @@ const DEFAULT_SETTINGS: Settings = {
   workstationMapping: 'auto',
   alertThreshold: 'moderate',
   dataRetention: 90,
+  // Live monitoring settings
+  targetFps: 15,
+  featureSmoothing: 0.7,
+  kalmanFilter: true,
+  // AI Assistant settings
+  ollamaModel: 'qwen2.5:1.5b',
+  aiExplanation: true,
+  // Export settings
+  defaultExportFormat: 'pdf',
+  autoExport: false,
+  // Display settings
+  timelineGranularity: 'seconds',
+  chartAnimation: true,
+  // Worker settings
+  defaultWorkerId: '',
+  autoAssignWorker: false,
 };
 
 function loadLocalSettings(): Settings {

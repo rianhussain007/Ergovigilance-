@@ -1,36 +1,28 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { FeatureCard, AnalyticCard } from '@/src/components/cards';
+import { AnalyticCard } from '@/src/components/cards';
 import { RiskHistoryChart, CameraPanel } from '@/src/components/charts';
-import { SectionHeader, StatusBadge, LoadingCard, ErrorCard, EmptyState, WorkerProfile, AIInsights, DigitalTwin, HealthScore, ShiftSummary, ExportsCenter, LiveAlerts, ContextAwareRiskCard, AlertManagementCard, SystemPerformanceCard, RecommendationsCard } from '@/src/components/common';
-import { TimelineBar, FeatureGraph, TelemetryPanel } from '@/src/components/timeline';
-import { useDashboardWithDemo } from '@/src/hooks/useDashboardWithDemo';
+import { SectionHeader, LoadingCard, ErrorCard, ExportsCenter, LiveAlerts, ContextAwareRiskCard, RecommendationsCard, PredictiveInsightsCard } from '@/src/components/common';
+import { TimelineBar } from '@/src/components/timeline';
+import { useDashboard } from '@/src/hooks/useDashboard';
 import { useHistory } from '@/src/hooks/useHistory';
 import { useLiveTimeline } from '@/src/hooks/useLiveTimeline';
 import { useContextSnapshot } from '@/src/hooks/useContextSnapshot';
-import { useRecommendations } from '@/src/hooks/useRecommendations';
 import { useToast } from '@/src/hooks/useToast';
 import { useSettings } from '@/src/hooks/useSettings';
-import { useDemo } from '@/src/demo/DemoProvider';
-import { CameraPlayback } from '@/src/components/demo';
-import { AlertTriangle, Camera, Clock3, FileDown, FileText, Radio, ShieldAlert } from 'lucide-react';
-import type { StatusType, Issue, ErgonomicFeature, LiveStatus, Recommendations, SessionInfo } from '@/src/types/api';
+import { AlertTriangle, Camera, Clock3, FileDown, FileText, Radio, ShieldAlert, Brain, ScanLine } from 'lucide-react';
+import type { Issue, ErgonomicFeature, LiveStatus, Recommendations, SessionInfo, ContextSnapshot } from '@/src/types/api';
 
 export default function LiveMonitoring() {
-  const { dashboard, sessions, loading, error, refetch } = useDashboardWithDemo();
-  const { state } = useDemo();
+  const { dashboard, sessions, loading, error, refetch } = useDashboard();
   const { settings } = useSettings();
   const history = useHistory();
   const { timeline: liveTimeline } = useLiveTimeline();
   const { snapshot: contextSnapshot } = useContextSnapshot();
-  const { data: recData } = useRecommendations();
   const { addToast } = useToast();
   const [showExports, setShowExports] = useState(false);
   const [showAlerts, setShowAlerts] = useState(false);
   const captureRef = useRef<(() => void) | null>(null);
-  const [selectedFeature, setSelectedFeature] = useState('neck_flexion');
   const [selectedTime, setSelectedTime] = useState(0);
-
-  const latestEntry = liveTimeline.length > 0 ? liveTimeline[liveTimeline.length - 1] : null;
 
   const liveAlerts = useMemo(() => {
     const result: { frame_number: number; severity: string; title: string }[] = [];
@@ -110,7 +102,7 @@ export default function LiveMonitoring() {
 
   if (loading || !dashboard) {
     return (
-      <div className="p-lg space-y-lg pb-32">
+      <div className="p-lg space-y-lg pb-xl">
         {/* Title skeleton */}
         <div className="h-8 w-1/3 bg-surface-container-highest rounded-lg animate-pulse" />
         <div className="h-4 w-1/2 bg-surface-container-high rounded animate-pulse mt-sm" />
@@ -145,8 +137,11 @@ export default function LiveMonitoring() {
     );
   }
 
-  const { liveStatus, ergonomicFeatures, issues, recommendations, sessionAnalytics, riskHistory, trendAnalysis, session, unavailableFeatures = [] } = dashboard;
+  const { liveStatus, ergonomicFeatures, issues, sessionAnalytics, session, unavailableFeatures = [] } = dashboard;
   const approximateFeatures = contextSnapshot?.approximate_features ?? [];
+  // Single source of truth: is a live session actually running right now?
+  const isActive = session?.cameraStatus === 'active';
+  const hasTimeline = liveTimeline.length > 0;
 
   // Filter displayed issues by the user's alert threshold (low | moderate | high).
   const filteredIssues = issues.filter((i) => {
@@ -156,90 +151,97 @@ export default function LiveMonitoring() {
   });
 
   return (
-    <div className="p-lg space-y-lg pb-32">
+    <div className="p-lg space-y-lg pb-xl">
+      {/* ── Live status: camera feed + session/task/status panel ── */}
       <section className="rounded-lg border border-cyan-400/15 bg-[#080d13] p-md shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
         <div className="mb-md flex flex-wrap items-center justify-between gap-md">
           <div className="flex items-center gap-sm min-w-0">
-            <Radio className="h-4 w-4 text-red-400" />
-            <span className="font-label-caps text-label-caps tracking-widest text-red-300 uppercase">Live Status: {session.cameraStatus === 'active' ? 'Active' : session.cameraStatus}</span>
-            <span className="font-label-mono text-[10px] text-on-surface-variant truncate">{session.id}</span>
+            {isActive ? (
+              <>
+                <Radio className="h-4 w-4 text-red-400" />
+                <span className="font-label-caps text-label-caps tracking-widest text-red-300 uppercase">Live Session</span>
+                {session.id && <span className="font-label-mono text-[10px] text-on-surface-variant truncate">{session.id}</span>}
+              </>
+            ) : (
+              <span className="font-label-caps text-label-caps tracking-widest text-on-surface-variant uppercase">Not monitoring</span>
+            )}
           </div>
-          <div className="flex items-center gap-xs text-[10px] font-label-mono text-on-surface-variant">
-            <Clock3 className="h-3.5 w-3.5" />
-            <span>{sessionAnalytics.sessionDuration}</span>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-md">
-          {state.active ? (
-            <CameraPlayback workerName={session.workerName} />
-          ) : (
-            <CameraPanel
-              status={session.cameraStatus}
-              workerName={session.workerName}
-              task={liveStatus.currentTask}
-              onCaptureReady={registerCapture}
-            />
+          {isActive && (
+            <div className="flex items-center gap-xs text-[10px] font-label-mono text-on-surface-variant">
+              <Clock3 className="h-3.5 w-3.5" />
+              <span>{sessionAnalytics.sessionDuration}</span>
+            </div>
           )}
+        </div>
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-md">
+          <CameraPanel
+            status={session.cameraStatus}
+            workerName={session.workerName}
+            task={liveStatus.currentTask}
+            onCaptureReady={registerCapture}
+          />
           <TelemetrySidebar
             session={session}
             liveStatus={liveStatus}
-            features={ergonomicFeatures}
-            issues={issues}
-            recommendations={recommendations}
+            contextSnapshot={contextSnapshot}
             unavailableFeatures={unavailableFeatures}
-            approximateFeatures={approximateFeatures}
+            active={isActive}
             onCapture={handleSidebarCapture}
             onLog={handleLogObservation}
             onOverride={handleRiskOverride}
           />
         </div>
-        {liveTimeline.length > 0 && (
+        {hasTimeline && (
           <TimelineBar timeline={liveTimeline} seekTime={selectedTime} seekTo={seekTo} alerts={liveAlerts} />
         )}
       </section>
 
+      {/* ── Ergonomic Features ── */}
+      <section className="bg-surface-container border border-outline-variant rounded-xl p-lg">
+        <SectionHeader title="Ergonomic Features" />
+        {isActive ? (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-md mt-sm">
+            {ergonomicFeatures.map((f) => <FeatureRowCompact feature={f} key={f.id} isApproximate={approximateFeatures.includes(f.id)} />)}
+          </div>
+        ) : (
+          <IdleNote message="Start monitoring to see live joint measurements." />
+        )}
+      </section>
+
+      {/* ── RULA / Assessment + Camera Framing + Context Risk ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-lg">
-        <div className="space-y-lg">
-          <WorkerProfile session={session} liveStatus={liveStatus} />
-        </div>
-        <div className="space-y-lg">
-          <HealthScore liveStatus={liveStatus} trend={trendAnalysis.improving > 50 ? 'improving' : trendAnalysis.improving < 50 ? 'deteriorating' : 'stable'} />
-        </div>
-        <div className="space-y-lg">
-          <ContextAwareRiskCard />
-        </div>
+        <RulaScoreCard snapshot={contextSnapshot} active={isActive} />
+        <CameraFramingCard snapshot={contextSnapshot} unavailableFeatures={unavailableFeatures} active={isActive} />
+        <ContextAwareRiskCard />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-lg">
-        <div className="lg:col-span-2 space-y-lg">
-          <section>
-            <SectionHeader title="Ergonomic Features" />
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-md">
-              {ergonomicFeatures.map((f) => <FeatureCard feature={f} key={f.id} isApproximate={approximateFeatures.includes(f.id)} />)}
-            </div>
-          </section>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-lg">
-            <div>
-              <SectionHeader title="Issues Detected" />
-              <div className="space-y-sm mt-sm">
-                {issues.length === 0 ? <EmptyState title="No issues" message="All clear." /> : issues.map((issue) => (
-                  <div key={issue.id} className="flex items-start gap-md p-sm bg-surface-container rounded-lg border border-outline-variant/50">
-                    <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${issue.severity === 'high' ? 'text-red-400' : issue.severity === 'moderate' ? 'text-orange-400' : 'text-blue-400'}`} />
-                    <div>
-                      <p className="text-body-sm text-on-surface font-medium">{issue.name}</p>
-                      <p className="text-[10px] text-on-surface-variant mt-0.5">{issue.detail}</p>
-                    </div>
-                  </div>
-                ))}
+      {/* ── Issues + Guidance ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-lg">
+        <div className="bg-surface-container border border-outline-variant rounded-xl p-lg">
+          <SectionHeader title="Issues Detected" />
+          <div className="space-y-sm mt-sm">
+            {issues.length === 0 ? (
+              <IdleNote message={isActive ? 'No posture issues detected.' : 'Start monitoring to detect posture issues.'} />
+            ) : issues.map((issue) => (
+              <div key={issue.id} className="flex items-start gap-md p-sm bg-surface-container-low rounded-lg border border-outline-variant/50">
+                <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${issue.severity === 'high' ? 'text-red-400' : issue.severity === 'moderate' ? 'text-orange-400' : 'text-blue-400'}`} />
+                <div>
+                  <p className="text-body-sm text-on-surface font-medium">{issue.name}</p>
+                  <p className="text-[10px] text-on-surface-variant mt-0.5">{issue.detail}</p>
+                </div>
               </div>
-            </div>
-            <RecommendationsCard />
+            ))}
           </div>
+        </div>
+        <RecommendationsCard idle={!isActive} />
+      </div>
 
-          <section>
-            <SectionHeader title="Session Analytics" />
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-md mt-sm">
+      {/* ── Session Stats + Risk History ── */}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_400px] gap-lg">
+        <section className="bg-surface-container border border-outline-variant rounded-xl p-lg">
+          <SectionHeader title="Session Stats" />
+          {isActive ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-md mt-sm">
               <AnalyticCard label="Session Duration" value={sessionAnalytics.sessionDuration} />
               <AnalyticCard label="Frames Analysed" value={sessionAnalytics.framesAnalyzed.toLocaleString()} />
               <AnalyticCard label="Highest Risk" value={sessionAnalytics.highestRisk} accent />
@@ -248,40 +250,31 @@ export default function LiveMonitoring() {
               <AnalyticCard label="Avg Trunk" value={`${sessionAnalytics.averageTrunk}°`} />
               <AnalyticCard label="Avg Knee" value={`${sessionAnalytics.averageKnee}°`} />
             </div>
-          </section>
-
-          {history.data.points.length === 0 ? <EmptyState title="No risk history" /> : <RiskHistoryChart data={history.data.points} />}
-        </div>
-
-        <div className="space-y-lg">
-          <AlertManagementCard />
-          <SystemPerformanceCard data={state.active ? state.systemPerformance : {
-            systemHealth: 'healthy', cpuUsage: 22, memoryUsage: 38, fps: 30, cameraStatus: 'active',
-            cameraLatency: 8, detectionLatency: 6, processedFrames: 0, droppedFrames: 0,
-            avgProcessingTime: 3.5, peakMemory: 42, uptime: 0, gpuUtilization: 12,
-            aiModelConfidence: 94, inferenceTime: 5.2, lastModelUpdate: '2026-06-28',
-            timeline: [],
-          }} />
-          <ShiftSummary analytics={sessionAnalytics} trend={trendAnalysis} />
-          <DigitalTwin features={ergonomicFeatures} />
-          <AIInsights snapshot={contextSnapshot} recData={recData} />
-          {liveTimeline.length > 0 && (
-            <>
-              {latestEntry && <TelemetryPanel entry={latestEntry} />}
-              <FeatureGraph
-                timeline={liveTimeline}
-                selectedFeature={selectedFeature}
-                onSelectFeature={setSelectedFeature}
-                seekTo={seekTo}
-                currentTime={selectedTime}
-              />
-            </>
+          ) : (
+            <IdleNote message="Start monitoring to collect session statistics." />
           )}
-        </div>
+        </section>
+        {history.data.points.length === 0 ? (
+          <IdleNote message="Start monitoring to build a risk history." />
+        ) : (
+          <RiskHistoryChart data={history.data.points} />
+        )}
       </div>
 
+      {/* ── Predictive forecast (advisory) ── */}
+      <PredictiveInsightsCard
+        mode="live"
+        active={isActive}
+        refreshKey={liveTimeline.length > 0 ? Math.floor(liveTimeline[liveTimeline.length - 1].timestamp / 30) : 0}
+      />
+
       <div className="flex items-center gap-md">
-        <button onClick={() => setShowExports(true)} className="flex items-center gap-sm px-lg py-sm bg-primary text-on-primary rounded-lg text-body-sm font-medium hover:bg-primary-hover transition-colors">
+        <button
+          onClick={() => setShowExports(true)}
+          disabled={!isActive}
+          title={isActive ? 'Export this session' : 'Start monitoring to export session data'}
+          className={`flex items-center gap-sm px-lg py-sm rounded-lg text-body-sm font-medium transition-colors ${isActive ? 'bg-primary text-on-primary hover:bg-primary-hover' : 'bg-surface-container-high text-on-surface-variant cursor-not-allowed'}`}
+        >
           <FileDown className="w-4 h-4" />
           Export Data
         </button>
@@ -295,43 +288,9 @@ export default function LiveMonitoring() {
         <span className="text-[10px] text-on-surface-variant">Alert level: {settings.alertThreshold}</span>
       </div>
 
-      <section>
-        <SectionHeader title="Recent Sessions" />
-        {sessions.length === 0 ? <EmptyState title="No sessions" /> : (
-          <div className="bg-surface-container border border-outline-variant rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="border-b border-outline-variant">
-                    <th className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest px-lg py-md">Session ID</th>
-                    <th className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest px-lg py-md">Date</th>
-                    <th className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest px-lg py-md">Duration</th>
-                    <th className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest px-lg py-md">Highest Risk</th>
-                    <th className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest px-lg py-md">Task</th>
-                    <th className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest px-lg py-md">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sessions.map((s) => (
-                    <tr key={s.id} className="border-b border-outline-variant/50 hover:bg-surface-container-low transition-colors">
-                      <td className="px-lg py-md"><span className="font-label-mono text-label-mono text-primary">{s.id}</span></td>
-                      <td className="px-lg py-md text-body-sm text-on-surface">{new Date(s.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
-                      <td className="px-lg py-md text-body-sm text-on-surface">{s.duration}</td>
-                      <td className="px-lg py-md"><span className="text-body-sm font-medium" style={{ color: s.highestRisk === 'Neck Flexion' || s.highestRisk === 'Trunk Flexion' ? '#f97316' : '#60a5fa' }}>{s.highestRisk}</span></td>
-                      <td className="px-lg py-md text-body-sm text-on-surface">{s.task}</td>
-                      <td className="px-lg py-md"><StatusBadge status={s.status as StatusType} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </section>
-
       {showExports && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowExports(false)}>
-          <div className="bg-surface-container w-full max-w-sm mx-lg rounded-xl border border-outline-variant shadow-2xl p-lg" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-surface-container w-full max-w-[24rem] mx-lg rounded-xl border border-outline-variant shadow-2xl p-lg" onClick={(e) => e.stopPropagation()}>
             <ExportsCenter
               onClose={() => setShowExports(false)}
               timeline={liveTimeline}
@@ -343,7 +302,7 @@ export default function LiveMonitoring() {
 
       {showAlerts && (
         <div className="fixed inset-0 z-50 flex justify-end" onClick={() => setShowAlerts(false)}>
-          <div className="w-full max-w-sm bg-surface-container border-l border-outline-variant shadow-2xl h-full" onClick={(e) => e.stopPropagation()}>
+          <div className="w-full max-w-[24rem] bg-surface-container border-l border-outline-variant shadow-2xl h-full" onClick={(e) => e.stopPropagation()}>
             <LiveAlerts issues={filteredIssues as Issue[]} onClose={() => setShowAlerts(false)} />
           </div>
         </div>
@@ -355,83 +314,264 @@ export default function LiveMonitoring() {
 function TelemetrySidebar({
   session,
   liveStatus,
-  features,
-  issues,
-  recommendations,
+  contextSnapshot,
   unavailableFeatures,
-  approximateFeatures,
+  active,
   onCapture,
   onLog,
   onOverride,
 }: {
   session: SessionInfo;
   liveStatus: LiveStatus;
-  features: ErgonomicFeature[];
-  issues: Issue[];
-  recommendations: Recommendations;
+  contextSnapshot: ContextSnapshot | null;
   unavailableFeatures: string[];
-  approximateFeatures: string[];
+  active: boolean;
   onCapture?: () => void;
   onLog?: (note: string, category: string) => void;
   onOverride?: (level: string, reason: string) => void;
 }) {
-  const primaryIssue = issues[0];
-  const guidanceText = recommendations.worker || primaryIssue?.detail || 'No active guidance from the live pipeline.';
-
   return (
-    <aside className="rounded border border-white/10 bg-black/35 p-md space-y-md">
-      <RiskGauge liveStatus={liveStatus} />
+    <aside className="rounded border border-outline-variant bg-surface-container-low p-md space-y-md">
+      <RiskGauge liveStatus={liveStatus} active={active} />
 
-      <div className="space-y-sm">
-        <div className="flex items-center justify-between">
-          <p className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">Real-Time Joint Telemetry</p>
-          <span className="font-label-mono text-[10px] text-cyan-200">{features.length} tracked</span>
-        </div>
-        <div className="space-y-xs">
-          {features.map((feature) => (
-            <div key={feature.id}>
-              <TelemetryRow feature={feature} unavailableFeatures={unavailableFeatures} isApproximate={approximateFeatures.includes(feature.id)} />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="rounded border border-orange-400/20 bg-orange-500/10 p-sm">
-        <div className="flex items-start gap-sm">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-orange-300" />
-          <div className="min-w-0">
-            <p className="text-[10px] font-label-caps tracking-widest uppercase text-orange-200">
-              {primaryIssue ? primaryIssue.name : 'Guidance'}
+      {/* ── Current Task (trained 7-class model) ── */}
+      {(() => {
+        const conf = liveStatus.taskConfidence ?? liveStatus.confidence ?? 0;
+        const confPct = Math.round(conf * 100);
+        const isUncertain = active && confPct < 50 && !!liveStatus.currentTask;
+        const taskDisplay = !active
+          ? 'No active session'
+          : isUncertain
+            ? 'Task: Uncertain'
+            : (liveStatus.currentTask || 'Not yet classified');
+        return (
+          <div className="rounded border border-cyan-400/30 bg-cyan-500/10 p-sm">
+            <p className="font-label-caps text-[9px] text-on-surface-variant uppercase tracking-widest">Current Task</p>
+            <p className="text-title-md font-bold text-on-surface mt-0.5">
+              {taskDisplay}
             </p>
-            <p className="mt-xs text-[11px] leading-relaxed text-on-surface-variant">{guidanceText}</p>
-            {recommendations.supervisor && (
-              <p className="mt-xs text-[10px] leading-relaxed text-on-surface-variant/75">Supervisor: {recommendations.supervisor}</p>
-            )}
+            <div className="flex items-center justify-between mt-1">
+              <span className="font-label-mono text-[10px] text-on-surface-variant">
+                {active ? `Conf ${confPct}%${isUncertain ? ' — baseline thresholds applied' : ''}` : '—'}
+              </span>
+              <span className="font-label-mono text-[10px] text-on-surface-variant">
+                {active ? (liveStatus.taskDurationSeconds ? `${Math.round(liveStatus.taskDurationSeconds)}s` : '0s') : '—'}
+              </span>
+            </div>
           </div>
-        </div>
+        );
+      })()}
+
+      {/* ── Assessment (RULA / REBA) ── */}
+      <div className="rounded border border-purple-400/30 bg-purple-500/10 p-sm">
+        <p className="font-label-caps text-[9px] text-on-surface-variant uppercase tracking-widest">Assessment</p>
+        {!active ? (
+          <p className="text-[11px] text-on-surface-variant mt-0.5">No active session — assessment starts when monitoring begins.</p>
+        ) : contextSnapshot?.assessment_method ? (
+          <div className="flex items-center justify-between mt-0.5">
+            <span className="text-title-md font-bold" style={{ color: riskColorHex(contextSnapshot.assessment_band || 'low') }}>
+              {contextSnapshot.assessment_method} {contextSnapshot.assessment_score}
+              <span className="text-on-surface-variant text-[11px]">/{contextSnapshot.assessment_method === 'REBA' ? '15' : '7'}</span>
+            </span>
+            <span
+              className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+              style={{ color: riskColorHex(contextSnapshot.assessment_band || 'low'), backgroundColor: `color-mix(in srgb, ${riskColorHex(contextSnapshot.assessment_band || 'low')} 13%, transparent)` }}
+            >
+              {contextSnapshot.assessment_band?.toUpperCase() || '—'}
+            </span>
+          </div>
+        ) : (
+          <p className="text-[11px] text-on-surface-variant mt-0.5">Waiting for assessment…</p>
+        )}
       </div>
+
+      {/* ── Camera framing ── */}
+      <CameraFramingNote snapshot={contextSnapshot} unavailableFeatures={unavailableFeatures} active={active} />
 
       <div className="grid grid-cols-3 gap-xs">
-        <OverrideButton onOverride={onOverride} currentLevel={liveStatus.riskLevel} />
-        <PlaceholderAction icon={Camera} label="Capture" onClick={onCapture} real />
-        <LogButton onLog={onLog} workerName={session.workerName} />
+        <OverrideButton onOverride={onOverride} currentLevel={liveStatus.riskLevel} disabled={!active} />
+        <PlaceholderAction icon={Camera} label="Capture" onClick={onCapture} real disabled={!active} />
+        <LogButton onLog={onLog} workerName={session.workerName} disabled={!active} />
       </div>
 
-      <div className="grid grid-cols-3 gap-sm pt-sm border-t border-white/10">
-        <Metric label="Worker" value={session.workerName} />
-        <Metric label="Task" value={liveStatus.currentTask || 'Unknown'} />
-        <Metric label="Duration" value={liveStatus.taskDurationSeconds ? `${Math.round(liveStatus.taskDurationSeconds)}s` : '0s'} />
-        <Metric label="Status" value={liveStatus.workerStatus || session.cameraStatus} />
-        <Metric label="Confidence" value={`${Math.round(liveStatus.confidence)}%`} />
+      <div className="grid grid-cols-3 gap-sm pt-sm border-t border-outline-variant">
+        <Metric label="Worker" value={session.workerName || 'Not assigned'} />
+        <Metric label="Task" value={(() => { const c = Math.round((liveStatus.taskConfidence ?? liveStatus.confidence ?? 0) * 100); return active ? (c < 50 && liveStatus.currentTask ? 'Uncertain' : (liveStatus.currentTask || 'Classifying…')) : 'No active session'; })()} />
+        <Metric label="Duration" value={active ? (liveStatus.taskDurationSeconds ? `${Math.round(liveStatus.taskDurationSeconds)}s` : '0s') : '—'} />
+        <Metric label="Status" value={active ? humanizeStatus(liveStatus.workerStatus || session.cameraStatus) : 'Idle'} />
+        <Metric label="Confidence" value={active ? `${Math.round(liveStatus.confidence)}%` : '—'} />
       </div>
     </aside>
   );
 }
 
-function RiskGauge({ liveStatus }: { liveStatus: LiveStatus }) {
+function humanizeStatus(status: string): string {
+  const s = (status || '').toLowerCase();
+  if (s === 'active' || s === 'monitoring') return 'Active';
+  if (s === 'disconnected' || s === 'offline') return 'No camera';
+  if (s === 'idle' || s === 'ready') return 'Idle';
+  return status || '—';
+}
+
+function riskColorHex(level: string): string {
+  switch (level.toLowerCase()) {
+    case 'low': return 'var(--color-chart-green)';
+    case 'medium': return 'var(--color-chart-orange)';
+    case 'high': return 'var(--color-chart-red)';
+    default: return 'var(--color-outline)';
+  }
+}
+
+// ── RULA / REBA score card (mirrors the demo's RULA SCORE panel) ──
+function RulaScoreCard({ snapshot, active }: { snapshot: ContextSnapshot | null; active: boolean }) {
+  const method = snapshot?.assessment_method ?? null;
+  const score = snapshot?.assessment_score ?? null;
+  const band = snapshot?.assessment_band ?? null;
+  const maxScore = method === 'REBA' ? 15 : 7;
+  const color = riskColorHex(band || 'low');
+
+  return (
+    <div className="bg-surface-container border border-outline-variant rounded-xl p-lg">
+      <div className="flex items-center gap-sm mb-md">
+        <Brain className="w-4 h-4 text-purple-400" />
+        <SectionHeader title="RULA / REBA Score" />
+      </div>
+      {!active ? (
+        <IdleNote message="Start monitoring to see the RULA/REBA score." />
+      ) : method && score != null ? (
+        <>
+          <div className="flex items-center gap-md">
+            <span className="font-label-mono text-3xl font-bold" style={{ color }}>
+              {score}
+              <span className="text-on-surface-variant text-lg">/{maxScore}</span>
+            </span>
+            <div>
+              <p className="text-body-sm font-bold" style={{ color }}>{band?.toUpperCase() || '—'}</p>
+              <p className="text-[10px] text-on-surface-variant">{method} — {method === 'REBA' ? 'full body' : 'upper body'} assessment</p>
+            </div>
+          </div>
+          {snapshot?.rula_is_partial && method === 'RULA' && (
+            <p className="mt-sm text-[11px] text-amber-400 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1">
+              Partial assessment — some landmarks unavailable (legs out of frame score neutral).
+            </p>
+          )}
+          <p className="mt-md text-[10px] text-on-surface-variant leading-relaxed">
+            RULA 1–2 low · 3–4 medium · 5+ high. REBA 1–3 low · 4–7 medium · 8+ high.
+          </p>
+        </>
+      ) : (
+        <IdleNote message="Waiting for assessment…" />
+      )}
+    </div>
+  );
+}
+
+// ── Camera framing card (mirrors the demo's CAMERA FRAMING panel) ──
+function CameraFramingCard({ snapshot, unavailableFeatures, active }: { snapshot: ContextSnapshot | null; unavailableFeatures: string[]; active: boolean }) {
+  // Tier 3: when the framing-intelligence module has produced a real
+  // assessment (profile view / cropped / occlusion aware), prefer its state
+  // and guidance over the legacy lower-body heuristic.
+  const framingState = snapshot?.framing?.framing_state;
+  const framingGuidance = snapshot?.framing?.guidance as string[] | undefined;
+  const framingQuality = snapshot?.framing?.quality_score as number | undefined;
+  const personCount = snapshot?.person_count;
+  const lowerBodyConf = snapshot?.lower_body_confidence;
+  const missingLower = unavailableFeatures.some((f) => ['trunk_flexion', 'knee_angle', 'stance_stability', 'weight_shift_offset'].includes(f));
+  const bad = framingState === 'poor' || framingState === 'upper_body'
+    || (!framingState && (missingLower || (lowerBodyConf != null && lowerBodyConf < 50)));
+
+  const guidanceLines = framingGuidance?.length
+    ? framingGuidance
+    : ['Lower body out of frame — reposition camera to mid-thigh for full-body REBA.'];
+
+  return (
+    <div className={`bg-surface-container border rounded-xl p-lg ${bad ? 'border-amber-500/40' : 'border-outline-variant'}`}>
+      <div className="flex items-center gap-sm mb-md">
+        <ScanLine className={`w-4 h-4 ${bad ? 'text-amber-400' : active ? 'text-green-400' : 'text-on-surface-variant'}`} />
+        <SectionHeader title="Camera Framing" />
+      </div>
+      {!active ? (
+        <IdleNote message="Start monitoring to check camera framing." />
+      ) : bad ? (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-md py-sm">
+          <p className="text-body-sm font-bold text-amber-400">
+            {framingState === 'poor' ? 'Poor framing — worker not fully visible' : framingState === 'upper_body' ? 'Upper body only — lower body out of frame' : 'Lower body out of frame'}
+          </p>
+          {guidanceLines.slice(0, 2).map((g, i) => (
+            <p key={i} className="text-[11px] text-amber-400/80 mt-0.5">{g}</p>
+          ))}
+          {framingQuality != null && (
+            <p className="text-[10px] font-mono text-amber-400/70 mt-1">Framing quality: {Math.round(framingQuality)}%</p>
+          )}
+          {lowerBodyConf != null && (
+            <p className="text-[10px] font-mono text-amber-400/70 mt-1">Lower-body confidence: {Math.round(lowerBodyConf)}%</p>
+          )}
+          {unavailableFeatures.length > 0 && (
+            <p className="text-[9px] text-amber-400/60 mt-1">Unavailable: {unavailableFeatures.join(', ')}</p>
+          )}
+        </div>
+      ) : (
+        <div>
+          <p className="text-body-sm text-green-400 font-medium">{personCount && personCount > 1 ? `${personCount} workers in view — monitoring primary` : 'Full body in frame'}</p>
+          {framingQuality != null && (
+            <p className="text-[10px] font-mono text-green-400/70 mt-0.5">Framing quality: {Math.round(framingQuality)}%</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CameraFramingNote({ snapshot, unavailableFeatures, active }: { snapshot: ContextSnapshot | null; unavailableFeatures: string[]; active: boolean }) {
+  const lowerBodyConf = snapshot?.lower_body_confidence;
+  const missingLower = unavailableFeatures.some((f) => ['trunk_flexion', 'knee_angle', 'stance_stability', 'weight_shift_offset'].includes(f));
+  const bad = missingLower || (lowerBodyConf != null && lowerBodyConf < 50);
+
+  if (!active) {
+    return (
+      <div className="flex items-center gap-sm rounded border border-white/10 bg-white/[0.03] px-sm py-xs">
+        <span className="w-1.5 h-1.5 rounded-full bg-outline" />
+        <span className="text-[10px] text-on-surface-variant">Camera not in use — framing check starts with the session</span>
+      </div>
+    );
+  }
+  if (!bad) {
+    return (
+      <div className="flex items-center gap-sm rounded border border-green-400/20 bg-green-500/5 px-sm py-xs">
+        <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+        <span className="text-[10px] text-green-300">Full body in frame</span>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded border border-amber-400/30 bg-amber-500/10 px-sm py-xs">
+      <p className="text-[10px] font-bold text-amber-300 uppercase tracking-widest">⚠ Camera Framing</p>
+      <p className="text-[10px] text-amber-300/80 mt-0.5">Lower body out of frame — reposition camera to mid-thigh.</p>
+    </div>
+  );
+}
+
+function RiskGauge({ liveStatus, active }: { liveStatus: LiveStatus; active: boolean }) {
   const score = Math.max(0, Math.min(100, liveStatus.riskScore || 0));
   const color = liveStatus.riskLevel === 'high' ? '#fb7185' : liveStatus.riskLevel === 'moderate' ? '#f59e0b' : '#22c55e';
   const ring = `conic-gradient(${color} ${score * 3.6}deg, rgba(148,163,184,0.16) 0deg)`;
+
+  if (!active) {
+    return (
+      <div className="rounded border border-white/10 bg-white/[0.03] p-md text-center">
+        <p className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">Current Risk Index</p>
+        <div className="mx-auto mt-sm grid h-28 w-28 place-items-center rounded-full border border-white/10 bg-black/30">
+          <div className="grid h-20 w-20 place-items-center rounded-full bg-[#080d13] border border-white/10">
+            <div>
+              <p className="font-label-mono text-2xl font-bold text-on-surface-variant">—</p>
+              <p className="font-label-caps text-[9px] uppercase tracking-widest text-on-surface-variant">Not measuring</p>
+            </div>
+          </div>
+        </div>
+        <p className="mt-sm text-[11px] italic text-on-surface-variant">Start monitoring to measure risk.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded border border-cyan-400/15 bg-white/[0.03] p-md text-center">
@@ -445,6 +585,19 @@ function RiskGauge({ liveStatus }: { liveStatus: LiveStatus }) {
         </div>
       </div>
       <p className="mt-sm text-[11px] italic text-on-surface-variant">Normal operation range maintained</p>
+    </div>
+  );
+}
+
+// Unified neutral empty-state note for the "no active session" case — muted
+// icon, consistent phrasing, gray (idle is neither good nor bad).
+function IdleNote({ message }: { message: string }) {
+  return (
+    <div className="flex min-h-[160px] flex-col items-center justify-center gap-md rounded-xl border border-outline-variant bg-surface-container-low p-lg text-center">
+      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-surface-container-highest">
+        <Radio className="h-5 w-5 text-on-surface-variant" />
+      </div>
+      <p className="text-body-sm font-medium text-on-surface-variant">{message}</p>
     </div>
   );
 }
@@ -491,6 +644,19 @@ function TelemetryRow({ feature, unavailableFeatures = [], isApproximate }: { fe
   );
 }
 
+function FeatureRowCompact({ feature, isApproximate }: { feature: ErgonomicFeature; isApproximate?: boolean }) {
+  const isUnavailable = feature.status === 'unavailable' || feature.value === null;
+  const color = isUnavailable ? 'text-on-surface-variant/50' : feature.status === 'high' ? 'text-red-400' : feature.status === 'moderate' ? 'text-orange-400' : feature.status === 'low' ? 'text-blue-400' : 'text-green-400';
+  return (
+    <div className={`rounded-lg border p-md ${isUnavailable ? 'border-outline-variant/40 bg-surface-container-low' : 'border-outline-variant/60 bg-surface-container-low'}`}>
+      <p className={`text-[10px] font-medium truncate ${isUnavailable ? 'text-on-surface-variant/50' : 'text-on-surface-variant'}`}>{feature.name}</p>
+      <p className={`font-label-mono text-title-md font-bold mt-0.5 ${color}`}>
+        {isUnavailable ? 'N/A' : isApproximate ? `~${feature.value!.toFixed(1)}${feature.unit}` : `${feature.value!.toFixed(1)}${feature.unit}`}
+      </p>
+    </div>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
@@ -500,26 +666,29 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function PlaceholderAction({ icon: Icon, label, onClick, real }: { icon: typeof Camera; label: string; onClick?: () => void; real?: boolean }) {
+function PlaceholderAction({ icon: Icon, label, onClick, real, disabled }: { icon: typeof Camera; label: string; onClick?: () => void; real?: boolean; disabled?: boolean }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
+      title={disabled ? 'Start monitoring to use this action' : `${label} current frame`}
       className={`relative flex items-center justify-center gap-xs rounded border px-sm py-sm text-[10px] font-medium transition-colors ${
-        real
-          ? 'border-cyan-400/40 bg-cyan-400/10 text-cyan-200 hover:bg-cyan-400/20'
-          : 'border-white/10 bg-white/[0.03] text-on-surface-variant hover:border-cyan-400/25 hover:text-cyan-100'
+        disabled
+          ? 'border-white/5 bg-white/[0.02] text-on-surface-variant/40 cursor-not-allowed'
+          : real
+            ? 'border-cyan-400/40 bg-cyan-400/10 text-cyan-200 hover:bg-cyan-400/20'
+            : 'border-white/10 bg-white/[0.03] text-on-surface-variant hover:border-cyan-400/25 hover:text-cyan-100'
       }`}
-      title={real ? `${label} current frame` : `${label} - coming soon`}
     >
       <Icon className="h-3.5 w-3.5" />
       {label}
-      {!real && <span className="absolute -top-1 -right-1 text-[8px] leading-none text-on-surface-variant/60">*</span>}
+      {!real && !disabled && <span className="absolute -top-1 -right-1 text-[8px] leading-none text-on-surface-variant/60">*</span>}
     </button>
   );
 }
 
-function LogButton({ onLog, workerName }: { onLog?: (note: string, category: string) => void; workerName: string }) {
+function LogButton({ onLog, workerName, disabled }: { onLog?: (note: string, category: string) => void; workerName: string; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
   const [note, setNote] = useState('');
   const [category, setCategory] = useState('general');
@@ -537,8 +706,13 @@ function LogButton({ onLog, workerName }: { onLog?: (note: string, category: str
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="relative flex items-center justify-center gap-xs rounded border border-white/10 bg-white/[0.03] px-sm py-sm text-[10px] font-medium text-on-surface-variant hover:border-cyan-400/25 hover:text-cyan-100 transition-colors"
-        title="Log an observation"
+        disabled={disabled}
+        title={disabled ? 'Start monitoring to log observations' : 'Log an observation'}
+        className={`relative flex items-center justify-center gap-xs rounded border px-sm py-sm text-[10px] font-medium transition-colors ${
+          disabled
+            ? 'border-white/5 bg-white/[0.02] text-on-surface-variant/40 cursor-not-allowed'
+            : 'border-white/10 bg-white/[0.03] text-on-surface-variant hover:border-cyan-400/25 hover:text-cyan-100'
+        }`}
       >
         <FileText className="h-3.5 w-3.5" />
         Log
@@ -578,7 +752,7 @@ function LogButton({ onLog, workerName }: { onLog?: (note: string, category: str
   );
 }
 
-function OverrideButton({ onOverride, currentLevel }: { onOverride?: (level: string, reason: string) => void; currentLevel: string }) {
+function OverrideButton({ onOverride, currentLevel, disabled }: { onOverride?: (level: string, reason: string) => void; currentLevel: string; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
   const [level, setLevel] = useState(currentLevel.toUpperCase());
   const [reason, setReason] = useState('');
@@ -594,8 +768,13 @@ function OverrideButton({ onOverride, currentLevel }: { onOverride?: (level: str
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="relative flex items-center justify-center gap-xs rounded border border-white/10 bg-white/[0.03] px-sm py-sm text-[10px] font-medium text-on-surface-variant hover:border-orange-400/40 hover:text-orange-300 transition-colors"
-        title="Manually override risk level"
+        disabled={disabled}
+        title={disabled ? 'Start monitoring to override risk' : 'Manually override risk level'}
+        className={`relative flex items-center justify-center gap-xs rounded border px-sm py-sm text-[10px] font-medium transition-colors ${
+          disabled
+            ? 'border-white/5 bg-white/[0.02] text-on-surface-variant/40 cursor-not-allowed'
+            : 'border-white/10 bg-white/[0.03] text-on-surface-variant hover:border-orange-400/40 hover:text-orange-300'
+        }`}
       >
         <ShieldAlert className="h-3.5 w-3.5" />
         Override

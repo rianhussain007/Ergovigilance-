@@ -21,6 +21,14 @@ const FEATURE_LABELS: Record<string, string> = {
   weight_shift_offset: 'Weight Shift',
 };
 
+// Standard limitation disclosure appended to every exported artifact. Heuristic
+// thresholds are not clinically validated; this is a screening aid, not a
+// medical device or a professional ergonomic assessment.
+const EXPORT_DISCLAIMER =
+  'ErgoVigilance export — heuristic posture-risk thresholds, not clinically validated. ' +
+  'Screening and awareness tool only; not a medical device; not a professional ergonomic assessment. ' +
+  'Risk scores are estimates for prioritization and do not establish causation of injury.';
+
 const FEATURE_COLORS: Record<string, string> = {
   neck_flexion: '#60a5fa',
   trunk_flexion: '#34d399',
@@ -219,7 +227,7 @@ export default function ReplayPage() {
                 >
                   <span className="text-on-surface-variant">{FEATURE_LABELS[name] ?? name}</span>
                   <span className="font-label-mono text-on-surface" style={{ color: FEATURE_COLORS[name] }}>
-                    {value.toFixed(1)}
+                    {value == null || value !== value ? '—' : value.toFixed(1)}
                   </span>
                 </button>
               ))}
@@ -233,7 +241,11 @@ export default function ReplayPage() {
             <div className="space-y-xs">
               <button
                 onClick={() => {
-                  const data = { summary, timeline };
+                  const data = {
+                    _disclaimer: EXPORT_DISCLAIMER,
+                    summary,
+                    timeline,
+                  };
                   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
                   const url = URL.createObjectURL(blob);
                   const a = document.createElement('a');
@@ -249,7 +261,8 @@ export default function ReplayPage() {
               <button
                 onClick={() => {
                   if (!timeline.length) return;
-                  const csv = ['timestamp,frame,risk_score,risk_level,neck_flexion,trunk_flexion,knee_angle'];
+                  const csv = ['# ' + EXPORT_DISCLAIMER.replace(/\s+/g, ' ').trim()];
+                  csv.push('timestamp,frame,risk_score,risk_level,neck_flexion,trunk_flexion,knee_angle');
                   for (const e of timeline) {
                     csv.push([e.timestamp, e.frame_number, e.risk_score, e.risk_level,
                       e.features.neck_flexion ?? '', e.features.trunk_flexion ?? '', e.features.knee_angle ?? ''].join(','));
@@ -305,7 +318,7 @@ function SessionSummaryCard({ summary }: { summary: RecordingSummary }) {
               <div className="mt-1 h-1.5 rounded bg-surface-container-highest overflow-hidden">
                 <div className="h-full rounded" style={{
                   width: `${Math.min(100, summary.risk_percentages[level] ?? 0)}%`,
-                  backgroundColor: level === 'HIGH' ? '#ef4444' : level === 'MEDIUM' ? '#f59e0b' : '#22c55e'
+                  backgroundColor: level === 'HIGH' ? 'var(--color-chart-red)' : level === 'MEDIUM' ? 'var(--color-chart-orange)' : 'var(--color-chart-green)'
                 }} />
               </div>
             </div>
@@ -315,19 +328,19 @@ function SessionSummaryCard({ summary }: { summary: RecordingSummary }) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-md">
         <div className="rounded border border-outline-variant/60 bg-surface-container-low p-md">
           <p className="font-label-caps text-[9px] text-on-surface-variant">Avg Neck Flexion</p>
-          <p className="text-body-sm font-bold text-on-surface">{summary.avg_neck_flexion.toFixed(1)}°</p>
+          <p className="text-body-sm font-bold text-on-surface">{summary.avg_neck_flexion == null ? '—' : `${summary.avg_neck_flexion.toFixed(1)}°`}</p>
         </div>
         <div className="rounded border border-outline-variant/60 bg-surface-container-low p-md">
           <p className="font-label-caps text-[9px] text-on-surface-variant">Avg Trunk Flexion</p>
-          <p className="text-body-sm font-bold text-on-surface">{summary.avg_trunk_flexion.toFixed(1)}°</p>
+          <p className="text-body-sm font-bold text-on-surface">{summary.avg_trunk_flexion == null ? '—' : `${summary.avg_trunk_flexion.toFixed(1)}°`}</p>
         </div>
         <div className="rounded border border-outline-variant/60 bg-surface-container-low p-md">
           <p className="font-label-caps text-[9px] text-on-surface-variant">Avg Shoulder Sym</p>
-          <p className="text-body-sm font-bold text-on-surface">{summary.avg_shoulder_symmetry.toFixed(1)}%</p>
+          <p className="text-body-sm font-bold text-on-surface">{summary.avg_shoulder_symmetry == null ? '—' : `${summary.avg_shoulder_symmetry.toFixed(1)}%`}</p>
         </div>
         <div className="rounded border border-outline-variant/60 bg-surface-container-low p-md">
           <p className="font-label-caps text-[9px] text-on-surface-variant">Avg Knee Angle</p>
-          <p className="text-body-sm font-bold text-on-surface">{summary.avg_knee_angle.toFixed(1)}°</p>
+          <p className="text-body-sm font-bold text-on-surface">{summary.avg_knee_angle == null ? '—' : `${summary.avg_knee_angle.toFixed(1)}°`}</p>
         </div>
       </div>
     </section>

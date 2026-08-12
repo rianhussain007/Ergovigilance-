@@ -5,6 +5,7 @@ import { useAlertsContext } from '@/src/hooks/useAlertsContext';
 import { useAuth } from '@/src/auth/AuthContext';
 import { apiFetch } from '@/src/services/apiClient';
 import type { AlertData, AlertsHistoryResponse } from '@/src/types/api';
+import { formatISTTime } from '@/src/utils/formatTime';
 
 type NotifCategory = 'critical' | 'warning' | 'info' | 'resolved';
 
@@ -107,7 +108,7 @@ function NotificationItem({
             )}
           </div>
         )}
-        <span className="text-[9px] font-label-mono text-on-surface-variant mt-1 block">{new Date(n.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false })}</span>
+        <span className="text-[9px] font-label-mono text-on-surface-variant mt-1 block">{formatISTTime(new Date(n.timestamp))}</span>
       </div>
     </div>
   );

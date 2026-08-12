@@ -4,6 +4,7 @@ import { Plus, Pencil, Trash2, X, Search, KeyRound, Eye, EyeOff } from 'lucide-r
 import { SectionHeader, EmptyState } from '@/src/components/common';
 import { useAuth } from '@/src/auth/AuthContext';
 import { apiFetch } from '@/src/services/apiClient';
+import { formatISTDate } from '@/src/utils/formatTime';
 
 interface User {
   id: number;
@@ -26,7 +27,7 @@ const ROLE_BADGE_CLASSES: Record<Role, string> = {
   operator: 'bg-blue-500/15 text-blue-400 border-blue-500/30',
   supervisor: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
   safety_mgr: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
-  admin: 'bg-red-500/15 text-red-400 border-red-500/30',
+  admin: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
 };
 
 function passwordStrength(pw: string): { score: number; label: string; color: string } {
@@ -281,7 +282,7 @@ export default function UsersPage() {
                         {ROLE_LABELS[u.role as Role] || u.role}
                       </span>
                     </td>
-                    <td className="py-sm px-md text-on-surface-variant text-[11px]">{new Date(u.created_at).toLocaleDateString()}</td>
+                    <td className="py-sm px-md text-on-surface-variant text-[11px]">{formatISTDate(new Date(u.created_at))}</td>
                     <td className="py-sm px-md text-on-surface-variant font-mono text-[11px]">{u.id}</td>
                     {isAdmin && (
                       <td className="py-sm px-md text-right">
@@ -310,7 +311,7 @@ export default function UsersPage() {
 
       {showForm && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)' }} onClick={closeForm}>
-          <div style={{ background: '#1d2027', width: '100%', maxWidth: '28rem', margin: '0 24px', borderRadius: '12px', border: '1px solid #424754', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ background: 'var(--color-surface-container)', width: '100%', maxWidth: '28rem', margin: '0 24px', borderRadius: '12px', border: '1px solid var(--color-outline-variant)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
               <h3 className="font-label-caps text-label-caps text-on-surface uppercase tracking-widest">
                 {editingId ? 'Edit User' : 'Add User'}
@@ -332,7 +333,7 @@ export default function UsersPage() {
                     type="email"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    style={{ width: '100%', padding: '8px 16px', borderRadius: '8px', border: '1px solid #424754', background: '#272a31', color: '#e1e2ec', fontSize: '13px' }}
+                    style={{ width: '100%', padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--color-outline-variant)', background: 'var(--color-surface-container-high)', color: 'var(--color-on-surface)', fontSize: '13px' }}
                     className="placeholder:text-on-surface-variant focus:outline-none focus:border-primary"
                     placeholder="user@example.com"
                   />
@@ -347,7 +348,7 @@ export default function UsersPage() {
                       type={showPassword ? 'text' : 'password'}
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      style={{ width: '100%', padding: '8px 16px', paddingRight: '40px', borderRadius: '8px', border: '1px solid #424754', background: '#272a31', color: '#e1e2ec', fontSize: '13px' }}
+                      style={{ width: '100%', padding: '8px 16px', paddingRight: '40px', borderRadius: '8px', border: '1px solid var(--color-outline-variant)', background: 'var(--color-surface-container-high)', color: 'var(--color-on-surface)', fontSize: '13px' }}
                       className="placeholder:text-on-surface-variant focus:outline-none focus:border-primary"
                       placeholder="Minimum 8 characters"
                     />
@@ -385,7 +386,7 @@ export default function UsersPage() {
                 <select
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value as Role })}
-                  style={{ width: '100%', padding: '8px 16px', borderRadius: '8px', border: '1px solid #424754', background: '#272a31', color: '#e1e2ec', fontSize: '13px' }}
+                  style={{ width: '100%', padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--color-outline-variant)', background: 'var(--color-surface-container-high)', color: 'var(--color-on-surface)', fontSize: '13px' }}
                   className="focus:outline-none focus:border-primary"
                 >
                   {ROLES.map((r) => (
@@ -402,7 +403,7 @@ export default function UsersPage() {
               <button
                 onClick={handleSave}
                 disabled={saving}
-                style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 500, background: '#adc6ff', color: '#002e6a', opacity: saving ? 0.5 : 1 }}
+                style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 500, background: 'var(--color-primary)', color: 'var(--color-on-primary)', opacity: saving ? 0.5 : 1 }}
               >
                 {saving ? 'Saving...' : editingId ? 'Update User' : 'Create User'}
               </button>
@@ -414,7 +415,7 @@ export default function UsersPage() {
 
       {deleteTarget && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)' }} onClick={() => !deleting && setDeleteTarget(null)}>
-          <div style={{ background: '#1d2027', width: '100%', maxWidth: '24rem', margin: '0 24px', borderRadius: '12px', border: '1px solid #424754', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ background: 'var(--color-surface-container)', width: '100%', maxWidth: '24rem', margin: '0 24px', borderRadius: '12px', border: '1px solid var(--color-outline-variant)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
             <h3 className="font-label-caps text-label-caps text-on-surface uppercase tracking-widest" style={{ marginBottom: '8px' }}>Delete User</h3>
             <p className="text-body-sm text-on-surface-variant" style={{ marginBottom: '8px' }}>
               Are you sure you want to delete <span className="text-on-surface font-medium">{deleteTarget.email}</span>?
@@ -442,7 +443,7 @@ export default function UsersPage() {
 
       {resetTarget && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)' }} onClick={() => { if (!resetting) { setResetTarget(null); setResetResult(null); setResetError(null); } }}>
-          <div style={{ background: '#1d2027', width: '100%', maxWidth: '24rem', margin: '0 24px', borderRadius: '12px', border: '1px solid #424754', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
+          <div style={{ background: 'var(--color-surface-container)', width: '100%', maxWidth: '24rem', margin: '0 24px', borderRadius: '12px', border: '1px solid var(--color-outline-variant)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
               <h3 className="font-label-caps text-label-caps text-on-surface uppercase tracking-widest">Reset Password</h3>
               <button onClick={() => { setResetTarget(null); setResetResult(null); setResetError(null); }} style={{ padding: '4px', borderRadius: '6px' }} className="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-higher transition-colors">
@@ -461,7 +462,7 @@ export default function UsersPage() {
             {resetResult ? (
               <div style={{ marginBottom: '16px' }}>
                 <p className="text-body-sm text-on-surface-variant" style={{ marginBottom: '8px' }}>New password generated:</p>
-                <div style={{ padding: '8px', borderRadius: '8px', background: '#272a31', border: '1px solid #424754', fontFamily: 'monospace', color: '#e1e2ec', fontSize: '13px', wordBreak: 'break-all' }}>{resetResult}</div>
+                <div style={{ padding: '8px', borderRadius: '8px', background: 'var(--color-surface-container-high)', border: '1px solid var(--color-outline-variant)', fontFamily: 'monospace', color: 'var(--color-on-surface)', fontSize: '13px', wordBreak: 'break-all' }}>{resetResult}</div>
                 <p className="text-[10px] text-on-surface-variant" style={{ marginTop: '4px' }}>Copy this password now. It will not be shown again.</p>
               </div>
             ) : (
@@ -469,7 +470,7 @@ export default function UsersPage() {
                 <button
                   onClick={() => handleResetPassword()}
                   disabled={resetting}
-                  style={{ width: '100%', padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 500, background: '#272a31', border: '1px solid #424754', color: '#e1e2ec' }}
+                  style={{ width: '100%', padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 500, background: 'var(--color-surface-container-high)', border: '1px solid var(--color-outline-variant)', color: 'var(--color-on-surface)' }}
                   className="hover:bg-surface-container-higher transition-colors disabled:opacity-50"
                 >
                   {resetting ? 'Generating...' : 'Generate Random Password'}

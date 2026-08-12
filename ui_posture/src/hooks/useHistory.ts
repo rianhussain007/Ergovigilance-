@@ -68,7 +68,7 @@ export function useHistory(): UseHistoryReturn {
   useEffect(() => {
     mountedRef.current = true;
     fetchData(true);
-    const interval = setInterval(() => fetchData(false), 2000);
+    const interval = setInterval(() => fetchData(false), 4000);
     return () => {
       mountedRef.current = false;
       clearInterval(interval);

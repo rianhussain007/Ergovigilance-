@@ -92,11 +92,11 @@ export default function FeatureGraph({ timeline, selectedFeature, onSelectFeatur
         </div>
       </div>
       <svg ref={svgRef} viewBox="0 0 800 200" className="w-full h-48 cursor-pointer" onClick={handleClick}>
-        <line x1="50" y1="30" x2="50" y2="180" stroke="#424754" />
-        <line x1="50" y1="180" x2="780" y2="180" stroke="#424754" />
-        <text x="8" y="36" fill="#c2c6d6" fontSize="10">{maxVal.toFixed(0)}{unit}</text>
-        <text x="22" y="108" fill="#c2c6d6" fontSize="10">{((maxVal + minVal) / 2).toFixed(0)}{unit}</text>
-        <text x="28" y="176" fill="#c2c6d6" fontSize="10">{minVal.toFixed(0)}{unit}</text>
+        <line x1="50" y1="30" x2="50" y2="180" stroke="var(--color-outline-variant)" />
+        <line x1="50" y1="180" x2="780" y2="180" stroke="var(--color-outline-variant)" />
+        <text x="8" y="36" fill="var(--color-on-surface-variant)" fontSize="10">{maxVal.toFixed(0)}{unit}</text>
+        <text x="22" y="108" fill="var(--color-on-surface-variant)" fontSize="10">{((maxVal + minVal) / 2).toFixed(0)}{unit}</text>
+        <text x="28" y="176" fill="var(--color-on-surface-variant)" fontSize="10">{minVal.toFixed(0)}{unit}</text>
         {points && <path d={points} fill="none" stroke={FEATURE_COLORS[selectedFeature] ?? '#60a5fa'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />}
         <line x1={seekX} y1="30" x2={seekX} y2="180" stroke="#fff" strokeWidth="1" strokeDasharray="3,3" opacity="0.7" />
         <text x={seekX - 10} y="196" fill="#fff" fontSize="9">{currentTime.toFixed(1)}s</text>

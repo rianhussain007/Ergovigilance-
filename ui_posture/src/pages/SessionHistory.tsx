@@ -1,18 +1,31 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
-import { Search, ArrowUpDown, AlertTriangle, CheckCircle, XCircle, Clock, ExternalLink, ChevronDown } from 'lucide-react';
+import { Search, AlertTriangle, CheckCircle, XCircle, Clock, ExternalLink, RotateCcw } from 'lucide-react';
 import type { StatusType, SessionDetail, SessionAlertEntry, SessionRecord } from '@/src/types/api';
-import { useDemo } from '@/src/demo/DemoProvider';
 import { getSessionDetail, getSessions } from '@/src/services/dashboardService';
 import { StatusBadge, LoadingCard, ErrorCard, EmptyState, SectionHeader } from '@/src/components/common';
 import { Drawer } from '@/src/components/common/Drawer';
+import SessionCalendar, { parseSessionTimestamp, toDateKey } from '@/src/components/common/SessionCalendar';
+import { normalizeSessionId } from '@/src/utils/sessionId';
+import { formatISTSessionLabel, formatISTTime } from '@/src/utils/formatTime';
 
 type SortKey = 'date' | 'duration' | 'task';
+
+const PAGE_SIZE = 20;
 
 function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.round(seconds % 60);
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+/** Human-readable session label in IST — the raw ID stays on hover. */
+function formatSessionLabel(date: string, rawId: string): string {
+  const d = parseSessionTimestamp(date);
+  if (d && !Number.isNaN(d.getTime())) {
+    return formatISTSessionLabel(d);
+  }
+  return rawId;
 }
 
 function severityColor(sev: string): string {
@@ -49,7 +62,7 @@ function AlertTimeline({ alerts }: { alerts: SessionAlertEntry[] }) {
             </div>
             <p className="text-[11px] text-on-surface-variant mt-1">{a.message}</p>
             <div className="flex items-center gap-md mt-1 text-[10px] text-outline">
-              <span>{a.created_at ? new Date(a.created_at).toLocaleTimeString() : 'N/A'}</span>
+              <span>{a.created_at ? formatISTTime(new Date(a.created_at)) : 'N/A'}</span>
               <span>Frame {a.frame_number}</span>
               <span>Rule: {a.trigger_rule}</span>
               <span>Confidence: {(a.confidence * 100).toFixed(0)}%</span>
@@ -78,66 +91,49 @@ function RiskBar({ label, pct, color }: { label: string; pct: number; color: str
 
 export default function SessionHistory() {
   const navigate = useNavigate();
-  const { state: demoState } = useDemo();
   const [allSessions, setAllSessions] = useState<SessionRecord[]>([]);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionsError, setSessionsError] = useState<string | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusType | 'all'>('all');
+  const [workerFilter, setWorkerFilter] = useState('');
+  const [riskFilter, setRiskFilter] = useState('');
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>('date');
   const [sortAsc, setSortAsc] = useState(false);
+  const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
-  const isDemo = demoState?.active === true;
-
-  // Initial fetch: demo mode gets all sessions from demo state, real mode fetches page 1
+  // Fetch the FULL session list (loop pages) so the calendar + filters work
+  // over every session, not just the first page. The backend serves each page
+  // from a cached full scan, so this is a few fast requests.
   useEffect(() => {
-    if (isDemo) {
-      setAllSessions(demoState.sessions || []);
-      setTotalPages(1);
-      setSessionsLoading(false);
-      return;
-    }
     let cancelled = false;
     setSessionsLoading(true);
     setSessionsError(null);
-    getSessions(1, 25)
-      .then((resp) => {
+    (async () => {
+      const all: SessionRecord[] = [];
+      let page = 1;
+      let total = Infinity;
+      while (all.length < total && page <= 50) {
+        const resp = await getSessions(page, 200);
         if (cancelled) return;
-        setAllSessions(resp.sessions);
-        setPage(resp.page);
-        setTotalPages(resp.pages);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setSessionsError(e?.message || 'Failed to load sessions');
-      })
-      .finally(() => {
-        if (!cancelled) setSessionsLoading(false);
-      });
+        all.push(...resp.sessions);
+        total = resp.total;
+        page += 1;
+      }
+      if (!cancelled) setAllSessions(all);
+    })().catch((e) => {
+      if (cancelled) return;
+      setSessionsError(e?.message || 'Failed to load sessions');
+    }).finally(() => {
+      if (!cancelled) setSessionsLoading(false);
+    });
     return () => { cancelled = true; };
-  }, [isDemo]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const loadMore = useCallback(async () => {
-    if (loadingMore || page >= totalPages || isDemo) return;
-    setLoadingMore(true);
-    try {
-      const resp = await getSessions(page + 1, 25);
-      setAllSessions((prev) => [...prev, ...resp.sessions]);
-      setPage(resp.page);
-      setTotalPages(resp.pages);
-    } catch {
-      // silent
-    } finally {
-      setLoadingMore(false);
-    }
-  }, [loadingMore, page, totalPages, isDemo]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchDetail = useCallback(async (id: string) => {
     setDetailLoading(true);
@@ -157,9 +153,50 @@ export default function SessionHistory() {
     if (selectedId) fetchDetail(selectedId);
   }, [selectedId, fetchDetail]);
 
+  const workerOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const s of allSessions) if (s.worker_id) set.add(s.worker_id);
+    return [...set].sort();
+  }, [allSessions]);
+
+  // Display the DOMINANT risk level (plurality of frames) — a session that
+  // was 98% MEDIUM with one stray HIGH frame should not render as red. Falls
+  // back to the peak (highest_risk_level) for records predating the field.
+  const sessionRiskLevel = useCallback((s: SessionRecord): string => {
+    const dom = (s.risk_level || '').toUpperCase();
+    if (dom === 'HIGH' || dom === 'MEDIUM' || dom === 'LOW') return dom;
+    const rl = (s.highest_risk_level || '').toUpperCase();
+    if (rl === 'HIGH' || rl === 'MEDIUM' || rl === 'LOW') return rl;
+    const hr = (s.highestRisk || '').toLowerCase();
+    if (hr.includes('high')) return 'HIGH';
+    if (hr.includes('medium') || hr.includes('moderate')) return 'MEDIUM';
+    if (hr.includes('low')) return 'LOW';
+    return 'LOW';
+  }, []);
+
+  // Reset to the first page whenever filters/sort change the visible set.
+  useEffect(() => { setPage(1); }, [search, statusFilter, workerFilter, riskFilter, selectedDate, sortKey, sortAsc]);
+
+  const hasActiveFilters =
+    workerFilter !== '' || riskFilter !== '' || selectedDate !== null || statusFilter !== 'all' || search.trim() !== '';
+
+  const clearFilters = useCallback(() => {
+    setSearch('');
+    setStatusFilter('all');
+    setWorkerFilter('');
+    setRiskFilter('');
+    setSelectedDate(null);
+  }, []);
+
   const filtered = useMemo(() => {
     let list = allSessions.filter((s) => {
       if (statusFilter !== 'all' && s.status !== statusFilter) return false;
+      if (workerFilter && s.worker_id !== workerFilter) return false;
+      if (riskFilter && sessionRiskLevel(s) !== riskFilter) return false;
+      if (selectedDate) {
+        const d = parseSessionTimestamp(s.date);
+        if (!d || toDateKey(d) !== selectedDate) return false;
+      }
       if (search.trim() && !s.id.toLowerCase().includes(search.toLowerCase()) && !s.task.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     });
@@ -171,30 +208,87 @@ export default function SessionHistory() {
       return sortAsc ? -cmp : cmp;
     });
     return list;
-  }, [allSessions, search, statusFilter, sortKey, sortAsc]);
+  }, [allSessions, search, statusFilter, workerFilter, riskFilter, selectedDate, sortKey, sortAsc, sessionRiskLevel]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, pageCount);
+  const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const shownStart = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const shownEnd = Math.min(safePage * PAGE_SIZE, filtered.length);
 
   if (sessionsError) return <div className="flex items-center justify-center h-full p-lg"><ErrorCard message={sessionsError} onRetry={() => window.location.reload()} /></div>;
 
   return (
     <div className="p-lg space-y-lg pb-32">
-      <div>
-        <h1 className="text-display-lg font-bold text-on-surface">Session History</h1>
-        <p className="text-body-sm text-on-surface-variant mt-xs">Browse, search, and review past monitoring sessions</p>
+      {/* Two-column top: LEFT = title + filters (fills the space beside the
+          calendar), RIGHT = work calendar. This removes the dead gap that
+          appeared when the title row and the filter row were stacked. */}
+      <div className="flex flex-wrap items-start justify-between gap-lg">
+        <div className="flex-1 min-w-0 space-y-lg">
+          <div>
+            <h1 className="text-display-lg font-bold text-on-surface">Session History</h1>
+            <p className="text-body-sm text-on-surface-variant mt-xs">Browse, search, and review past monitoring sessions</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-md">
+            <div className="flex items-center gap-md flex-1 min-w-[200px] max-w-[24rem] bg-surface-container border border-outline-variant rounded-lg px-md py-sm">
+              <Search className="w-4 h-5 text-on-surface-variant shrink-0" />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by ID or task..." className="flex-1 bg-transparent text-body-sm text-on-surface placeholder:text-outline focus:outline-none" />
+            </div>
+            <div className="flex items-center gap-sm bg-surface-container border border-outline-variant rounded-lg p-xs">
+              {(['all', 'active', 'completed', 'interrupted'] as const).map((s) => (
+                <button key={s} onClick={() => setStatusFilter(s)} className={`px-md py-sm rounded text-[11px] font-bold uppercase tracking-wider transition-colors ${statusFilter === s ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}`}>{s}</button>
+              ))}
+            </div>
+            <select
+              value={workerFilter}
+              onChange={(e) => setWorkerFilter(e.target.value)}
+              className="px-md py-sm bg-surface-container border border-outline-variant rounded-lg text-body-sm text-on-surface focus:outline-none"
+            >
+              <option value="">All workers</option>
+              {workerOptions.map((w) => (
+                <option key={w} value={w}>{w}</option>
+              ))}
+            </select>
+            <select
+              value={riskFilter}
+              onChange={(e) => setRiskFilter(e.target.value)}
+              className="px-md py-sm bg-surface-container border border-outline-variant rounded-lg text-body-sm text-on-surface focus:outline-none"
+            >
+              <option value="">Any risk</option>
+              <option value="LOW">LOW</option>
+              <option value="MEDIUM">MEDIUM</option>
+              <option value="HIGH">HIGH</option>
+            </select>
+            <button onClick={() => { setSortAsc(!sortAsc); }} className="flex items-center gap-sm px-md py-sm bg-surface-container border border-outline-variant rounded-lg text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">
+              {sortKey === 'date' ? (sortAsc ? 'Date Asc' : 'Date Desc') : sortKey === 'duration' ? 'Duration' : 'Task'}
+            </button>
+            {hasActiveFilters && (
+              <button onClick={clearFilters} className="flex items-center gap-sm px-md py-sm bg-surface-container border border-outline-variant rounded-lg text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">
+                <RotateCcw className="w-3.5 h-3.5" /> Clear
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="w-full shrink-0 sm:w-[300px]">
+          <SessionCalendar
+            compact
+            items={allSessions.map((s) => ({
+              timestamp: s.date,
+              riskLevel: sessionRiskLevel(s),
+            }))}
+            selectedDate={selectedDate}
+            onSelectDate={setSelectedDate}
+          />
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-md">
-        <div className="flex items-center gap-md flex-1 min-w-[200px] max-w-sm bg-surface-container border border-outline-variant rounded-lg px-md py-sm">
-          <Search className="w-4 h-5 text-on-surface-variant shrink-0" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by ID or task..." className="flex-1 bg-transparent text-body-sm text-on-surface placeholder:text-outline focus:outline-none" />
-        </div>
-        <div className="flex items-center gap-sm bg-surface-container border border-outline-variant rounded-lg p-xs">
-          {(['all', 'active', 'completed', 'interrupted'] as const).map((s) => (
-            <button key={s} onClick={() => setStatusFilter(s)} className={`px-md py-sm rounded text-[11px] font-bold uppercase tracking-wider transition-colors ${statusFilter === s ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}`}>{s}</button>
-          ))}
-        </div>
-        <button onClick={() => { setSortAsc(!sortAsc); }} className="flex items-center gap-sm px-md py-sm bg-surface-container border border-outline-variant rounded-lg text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">
-          <ArrowUpDown className="w-4 h-4" /> {sortAsc ? 'Asc' : 'Desc'}
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-sm text-[11px] text-on-surface-variant">
+        <span>
+          {filtered.length} session{filtered.length === 1 ? '' : 's'}
+          {hasActiveFilters ? ' match the filters' : ' available'}
+          {selectedDate && <span className="ml-sm">· Showing: {selectedDate}</span>}
+        </span>
       </div>
 
       {sessionsLoading ? (
@@ -208,19 +302,33 @@ export default function SessionHistory() {
               <table className="w-full text-left">
                 <thead>
                   <tr className="border-b border-outline-variant">
-                    {(['Session ID', 'Date', 'Duration', 'Highest Risk', 'Task', 'Status', ''] as const).map((h) => (
+                    {(['Session', 'Duration', 'Highest Risk', 'Task', 'Status', ''] as const).map((h) => (
                       <th key={h} className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest px-lg py-md">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map((s) => (
+                  {paged.map((s) => (
                     <tr key={s.id} onClick={() => setSelectedId(s.id)} className="border-b border-outline-variant/50 hover:bg-surface-container-low transition-colors cursor-pointer">
-                      <td className="px-lg py-md"><span className="font-label-mono text-label-mono text-primary">{s.id}</span></td>
-                      <td className="px-lg py-md text-body-sm text-on-surface">{new Date(s.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                      <td className="px-lg py-md" title={`Session ID: ${s.id}`}>
+                        <span className="text-body-sm font-medium text-on-surface">
+                          {formatSessionLabel(s.date, s.id)}
+                        </span>
+                        <span className="block font-label-mono text-[10px] text-on-surface-variant/70 mt-0.5">{normalizeSessionId(s.id)}</span>
+                      </td>
                       <td className="px-lg py-md text-body-sm text-on-surface">{s.duration}</td>
-                      <td className="px-lg py-md"><span className="text-body-sm font-medium" style={{ color: s.highestRisk === 'Neck Flexion' || s.highestRisk === 'Trunk Flexion' ? '#f97316' : '#60a5fa' }}>{s.highestRisk}</span></td>
-                      <td className="px-lg py-md text-body-sm text-on-surface">{s.task}</td>
+                      <td className="px-lg py-md">
+                        <span className={`text-body-sm font-bold ${sessionRiskLevel(s) === 'HIGH' ? 'text-danger' : sessionRiskLevel(s) === 'MEDIUM' ? 'text-warning' : 'text-success'}`}>
+                          {sessionRiskLevel(s)}
+                        </span>
+                      </td>
+                      <td className="px-lg py-md text-body-sm text-on-surface">
+                        {s.task && s.task !== 'Not classified' ? (
+                          s.task
+                        ) : (
+                          <span className="text-on-surface-variant/60">—</span>
+                        )}
+                      </td>
                       <td className="px-lg py-md"><StatusBadge status={s.status as StatusType} /></td>
                       <td className="px-lg py-md">
                         {s.status === 'completed' || s.status === 'interrupted' ? (
@@ -240,20 +348,29 @@ export default function SessionHistory() {
               </table>
             </div>
           </div>
-          {!isDemo && page < totalPages && (
-            <div className="flex justify-center pt-lg">
-              <button
-                onClick={loadMore}
-                disabled={loadingMore}
-                className="flex items-center gap-sm px-lg py-md bg-surface-container border border-outline-variant rounded-lg text-body-sm text-on-surface hover:bg-surface-container-low transition-colors disabled:opacity-60"
-              >
-                {loadingMore ? (
-                  <span className="w-4 h-4 border-2 border-outline border-t-primary rounded-full animate-spin" />
-                ) : (
-                  <ChevronDown className="w-4 h-4" />
-                )}
-                {loadingMore ? 'Loading...' : `Load more (page ${page}/${totalPages}, ${allSessions.length} loaded)`}
-              </button>
+
+          {filtered.length > PAGE_SIZE && (
+            <div className="mt-md flex flex-wrap items-center justify-between gap-md">
+              <span className="text-[11px] text-on-surface-variant">
+                Showing {shownStart}–{shownEnd} of {filtered.length}
+              </span>
+              <div className="flex items-center gap-sm">
+                <button
+                  disabled={safePage <= 1}
+                  onClick={() => setPage(safePage - 1)}
+                  className="px-md py-sm rounded-lg border border-outline-variant bg-surface-container text-body-sm text-on-surface-variant hover:text-on-surface transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  ← Prev
+                </button>
+                <span className="text-[11px] text-on-surface-variant">Page {safePage} of {pageCount}</span>
+                <button
+                  disabled={safePage >= pageCount}
+                  onClick={() => setPage(safePage + 1)}
+                  className="px-md py-sm rounded-lg border border-outline-variant bg-surface-container text-body-sm text-on-surface-variant hover:text-on-surface transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Next →
+                </button>
+              </div>
             </div>
           )}
         </div>

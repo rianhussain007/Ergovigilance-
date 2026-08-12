@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useSessionLifecycle, SessionStatus } from '@/src/hooks/useSessionLifecycle';
-import { useDemo } from '@/src/demo/DemoProvider';
 import { useSettings } from '@/src/hooks/useSettings';
 import { Camera, Play, Square, Loader2, Wifi } from 'lucide-react';
 import { apiFetch } from '@/src/services/apiClient';
@@ -15,17 +14,16 @@ const statusLabels: Record<SessionStatus, string> = {
 };
 
 const statusColors: Record<SessionStatus, string> = {
-  idle: 'bg-primary text-on-primary hover:bg-primary/90',
+  idle: 'bg-primary text-on-primary hover:brightness-110 shadow-md shadow-primary/25',
   starting: 'bg-amber-500 text-on-primary cursor-wait',
-  monitoring: 'bg-red-500 text-on-primary hover:bg-red-600',
+  monitoring: 'bg-red-500 text-on-primary hover:bg-red-600 shadow-md shadow-red-500/20',
   stopping: 'bg-amber-500 text-on-primary cursor-wait',
-  error: 'bg-red-500 text-on-primary hover:bg-red-600',
+  error: 'bg-red-500 text-on-primary hover:bg-red-600 shadow-md shadow-red-500/20',
 };
 
-export default function DemoControls() {
+export default function MonitoringControls() {
   const { status, error, startSession, stopSession } = useSessionLifecycle();
-  const { state: demoState, toggleDemo } = useDemo();
-  const { settings, updateSetting } = useSettings();
+  const { settings } = useSettings();
   const [workers, setWorkers] = useState<WorkerRecord[]>([]);
   const [selectedWorkerId, setSelectedWorkerId] = useState('');
   const isMonitoring = status === 'monitoring';
@@ -56,33 +54,37 @@ export default function DemoControls() {
   };
 
   return (
-    <div className="flex items-center gap-sm">
+    <div className="flex items-center gap-md">
       {!isMonitoring && (
         <>
-          <select
-            value={selectedWorkerId}
-            onChange={(e) => setSelectedWorkerId(e.target.value)}
-            disabled={isBusy || workers.length === 0}
-            className="h-10 rounded-lg border border-outline-variant bg-surface-container px-sm text-xs text-on-surface outline-none focus:border-primary disabled:opacity-60"
-            title="Worker for new monitoring session"
-          >
-            {workers.length === 0 ? (
-              <option value="">No workers</option>
-            ) : workers.map((worker) => (
-              <option key={worker.worker_id} value={worker.worker_id}>
-                {worker.name} ({worker.employee_id})
-              </option>
-            ))}
-          </select>
-          <span className="h-10 flex items-center px-sm text-xs text-on-surface-variant border border-outline-variant rounded-lg bg-surface-container" title="Camera ID for this session">
-            <Camera className="w-3.5 h-3.5 mr-1" /> cam {settings.cameraId || '0'}
-          </span>
+          {/* Session setup cluster: worker + camera selection */}
+          <div className="flex items-center gap-sm px-sm py-1.5 rounded-lg border border-outline-variant bg-surface-container">
+            <select
+              value={selectedWorkerId}
+              onChange={(e) => setSelectedWorkerId(e.target.value)}
+              disabled={isBusy || workers.length === 0}
+              className="h-8 rounded-md border border-transparent bg-transparent px-1 text-xs text-on-surface outline-none focus:border-primary disabled:opacity-60"
+              title="Worker for new monitoring session"
+            >
+              {workers.length === 0 ? (
+                <option value="">No workers</option>
+              ) : workers.map((worker) => (
+                <option key={worker.worker_id} value={worker.worker_id}>
+                  {worker.name} ({worker.employee_id})
+                </option>
+              ))}
+            </select>
+            <span className="w-px h-5 bg-outline-variant/60" />
+            <span className="h-8 flex items-center px-1 text-xs text-on-surface-variant" title="Camera ID for this session">
+              <Camera className="w-3.5 h-3.5 mr-1" /> cam {settings.cameraId || '0'}
+            </span>
+          </div>
         </>
       )}
       <button
         onClick={handleClick}
         disabled={isBusy || (!isMonitoring && !selectedWorkerId)}
-        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all shadow-sm ${statusColors[status]}`}
+        className={`flex items-center gap-2 h-11 px-6 rounded-lg text-sm font-bold transition-all ${statusColors[status]}`}
       >
         {status === 'starting' || status === 'stopping' ? (
           <Loader2 className="w-4 h-4 animate-spin" />
@@ -105,20 +107,6 @@ export default function DemoControls() {
         <span className="text-xs text-red-500 max-w-[200px] truncate" title={error}>
           {error}
         </span>
-      )}
-
-      {!isMonitoring && !isBusy && (
-        <button
-          onClick={toggleDemo}
-          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
-            demoState.active
-              ? 'bg-blue-500/10 text-blue-600 border border-blue-200'
-              : 'bg-surface-container border border-outline-variant text-on-surface-variant hover:bg-surface-container-higher'
-          }`}
-        >
-          <Camera className="w-3.5 h-3.5" />
-          <span>Demo</span>
-        </button>
       )}
     </div>
   );

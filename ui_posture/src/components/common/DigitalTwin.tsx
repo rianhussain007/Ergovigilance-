@@ -6,11 +6,11 @@ interface DigitalTwinProps {
 
 function bodyColor(features: ErgonomicFeature[], id: string): string {
   const f = features.find((x) => x.id === id);
-  if (!f) return '#8c909f';
-  if (f.status === 'high') return '#ef4444';
-  if (f.status === 'moderate') return '#f97316';
-  if (f.status === 'low') return '#22c55e';
-  return '#22c55e';
+  if (!f) return 'var(--color-outline)';
+  if (f.status === 'high') return 'var(--color-chart-red)';
+  if (f.status === 'moderate') return 'var(--color-chart-orange)';
+  if (f.status === 'low') return 'var(--color-chart-green)';
+  return 'var(--color-chart-green)';
 }
 
 function bodyGlow(features: ErgonomicFeature[], id: string): string {
@@ -27,8 +27,8 @@ export function DigitalTwin({ features }: DigitalTwinProps) {
       <h3 className="font-label-caps text-label-caps text-on-surface uppercase tracking-widest mb-md self-start">Digital Twin</h3>
       <svg viewBox="0 0 200 380" className="w-32 h-64 md:w-40 md:h-72">
         <defs>
-          <radialGradient id="glowRed" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#ef4444" stopOpacity="0.6" /><stop offset="100%" stopColor="#ef4444" stopOpacity="0" /></radialGradient>
-          <radialGradient id="glowOrange" cx="50%" cy="50%" r="50%"><stop offset="0%" stopColor="#f97316" stopOpacity="0.5" /><stop offset="100%" stopColor="#f97316" stopOpacity="0" /></radialGradient>
+          <radialGradient id="glowRed" cx="50%" cy="50%" r="50%"><stop offset="0%" style={{ stopColor: 'var(--color-chart-red)' }} stopOpacity="0.6" /><stop offset="100%" style={{ stopColor: 'var(--color-chart-red)' }} stopOpacity="0" /></radialGradient>
+          <radialGradient id="glowOrange" cx="50%" cy="50%" r="50%"><stop offset="0%" style={{ stopColor: 'var(--color-chart-orange)' }} stopOpacity="0.5" /><stop offset="100%" style={{ stopColor: 'var(--color-chart-orange)' }} stopOpacity="0" /></radialGradient>
         </defs>
         <g strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="100" cy="42" r="18" stroke={bodyColor(features, 'neck_flexion')} fill={bodyGlow(features, 'neck_flexion')} />
