@@ -1,6 +1,28 @@
 version: "3.9"
 
 services:
+  db:
+    # Tier 1 telemetry store — session summaries + per-frame timeline rows.
+    # Swap the image to timescale/timescaledb:latest-pg16 and set
+    # PG_TIMESCALEDB=true on the backend for time-series hypertables.
+    image: postgres:16-alpine
+    container_name: ergovigilance-db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-ergovigilance}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ergovigilance}
+      - POSTGRES_DB=${POSTGRES_DB:-ergovigilance}
+    volumes:
+      - ergovigilance-pg:/var/lib/postgresql/data
+    # Loopback-only: never expose Postgres publicly.
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ergovigilance} -d ${POSTGRES_DB:-ergovigilance}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
   backend:
     build:
       context: .
@@ -20,8 +42,14 @@ services:
       - CORS_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost
       - LOG_LEVEL=INFO
       - AUTH_DB_PATH=/data/local_auth.db
+      # Tier 1 telemetry store (additive; unset = JSON-file mode).
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-ergovigilance}:${POSTGRES_PASSWORD:-ergovigilance}@db:5432/${POSTGRES_DB:-ergovigilance}
+      - PG_TIMESCALEDB=${PG_TIMESCALEDB:-false}
     volumes:
       - ergovigilance-db:/data
+    depends_on:
+      db:
+        condition: service_healthy
     restart: unless-stopped
     # Liveness probe for orchestrators / docker compose ps (python, not curl,
     # because the image is python:3.12-slim and ships no curl).
@@ -54,3 +82,4 @@ services:
 
 volumes:
   ergovigilance-db:
+  ergovigilance-pg:

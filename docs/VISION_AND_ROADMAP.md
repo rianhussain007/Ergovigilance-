@@ -6,7 +6,25 @@ For what is actually built and verified, see CURRENT_STATE.md. If the two docume
 
 Note on this revision: an earlier version of this file was found to be significantly out of date — it listed Recording/Replay as not-started and Auth/RBAC as explicitly out of scope, when both are now built and verified. This revision corrects that. Always sanity-check this file's phase statuses against actual recent work before trusting it.
 
+## Phase Status Summary (as of 2026-08-12)
 
+| Phase | Status |
+|---|---|
+| A — Live Monitoring | Complete and verified |
+| B — Session Review | Complete |
+| C — Reports | Complete (risk-trend / safety-report built and verified in Phase J) |
+| D — Video Recording | Complete |
+| E — Replay | Complete, verified end-to-end (SessionDetail status fix applied) |
+| F — Authentication & RBAC | Complete |
+| G — Dashboard | Complete |
+| H — Video Upload & Analysis | Complete and verified |
+| I — Context-Aware Task Recognition | Complete |
+| J — Long-Term Fatigue & Trend Analytics | Complete |
+| K — Cloud & Multi-Site | Not started |
+| L — AI Assistant (RAG, Local Ollama) | Backend + frontend built, verified end-to-end |
+| Research Track — ML-Enhanced Risk Scoring | Not started (blocked on R2: ground-truth labels) |
+
+This table is a summary; the phase sections below carry the detail and verification evidence. If this table and the sections ever disagree, the sections win.
 
 
 1. Executive Vision
@@ -95,17 +113,17 @@ Phase J — Long-Term Fatigue & Trend Analytics
 
 Status: complete. All three major report types are built and verified:
 
-- **Risk Trend Report** — `GET /api/reports/risk-trend` (backend_api/app/api/risk_trend.py, computation in backend/services/trend_analysis.py:analyze_risk_trend()). Reads real session JSON files from `outputs/sessions/`, computes cross-session risk distribution (LOW/MEDIUM/HIGH percentages), per-feature trend analysis (early-half vs late-half mean comparison with Improving/Stable/Deteriorating direction), and most common issues. Verified against 139 real sessions. PDF export at `/api/reports/risk-trend/pdf` via render_risk_trend_pdf().
-- **Safety Report** — `GET /api/reports/safety-report` (backend_api/app/api/safety_report.py, computation in backend/services/safety_report.py:analyze_safety()). Cross-session alert analysis: severity breakdown, trigger rule distribution, alert density metrics, top sessions by alert count, most frequent issues. Only sessions with genuine alert data are included (older sessions without alert tracking are excluded and reported as such). Verified against 73 sessions with alert data from 139 total. PDF export at `/api/reports/safety-report/pdf` via render_safety_report_pdf().
+- **Risk Trend Report** — `GET /api/reports/risk-trend` (backend_api/app/api/risk_trend.py, computation in backend/services/trend_analysis.py:analyze_risk_trend()). Reads real session JSON files from `outputs/sessions/`, computes cross-session risk distribution (LOW/MEDIUM/HIGH percentages), per-feature trend analysis (early-half vs late-half mean comparison with Improving/Stable/Deteriorating direction), and most common issues. Verified against 99 real sessions (as of 2026-08-12; the session count changes as new sessions are saved and retention removes old ones). PDF export at `/api/reports/risk-trend/pdf` via render_risk_trend_pdf().
+- **Safety Report** — `GET /api/reports/safety-report` (backend_api/app/api/safety_report.py, computation in backend/services/safety_report.py:analyze_safety()). Cross-session alert analysis: severity breakdown, trigger rule distribution, alert density metrics, top sessions by alert count, most frequent issues. Only sessions with genuine alert data are included (older sessions without alert tracking are excluded and reported as such). Verified against 87 sessions with alert data from 99 total (as of 2026-08-12). PDF export at `/api/reports/safety-report/pdf` via render_safety_report_pdf().
 - **Per-Worker Fatigue Trends & Station Analysis** — `GET /api/reports/worker-trends` (backend_api/app/api/worker_trends.py, computation in backend_api/app/services/worker_trends.py:compute_worker_trends()). Four sub-reports in one endpoint:
-  - **Per-worker trend points**: Groups session files by worker_id, joins with SQLite workers table for department/shift/name, computes avg risk score (`(M×50 + H×100) / total_frames`), trend direction (early-half vs late-half comparison), latest risk level. Verified against 4 registered workers with 64 sessions.
+  - **Per-worker trend points**: Groups session files by worker_id, joins with SQLite workers table for department/shift/name, computes avg risk score (`(M×50 + H×100) / total_frames`), trend direction (early-half vs late-half comparison), latest risk level. Verified against 4 registered workers with session data (as of 2026-08-12).
   - **Per-department patterns**: Aggregates per-worker trends into departments, computes average risk, high-risk count, improving/deteriorating worker counts, overall trend. Verified: Assembly, Tester, Unknown departments.
   - **Temporal fatigue curves**: Parses `session_timestamp` → ISO week, computes weekly avg risk per worker. Only workers with 2+ weeks of data included. Verified: Asha Patel (W28: 48.0, W29: 51.5, W30: 57.8), Rian Hussain (W28: 35.0, W29: 50.0, W30: 80.1).
-  - **Per-station risk patterns**: Normalizes inconsistent camera_id values (`cam1`→`cam-01`, `camera1`→`cam-01`), groups sessions by station, computes avg risk, high-risk count, worker count. Station names mapped from mock data (cam-01 → "Assembly Line A — Station 1"). Verified: 17 of 139 sessions have camera_id, 1 station with data.
+  - **Per-station risk patterns**: Normalizes inconsistent camera_id values (`cam1`→`cam-01`, `camera1`→`cam-01`), groups sessions by station, computes avg risk, high-risk count, worker count. Station names mapped from mock data (cam-01 → "Assembly Line A — Station 1"). Verified as of 2026-08-12: 4 stations with data (cam-01 "Assembly Line A — Station 1" has 36 sessions).
 
 Frontend: Reports page → "Generate Worker Trends Report" button → WorkerTrendsView with summary stats (4-column grid), department pattern cards, per-worker detail cards, weekly risk bar charts (temporal curves), and station risk pattern cards. PDF export via Download PDF button in the view header, calling `GET /api/reports/worker-trends/pdf`.
 
-Note on the old `/api/trends` endpoint: This endpoint (backend_api/app/repositories/live.py:375-377) still returns hardcoded mock data. It was the original trend endpoint before the real Risk Trend Report was built. The old TrendAnalysis page (`/trends`, TrendAnalysisPage.tsx) consumed this mock data. As of this revision, the old `/trends` route and TrendAnalysisPage have been removed — navigation to `/trends` redirects to `/reports?view=risk-trend`. The mock `/api/trends` endpoint remains in the codebase but is no longer consumed by any active UI.
+Note on the old `/api/trends` endpoint: This endpoint (backend_api/app/repositories/live.py:375-377) still returns hardcoded mock data. It was the original trend endpoint before the real Risk Trend Report was built. The old TrendAnalysis page (`/trends`, TrendAnalysisPage.tsx) consumed this mock data. As of this revision, the old `/trends` route and TrendAnalysisPage have been removed — navigation to `/trends` redirects to `/reports?view=risk-trend`. The mock `/api/trends` endpoint was removed from the codebase in this revision — it returned hardcoded mock data and was no longer consumed by any active UI.
 
 Phase K — Cloud & Multi-Site
 

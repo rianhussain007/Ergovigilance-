@@ -74,10 +74,25 @@ These were never in the `test_*.py` loop, so CI stays green while they were brok
 
 The original pivot investigation deferred these as product decisions, not code bugs:
 
-- [ ] **Multi-person tracking** — MediaPipe supports `num_poses > 1`, but the pipeline
-  (`PoseEngine`, `LiveState`, per-worker sessions, analytics) is single-person. Decide scope:
-  track N workers in one frame (new per-person state model) vs. per-camera sessions.
-  *Accept: decision doc + scoped plan.*
+- [x] **Multi-person foundation (Tier 3, partial)** — `PoseEngine` now reads
+  `ERGOVIGILANCE_NUM_POSES` (default 1, up to 4), selects the PRIMARY person (largest
+  bbox) for scoring, and reports `person_count` in the live payload/timeline. Per-worker
+  session isolation and analytics aggregation remain the follow-up (new per-person state
+  model). *Accept: primary-scored pipeline + person count in UI.*
+- [x] **Framing / pose-quality intelligence (Tier 3)** — `backend/services/framing_quality.py`
+  auto-detects profile view / cropped body / occlusion, emits "reposition camera" guidance
+  and a quality score, and produces per-joint angle uncertainty. Wired into the live
+  payload, timeline, demo panel, and the Live Monitoring framing card.
+- [x] **Uncertainty-aware risk bands (Tier 3)** — `ContextIntelligenceEngine._score_feature`
+  scores P(rule violated) via the per-joint sigma from framing quality instead of hard
+  cutoffs (soft ~25/75 at boundaries vs. hard 0/100 snap), killing boundary-flip
+  sensitivity at the root. Legacy hard scoring preserved at sigma=0.
+- [x] **Per-joint risk forecast (Tier 3)** — `RiskForecaster.predict_per_joint` projects
+  next-window mean angle per joint from the recent window trend, honest
+  `insufficient_data` guard below 15 frames.
+- [x] **Temporal task smoothing** — already shipped (confidence-weighted sliding window in
+  `TaskRecognition.detect_task`). Retraining on real labeled footage remains a pilot-time
+  item (needs `capture_task_clips.py` ground truth).
 - [ ] **Remote fleet management** — multi-camera/multi-site monitoring through the API
   (today one `LiveMonitoringService` singleton per backend). Decide: N instances per backend,
   per-site deployments, or central fleet API. *Accept: decision doc + scoped plan.*

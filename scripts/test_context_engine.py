@@ -21,6 +21,9 @@ from backend.context.fatigue import FatigueModel
 # ── Test Helpers ───────────────────────────────────────────────────
 
 def _healthy_features() -> dict[str, float]:
+    # All feature keys present (the real pipeline always provides them; a
+    # missing key defaults to 0.0, which would make inverted features like
+    # stance_stability score as max risk).
     return {
         "neck_flexion": 5.0,
         "trunk_flexion": 8.0,
@@ -29,6 +32,13 @@ def _healthy_features() -> dict[str, float]:
         "shoulder_symmetry": 2.0,
         "alignment_deviation": 3.0,
         "knee_angle": 165.0,
+        "elbow_flexion_angle": 170.0,
+        "upper_arm_angle_from_vertical": 5.0,
+        "forward_head_posture": 4.0,
+        "head_tilt_angle": 3.0,
+        "wrist_deviation_angle": 0.0,
+        "stance_stability": 0.8,
+        "weight_shift_offset": 4.0,
     }
 
 
@@ -41,6 +51,13 @@ def _poor_neck_features() -> dict[str, float]:
         "shoulder_symmetry": 2.5,
         "alignment_deviation": 4.0,
         "knee_angle": 160.0,
+        "elbow_flexion_angle": 170.0,
+        "upper_arm_angle_from_vertical": 5.0,
+        "forward_head_posture": 4.0,
+        "head_tilt_angle": 3.0,
+        "wrist_deviation_angle": 0.0,
+        "stance_stability": 0.8,
+        "weight_shift_offset": 4.0,
     }
 
 
@@ -53,6 +70,13 @@ def _poor_trunk_features() -> dict[str, float]:
         "shoulder_symmetry": 1.8,
         "alignment_deviation": 4.0,
         "knee_angle": 155.0,
+        "elbow_flexion_angle": 170.0,
+        "upper_arm_angle_from_vertical": 5.0,
+        "forward_head_posture": 4.0,
+        "head_tilt_angle": 3.0,
+        "wrist_deviation_angle": 0.0,
+        "stance_stability": 0.8,
+        "weight_shift_offset": 4.0,
     }
 
 
@@ -65,6 +89,13 @@ def _multiple_issues_features() -> dict[str, float]:
         "shoulder_symmetry": 14.0,
         "alignment_deviation": 18.0,
         "knee_angle": 120.0,
+        "elbow_flexion_angle": 170.0,
+        "upper_arm_angle_from_vertical": 5.0,
+        "forward_head_posture": 4.0,
+        "head_tilt_angle": 3.0,
+        "wrist_deviation_angle": 0.0,
+        "stance_stability": 0.8,
+        "weight_shift_offset": 4.0,
     }
 
 

@@ -1,0 +1,6 @@
+name,company,site_type,camera_network_readiness,decision_maker,call_date,triage_score,status,notes,next_action,next_followup
+Example: Jane Smith,Example Manufacturing,Assembly line,USB webcam + LAN available,yes,2026-08-10,8,scheduled,"High-risk station, recent WMSD incident","Send pre-deploy checklist + consent one-pager",2026-08-12
+, , , , , , ,waitlisted, , ,
+, , , , , , ,scheduled, , ,
+, , , , , , ,active, , ,
+, , , , , , ,declined, , ,

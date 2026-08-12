@@ -39,7 +39,7 @@
 | API | FastAPI | 2 endpoints (`/health`, `/predict`), NOT called by UI |
 | Pose Engine | MediaPipe | Python `pose.py` — landmark detection |
 | Feature Extraction | Python `features.py` | 7 biomechanical features + rule-based risk |
-| ML Model | Random Forest (`best_model.pkl`) | 97.97% accuracy, 3 classes |
+| ML Model | Random Forest (`best_model.pkl`) | 76.4% accuracy, 3 classes (current `results/best_model_metrics.json`; labels auto-generated, not ground-truth verified) |
 | Storage | Flat JSON files in `results/` | No database, no query layer |
 | Session State | Local Python variables | No persistence across runs |
 

@@ -43,8 +43,16 @@ def _make_kps(
 def _make_features(
     neck=5.0, trunk=5.0, shoulder_l=10.0, shoulder_r=10.0,
     shoulder_sym=2.0, knee=170.0, alignment=3.0,
+    **extra,
 ):
-    return {
+    """Feature dict with realistic defaults for ALL 19 classifier columns.
+
+    The trained model reads every column; a sparse dict (the old 7-key
+    version) made fixtures out-of-distribution for the 7-class model and
+    produced confident mislabels. Motion and arm features get ergonomic
+    resting values here so callers can override just what each pose needs.
+    """
+    feats = {
         "neck_flexion": neck,
         "trunk_flexion": trunk,
         "left_shoulder_elev": shoulder_l,
@@ -52,7 +60,24 @@ def _make_features(
         "shoulder_symmetry": shoulder_sym,
         "knee_angle": knee,
         "alignment_deviation": alignment,
+        # Arms
+        "elbow_flexion_angle": 160.0,
+        "upper_arm_angle_from_vertical": 10.0,
+        # Phase-A head/hand/stance
+        "forward_head_posture": 4.0,
+        "head_tilt_angle": 2.0,
+        "wrist_deviation_angle": 3.0,
+        "stance_stability": 0.9,
+        "weight_shift_offset": 2.0,
+        "hand_reach_ratio": 0.5,
+        "finger_spread_ratio": 0.4,
+        "stance_width_ratio": 0.4,
+        # Motion
+        "movement_velocity": 5.0,
+        "wrist_movement_velocity": 15.0,
     }
+    feats.update(extra)
+    return feats
 
 
 results: list[str] = []
@@ -90,7 +115,11 @@ kps = _make_kps(
     lel=(0.38, 0.38), rel=(0.62, 0.38),
     lwr=(0.42, 0.42), rwr=(0.58, 0.42),
 )
-feats = _make_features(neck=8.0, trunk=8.0)
+feats = _make_features(
+    neck=8.0, trunk=8.0, shoulder_l=15.0, shoulder_r=15.0,
+    elbow_flexion_angle=110.0, upper_arm_angle_from_vertical=30.0,
+    movement_velocity=18.0, wrist_movement_velocity=50.0,
+)
 t = TaskRecognition()
 r = t.detect_task(kps, feats)
 check("assembly task", r["task"], "Assembly Work")
@@ -107,9 +136,18 @@ kps = _make_kps(
     lwr=(0.30, 0.52, -0.10), rwr=(0.70, 0.52, -0.10),
     lhip=(0.46, 0.62, 0.0), rhip=(0.54, 0.62, 0.0),
 )
-feats = _make_features(neck=8.0, trunk=15.0)
-# Reaching is scored partly on arm motion — the scorer reads this velocity.
-feats["wrist_movement_velocity"] = 150.0
+# Feature values mirror a genuine generator Reaching sample (verified:
+# the 7-class model classifies 30/30 real Reaching samples correctly —
+# distinguishing arm-extension from Walking requires the full feature
+# vector: high upper-arm elevation, high reach ratio, fast wrist motion).
+feats = _make_features(
+    neck=16.0, trunk=6.0, elbow_flexion_angle=106.0,
+    upper_arm_angle_from_vertical=81.0, forward_head_posture=31.0,
+    wrist_deviation_angle=9.0, weight_shift_offset=32.0,
+    hand_reach_ratio=1.35, finger_spread_ratio=4.4, stance_width_ratio=0.76,
+    stance_stability=0.76, knee=153.0,
+    movement_velocity=64.0, wrist_movement_velocity=168.0,
+)
 t = TaskRecognition()
 r = t.detect_task(kps, feats)
 check("reaching task", r["task"], "Reaching")
@@ -142,7 +180,18 @@ kps = _make_kps(
     lel=(0.38, 0.28), rel=(0.62, 0.28),
     lwr=(0.42, 0.24), rwr=(0.58, 0.24),
 )
-feats = _make_features(neck=25.0, trunk=5.0)
+# Inspection is hands-to-face with highly flexed elbows and wrists — mirror
+# the genuine generator distribution (elbow ~12°, upper arm ~151°, wrist
+# deviation ~51°) so the 7-class model classifies it as Inspection.
+feats = _make_features(
+    neck=4.0, trunk=8.0, shoulder_l=3.0, shoulder_r=3.0,
+    shoulder_sym=0.8, alignment=17.0, elbow_flexion_angle=13.0,
+    upper_arm_angle_from_vertical=151.0, wrist_deviation_angle=51.0,
+    forward_head_posture=13.0, weight_shift_offset=28.0,
+    hand_reach_ratio=0.46, finger_spread_ratio=0.8, stance_width_ratio=0.77,
+    stance_stability=0.77, knee=156.0,
+    movement_velocity=11.0, wrist_movement_velocity=20.0,
+)
 t = TaskRecognition()
 r = t.detect_task(kps, feats)
 check("inspection task", r["task"], "Inspection")

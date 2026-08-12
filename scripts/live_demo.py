@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 import time
 from collections import deque
@@ -12,6 +13,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from backend.services.calibration import load_calibration
 from backend.services.features import (
     RISK_COLORS_BGR,
     risk_breakdown,
@@ -129,47 +131,164 @@ MEDIAPIPE_POSE_CONNECTIONS = [
     (23, 25), (25, 27), (24, 26), (26, 28),
 ]
 
+# Body region per connection (matches backend_api pose_overlay coloring so the
+# demo and the website render the same per-segment risk colors).
+_DEMO_CONNECTION_REGION = {
+    (0, 7): "head", (0, 8): "head", (7, 11): "head", (8, 12): "head",
+    (11, 12): "torso",
+    (11, 13): "left_arm", (13, 15): "left_arm",
+    (12, 14): "right_arm", (14, 16): "right_arm",
+    (11, 23): "torso", (12, 24): "torso", (23, 24): "torso",
+    (23, 25): "left_leg", (25, 27): "left_leg",
+    (24, 26): "right_leg", (26, 28): "right_leg",
+}
 
-def draw_skeleton(frame: np.ndarray, keypoints: list[list[float]], features: dict[str, float]) -> np.ndarray:
-    green = RISK_COLORS_BGR["LOW"]
-    red = RISK_COLORS_BGR["HIGH"]
+_DEMO_REGION_FEATURES = {
+    "head": ["neck_flexion", "forward_head_posture", "head_tilt_angle"],
+    "torso": ["trunk_flexion", "shoulder_symmetry", "alignment_deviation"],
+    "left_arm": ["left_shoulder_elev", "wrist_deviation_angle"],
+    "right_arm": ["right_shoulder_elev", "wrist_deviation_angle"],
+    "left_leg": ["knee_angle", "stance_stability", "weight_shift_offset"],
+    "right_leg": ["knee_angle", "stance_stability", "weight_shift_offset"],
+}
 
-    def _seg_color(feat_name: str, high_thresh: float) -> tuple[int, int, int]:
-        return red if features.get(feat_name, 0) > high_thresh else green
+_DEMO_RISK_ORDER = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
 
-    neck_c = _seg_color("neck_flexion", 30)
-    trunk_c = _seg_color("trunk_flexion", 60)
-    shoulder_c = _seg_color("left_shoulder_elev", 60)
 
-    seg_colors: dict[tuple[int, int], tuple[int, int, int]] = {}
+def _demo_sub_band(score) -> str | None:
+    """Map a RULA/REBA posture sub-score (1 = neutral) to a risk band."""
+    try:
+        s = int(score)
+    except (TypeError, ValueError):
+        return None
+    if s <= 0:
+        return None
+    if s == 1:
+        return "LOW"
+    if s == 2:
+        return "MEDIUM"
+    return "HIGH"
+
+
+def _demo_arm_band(features: dict, side: str, cal, wrist_band: str | None) -> str | None:
+    """Per-side arm band using the same calibration bands as RULA/REBA."""
+    elev = features.get(f"{side}_shoulder_elev")
+    if elev is None or elev != elev:
+        return wrist_band
+    if elev <= cal.upper_arm_neutral_max:
+        band = "LOW"
+    elif elev <= cal.upper_arm_medium_max:
+        band = "MEDIUM"
+    else:
+        band = "HIGH"
+    if wrist_band is not None and _DEMO_RISK_ORDER[wrist_band] > _DEMO_RISK_ORDER[band]:
+        return wrist_band
+    return band
+
+
+def _demo_region_levels(features: dict[str, float], overall: str, standard_assessment=None) -> dict[str, str]:
+    """Per-region risk bands, mirroring the website overlay.
+
+    With a standard RULA/REBA assessment the colors derive from the method's
+    per-joint sub-scores (same calibration as the level); otherwise the
+    per-feature breakdown is used. Each body region falls back to the
+    overall risk when nothing is scored — a raised arm turns red while the
+    rest of the skeleton stays green.
+    """
+    features = features or {}
+    std = standard_assessment or {}
+    method = std.get("method")
+    details = std.get("details") or {}
+    cal = load_calibration()
+
+    region_level: dict[str, str] = {}
+    for region in _DEMO_REGION_FEATURES:
+        band: str | None = None
+        if method == "RULA":
+            if region == "head":
+                band = _demo_sub_band(details.get("rula_neck"))
+            elif region == "torso":
+                band = _demo_sub_band(details.get("rula_trunk"))
+            elif region in ("left_arm", "right_arm"):
+                side = "left" if region == "left_arm" else "right"
+                band = _demo_arm_band(features, side, cal, _demo_sub_band(details.get("rula_wrist")))
+            elif region in ("left_leg", "right_leg"):
+                band = _demo_sub_band(details.get("rula_legs"))
+        elif method == "REBA":
+            if region == "head":
+                band = _demo_sub_band(details.get("neck_score"))
+            elif region == "torso":
+                band = _demo_sub_band(details.get("trunk_score"))
+            elif region in ("left_arm", "right_arm"):
+                side = "left" if region == "left_arm" else "right"
+                band = _demo_arm_band(features, side, cal, _demo_sub_band(details.get("wrist_score")))
+            elif region in ("left_leg", "right_leg"):
+                band = _demo_sub_band(details.get("legs_score"))
+        if band is None:
+            breakdown = risk_breakdown(features)
+            levels = []
+            for feat in _DEMO_REGION_FEATURES[region]:
+                br = breakdown.get(feat)
+                if br is not None and br.level in _DEMO_RISK_ORDER:
+                    levels.append(br.level)
+            band = max(levels, key=lambda l: _DEMO_RISK_ORDER[l]) if levels else overall
+        region_level[region] = band
+    return region_level
+
+
+def _demo_segment_colors(features: dict[str, float], overall: str, standard_assessment=None):
+    """Per-region (connection, joint) colors, mirroring the website overlay.
+
+    Each body region is colored by the worst risk band of its own scored
+    features, falling back to the overall risk when nothing is scored — so a
+    raised arm turns red while the rest of the skeleton stays green.
+    """
+    region_level = _demo_region_levels(features, overall, standard_assessment)
+
+    conn_color: dict[tuple[int, int], tuple[int, int, int]] = {}
+    joint_regions: dict[int, list[str]] = {}
     for a, b in MEDIAPIPE_POSE_CONNECTIONS:
-        seg_colors[(a, b)] = green
-    for a, b in [(0, 7), (0, 8), (7, 11), (8, 12)]:
-        seg_colors[(a, b)] = neck_c
-    for a, b in [(11, 12), (11, 13), (13, 15), (12, 14), (14, 16)]:
-        seg_colors[(a, b)] = shoulder_c
-    for a, b in [(11, 23), (12, 24), (23, 24), (23, 25), (25, 27), (24, 26), (26, 28)]:
-        seg_colors[(a, b)] = trunk_c
+        region = _DEMO_CONNECTION_REGION.get((a, b), "head")
+        conn_color[(a, b)] = STATUS_COLORS_BGR.get(region_level[region], STATUS_COLORS_BGR.get(overall, (50, 180, 50)))
+        joint_regions.setdefault(a, []).append(region)
+        joint_regions.setdefault(b, []).append(region)
 
-    for (a, b), color in seg_colors.items():
+    joint_color: dict[int, tuple[int, int, int]] = {}
+    for idx, regions in joint_regions.items():
+        worst = max(regions, key=lambda r: _DEMO_RISK_ORDER[region_level[r]])
+        joint_color[idx] = STATUS_COLORS_BGR.get(region_level[worst], STATUS_COLORS_BGR.get(overall, (50, 180, 50)))
+    return conn_color, joint_color
+
+
+def draw_skeleton(
+    frame: np.ndarray,
+    keypoints: list[list[float]],
+    features: dict[str, float],
+    risk_level: str = "LOW",
+    standard_assessment=None,
+) -> np.ndarray:
+    """Draw the pose skeleton colored per body region.
+
+    Matches the website's live overlay exactly: each segment is green when its
+    own body region is LOW, yellow/orange when MEDIUM, red when HIGH — a
+    raised arm turns red while the rest of the skeleton stays green. Regions
+    with no scored feature fall back to the overall risk level.
+    """
+    overall_color = STATUS_COLORS_BGR.get(risk_level, STATUS_COLORS_BGR["LOW"])
+    conn_color, joint_color = _demo_segment_colors(features, risk_level, standard_assessment)
+
+    for a, b in MEDIAPIPE_POSE_CONNECTIONS:
         if a >= len(keypoints) or b >= len(keypoints):
             continue
         p1 = tuple(np.round(keypoints[a][:2]).astype(int))
         p2 = tuple(np.round(keypoints[b][:2]).astype(int))
-        cv2.line(frame, p1, p2, color, 3, lineType=cv2.LINE_AA)
+        cv2.line(frame, p1, p2, conn_color.get((a, b), overall_color), 3, lineType=cv2.LINE_AA)
 
     for idx, kp in enumerate(keypoints):
         if idx >= 33:
             continue
-        color = green
-        if idx in {7, 8}:
-            color = neck_c
-        elif idx in {11, 12, 13, 14, 15, 16}:
-            color = shoulder_c
-        elif idx in {23, 24, 25, 26, 27, 28}:
-            color = trunk_c
         pt = tuple(np.round(kp[:2]).astype(int))
-        cv2.circle(frame, pt, 5, color, -1, lineType=cv2.LINE_AA)
+        cv2.circle(frame, pt, 5, joint_color.get(idx, overall_color), -1, lineType=cv2.LINE_AA)
 
     return frame
 
@@ -393,21 +512,29 @@ def draw_panel(
     # ===================================================================
     # VISIBILITY WARNING  –  shown when lower body landmarks unavailable
     # ===================================================================
-    if unavailable_features:
-        lower_body_missing = {"trunk_flexion", "knee_angle", "neck_flexion"} & set(unavailable_features)
-        if lower_body_missing:
-            warn_h = 58
+    framing_guidance = list(getattr(engine, "_last_framing_guidance", None) or [])
+    lower_body_missing = {"trunk_flexion", "knee_angle", "neck_flexion"} & set(unavailable_features or [])
+    needs_framing = bool(lower_body_missing) or any(
+        g and not g.startswith("Good framing") for g in framing_guidance
+    )
+    if needs_framing:
+        if not lower_body_missing:
+            warn_h = 74
             cy0 = _cursor - scroll_offset
             cv2.rectangle(frame, (x, cy0), (x + cw, cy0 + warn_h), (20, 30, 60), -1)
             cv2.rectangle(frame, (x, cy0), (x + cw, cy0 + warn_h), (0, 165, 255), 1)
             cy = cy0 + 8
             cy = _draw_section_header(frame, x, cy, cw, "⚠ CAMERA FRAMING")
             cy += 2
-            _draw_text_with_bg(frame, "Lower body out of frame", x + 10, cy,
-                               SML_SZ, (0, 200, 255), 1, TXT_BG)
-            cy += 16
-            _draw_text_with_bg(frame, "Reposition camera: head to mid-thigh",
-                               x + 10, cy, SML_SZ, (0, 180, 230), 1, TXT_BG)
+            # Tier 3: use the framing-intelligence module's guidance when the
+            # pipeline produced it (profile view / cropped / occlusion aware),
+            # falling back to the legacy static line.
+            lines = list(framing_guidance or ["Lower body out of frame",
+                                              "Reposition camera: head to mid-thigh"])
+            for line in lines[:3]:
+                cy += 16
+                _draw_text_with_bg(frame, line, x + 10, cy,
+                                   SML_SZ, (0, 200, 255), 1, TXT_BG)
             cy += 16
             _draw_text_with_bg(frame, f"Missing: {', '.join(sorted(lower_body_missing))}",
                                x + 10, cy, SML_SZ, (0, 160, 210), 1, TXT_BG)
@@ -636,7 +763,9 @@ def main() -> None:
 
     cap, cam_info = get_camera_from_args()
 
-    preferred = [(1920, 1080), (1280, 720), (960, 720), (640, 480)]
+    # 1280x720 first (matching the website's camera resolution): pose
+    # inference cost scales with pixels, and 1080p halves the demo FPS.
+    preferred = [(1280, 720), (960, 720), (640, 480)]
     for pw, ph in preferred:
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, pw)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, ph)
@@ -703,17 +832,42 @@ def main() -> None:
     print("Q = Quit  |  S = Screenshot  |  Scroll: Mouse wheel")
     print(f"Screenshots saved to: {SCREENSHOT_DIR}")
 
+    # Throttle pose inference to POSE_PROCESS_FPS (same default as the website,
+    # 15 fps) and reuse the latest result for drawing. The display loop then
+    # runs at camera rate (~30 fps) instead of being dragged down by inference
+    # on every frame — this is what aligns the demo FPS with the website.
+    pose_fps = max(2.0, min(30.0, float(os.environ.get("POSE_PROCESS_FPS", "15"))))
+    pose_interval = 1.0 / pose_fps
+    last_process_time = 0.0
+    last_result = None
+
     cv2.namedWindow("Live Posture Analysis - Demo Mode", cv2.WINDOW_NORMAL)
     cv2.setMouseCallback("Live Posture Analysis - Demo Mode", on_mouse)
 
     while True:
-        ret, frame = cap.read()
+        ret, raw = cap.read()
         if not ret:
             print("ERROR: Failed to read frame.")
             break
 
-        frame = cv2.flip(frame, 1)
-        result = engine.process_frame(frame)
+        # Infer on the RAW (un-flipped) frame so MediaPipe's left/right labels
+        # match the person's actual body; mirroring the input first silently
+        # swaps "left elev" and "right elev" (the reported bug).
+        now = time.perf_counter()
+        fresh = last_result is None or (now - last_process_time) >= pose_interval
+        if fresh:
+            last_result = engine.process_frame(raw)
+            last_process_time = now
+        result = last_result
+
+        # Selfie view for display: mirror the frame AND the keypoint x-coords
+        # so the skeleton overlay aligns with the mirrored feed.
+        frame = cv2.flip(raw, 1)
+
+        # Tier 3 framing guidance (profile/cropped/occlusion aware) — used by
+        # the CAMERA FRAMING panel below; stored on the engine for the draw
+        # helper which runs later in the same loop iteration.
+        engine._last_framing_guidance = (result.framing or {}).get("guidance", [])
 
         features = result.features
         risk_level = result.risk_level
@@ -754,13 +908,17 @@ def main() -> None:
             output[dst_y1:dst_y1 + ch_seg, dst_x1:dst_x1 + cw_seg] = feed[src_y1:src_y1 + ch_seg, src_x1:src_x1 + cw_seg]
 
         if person_detected:
-            adj_kps = [[kp[0] * feed_scale + fx, kp[1] * feed_scale + fy] for kp in result.keypoints]
-            draw_skeleton(output, adj_kps, features)
+            # Mirror x back (raw inference coords -> mirrored display coords).
+            raw_w = raw.shape[1]
+            adj_kps = [[(raw_w - kp[0]) * feed_scale + fx, kp[1] * feed_scale + fy] for kp in result.keypoints]
+            draw_skeleton(output, adj_kps, features, risk_level,
+                          standard_assessment=result.standard_assessment)
 
-            session_neck.append(features.get("neck_flexion", 0.0))
-            session_trunk.append(features.get("trunk_flexion", 0.0))
-            if risk_order.get(risk_level, 0) > risk_order.get(max_risk, 0):
-                max_risk = risk_level
+            if fresh:
+                session_neck.append(features.get("neck_flexion", 0.0))
+                session_trunk.append(features.get("trunk_flexion", 0.0))
+                if risk_order.get(risk_level, 0) > risk_order.get(max_risk, 0):
+                    max_risk = risk_level
         else:
             label = "No person detected"
             (lw_t, lh_t), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 2)
@@ -779,8 +937,9 @@ def main() -> None:
             frame_count = 0
             fps_start = now
 
-        sample_counter += 1
-        if sample_counter >= SAMPLE_INTERVAL and person_detected:
+        if fresh:
+            sample_counter += 1
+        if sample_counter >= SAMPLE_INTERVAL and person_detected and fresh:
             sample_counter = 0
             risk_history.append((time.monotonic(), RISK_LEVELS.get(risk_level, 0)))
 
@@ -826,7 +985,8 @@ def main() -> None:
             cv2.line(output, (0, info_y), (left_w, info_y), (50, 50, 70), 1)
 
         timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        analytics.update(features, risk_level, result.issues, person_detected, timestamp_str)
+        if fresh:
+            analytics.update(features, risk_level, result.issues, person_detected, timestamp_str)
 
         session_duration_val = time.perf_counter() - session_start
 
