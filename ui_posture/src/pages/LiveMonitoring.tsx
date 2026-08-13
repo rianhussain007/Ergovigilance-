@@ -634,7 +634,7 @@ function TelemetryRow({ feature, unavailableFeatures = [], isApproximate }: { fe
         <span className={`font-label-mono text-sm flex items-center gap-1 ${isUnavailable ? 'text-on-surface-variant/50' : 'text-on-surface'}`}>
           {isUnavailable ? 'N/A' : isApproximate ? `~${feature.value!.toFixed(1)}${feature.unit}` : `${feature.value!.toFixed(1)}${feature.unit}`}
           {isApproximate && !isUnavailable && (
-            <span className="text-[8px] text-amber-400/70 italic font-normal" title="Computed via fallback method (image-vertical instead of hip-anchored)">approx</span>
+            <span className="text-[11px] text-amber-400/70 italic font-normal" title="Computed via fallback method (image-vertical instead of hip-anchored)">approx</span>
           )}
         </span>
       </div>
@@ -684,7 +684,7 @@ function PlaceholderAction({ icon: Icon, label, onClick, real, disabled }: { ico
     >
       <Icon className="h-3.5 w-3.5" />
       {label}
-      {!real && !disabled && <span className="absolute -top-1 -right-1 text-[8px] leading-none text-on-surface-variant/60">*</span>}
+      {!real && !disabled && <span className="absolute -top-1 -right-1 text-[11px] leading-none text-on-surface-variant/60">*</span>}
     </button>
   );
 }

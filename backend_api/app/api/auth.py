@@ -1,5 +1,6 @@
 """Authentication endpoints."""
 
+import asyncio
 import time
 import uuid
 from datetime import datetime, timezone
@@ -105,7 +106,9 @@ async def login(request: Request, body: LoginRequest):
     # Note: verify_password must run unconditionally — short-circuiting on
     # `row is None` would skip the bcrypt work and reintroduce the oracle.
     password_hash = row["password_hash"] if row is not None else DUMMY_PASSWORD_HASH
-    password_ok = verify_password(body.password, password_hash)
+    # bcrypt at cost 12 costs ~400 ms of CPU — run it off the event loop so a
+    # login can never freeze the dashboard/WS polling for other clients.
+    password_ok = await asyncio.to_thread(verify_password, body.password, password_hash)
     if row is None or not password_ok:
         record_login_attempt(email, ip, success=False)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")

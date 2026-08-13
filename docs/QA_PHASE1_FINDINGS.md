@@ -20,7 +20,17 @@
 | #9 AI-explanation thread churn | `_ai_expl_running` one-at-a-time guard — a hung Ollama call can no longer accumulate threads | Compiled |
 | #10–12 (INFO items) | No action needed | — |
 
-Remaining amends (UI/human): #5 operator text sizes + touch targets (design pass), #2 power-loss recovery (design decision), #18/#19 lighting & language (on-site data).
+Remaining amends (UI/human): #2 power-loss recovery (design decision), #18/#19 lighting & language (on-site data).
+
+### 0.1.1 System audit addendum (2026-08-13 — full end-to-end re-verification)
+
+| Item | Finding | Fix applied | Verified by |
+|------|---------|-------------|-------------|
+| Event-loop lag trigger | `login` ran `bcrypt.checkpw` (~400 ms measured) synchronously inside the async handler — every concurrent dashboard/WS poll froze during a login | `await asyncio.to_thread(verify_password, ...)` in `auth.py`; `await asyncio.to_thread(hash_password, ...)` in `users.py` (create + reset) | Concurrency test: login ~0.5 s while 5 concurrent dashboard polls completed in 5–18 ms; full pytest 222 pass |
+| Reconnect logic untested | RTSP reconnect had no regression coverage | New `tests/test_camera_reconnect.py` — 4 headless tests: jitter below threshold, flag toggle, exponential backoff 0.5→4 s capped at 10 s, recovery reset | `pytest tests/test_camera_reconnect.py` 4 pass |
+| Operator UI standard | Two `text-[8px]` annotations remained on the live-monitoring screen | Bumped to `text-[11px]`; interactive controls verified at 14px+ / h-11–h-12 | `tsc --noEmit` clean; grep: no 8–10px on interactive elements |
+
+**Re-verified this pass (no amends needed):** 222 pytest pass + 1 skip; `tsc --noEmit` clean; production `vite build` succeeds; all 62 OpenAPI paths registered; 19-endpoint happy-path battery all 200; error paths 401/404/422 correct; PDF exports valid (`%PDF-` magic, 87 KB / 107 KB); sessions paginated (99 total, 25/page); synthetic edge-data test 8/8 PASS (2 env-skips); WS strict-JSON parse OK; memory bounds asserted in `test_tier0_stability.py` + `test_perf_regressions.py`; WS client backoff 3 s→48 s + malformed-message guard verified.
 
 ---
 

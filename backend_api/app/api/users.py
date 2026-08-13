@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import secrets
 import string
 from datetime import datetime, timezone
@@ -84,7 +85,7 @@ async def create_user(
     if existing:
         raise HTTPException(status_code=409, detail="A user with this email already exists")
     now = datetime.now(timezone.utc).isoformat()
-    pw_hash = hash_password(body.password)
+    pw_hash = await asyncio.to_thread(hash_password, body.password)
     with get_connection() as conn:
         cur = conn.execute(
             "INSERT INTO users (email, password_hash, role, created_at) VALUES (?, ?, ?, ?)",
@@ -135,7 +136,7 @@ async def reset_user_password(
     if not target:
         raise HTTPException(status_code=404, detail="User not found")
     new_password = body.password if body and body.password else _generate_temp_password()
-    pw_hash = hash_password(new_password)
+    pw_hash = await asyncio.to_thread(hash_password, new_password)
     with get_connection() as conn:
         conn.execute(
             "UPDATE users SET password_hash = ? WHERE id = ?",
