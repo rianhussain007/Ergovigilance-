@@ -166,43 +166,33 @@ rounded shoulders, trunk bending, etc.). An ergonomist or physiotherapist is ide
 
 ## Phase 3: Evaluation Script
 
-Once labels exist, a script (`scripts/evaluate_ground_truth.py`) will:
+The evaluation script (`scripts/evaluate_ground_truth.py`) is **implemented as of 2026-08-13**.
+Once labels exist it compares them against the model's per-frame predictions from `timeline.json`
+and writes `results/ground_truth_evaluation.json`:
 
-```python
-import json
-import pandas as pd
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+```bash
+# Risk pass (default): labels file + the recording's timeline.json (co-located)
+venv/Scripts/python.exe scripts/evaluate_ground_truth.py \
+    --labels recordings/worker-001/<ts>/ground_truth_risk.json
 
-# Load ground-truth labels
-with open("ground_truth_risk.json") as f:
-    gt = json.load(f)
-gt_df = pd.DataFrame(gt["frames"])
+# Task pass:
+venv/Scripts/python.exe scripts/evaluate_ground_truth.py \
+    --labels recordings/worker-001/<ts>/ground_truth_task.json --kind task
 
-# Load model predictions from timeline.json
-with open("recordings/.../timeline.json") as f:
-    timeline = json.load(f)
-pred_df = pd.DataFrame(timeline)  # has risk_score, task per frame
-
-# Merge on frame number
-merged = gt_df.merge(pred_df, on="frame", how="inner")
-
-# --- Risk classification metrics ---
-y_true = merged["label"]
-y_pred = merged["predicted_risk"]  # derived from risk_score thresholds
-
-print("=== RISK CLASSIFICATION ===")
-print(f"Accuracy: {accuracy_score(y_true, y_pred):.4f}")
-print(classification_report(y_true, y_pred))
-print(confusion_matrix(y_true, y_pred))
-
-# --- Task recognition metrics ---
-y_true_task = merged["task_label"]   # from ground_truth_task.json
-y_pred_task = merged["task_name"]    # from timeline.json
-
-print("\n=== TASK RECOGNITION ===")
-print(f"Accuracy: {accuracy_score(y_true_task, y_pred_task):.4f}")
-print(classification_report(y_true_task, y_pred_task))
+# Aggregate several labeled sessions into one result file:
+venv/Scripts/python.exe scripts/evaluate_ground_truth.py \
+    --labels a/ground_truth_risk.json b/ground_truth_risk.json
 ```
+
+**Matching note (deviation from the original sketch):** a real `timeline.json` does not carry
+the video frame index — its `frame_number` is a *processed-frame counter* (1, 2, 3, …), so
+merging on an exact frame number matches almost nothing, especially on sparse timelines.
+The script instead converts each labeled frame index to a timestamp (`frame / fps`) and
+matches the timeline entry with the nearest `timestamp` within `--tolerance` (default 1.0 s).
+The model prediction is the timeline entry's `risk_level` / `current_task` — the actual
+per-frame classes the pipeline emitted, not values re-derived from `risk_score`. Every matched
+pair (with its match error) is written to `results/ground_truth_evaluation.json` under
+`matched_pairs` so disagreements can be reviewed.
 
 ### Expected outputs
 
@@ -250,9 +240,9 @@ If the real accuracy is below target, the new labels enable:
 | Phase 2 Tooling: `scripts/label_frames.py` | 2 hours | None (developer) |
 | Phase 2 Pass A: Risk labeling (~1,500 frames) | 4–8 hours | Ergonomics-aware labeler |
 | Phase 2 Pass B: Task labeling (~1,000 frames) | 2–3 hours | Any labeler |
-| Phase 3: Evaluation script + metrics | 2–3 hours | Labeled data must exist |
+| Phase 3: Evaluation script + metrics | 1 hour (script implemented 2026-08-13; running it needs labeled data) | Labeled data must exist |
 | Phase 4: Retraining (optional) | 2–4 hours | Labeled data must exist |
-| **Total** | **12–19 hours** | **Blocked on ergonomics labeler for risk metrics** |
+| **Total** | **11–17 hours** | **Blocked on ergonomics labeler for risk metrics** |
 
 Note: Task recognition metrics do NOT require an ergonomics labeler — any annotator can assign
 task classes. If risk labeling is blocked, task evaluation can proceed independently.
