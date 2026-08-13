@@ -276,10 +276,11 @@ def _no_data_body(title: str, status: str) -> str:
 
 
 def _risk_trend_body(data: Dict[str, Any]) -> str:
-    if not data.get("total_sessions"):
+    if not data.get("total_sessions") or not data.get("risk_distribution"):
         # analyze_risk_trend returns only {"total_sessions": 0, "status": "..."}
         # when there is no session data — render an honest empty report instead
-        # of KeyErroring on the missing aggregation keys.
+        # of KeyErroring on the missing aggregation keys. The partial-shape
+        # guard also covers a malformed analysis result reaching the renderer.
         return _no_data_body(
             "Risk Trend Report",
             data.get("status", "No session data available"),

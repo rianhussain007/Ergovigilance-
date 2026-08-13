@@ -21,6 +21,7 @@ interface DashboardUpdate {
     inference_latency_ms?: number;
     timestamp?: string;
     camera_status?: string;
+    camera_reconnecting?: boolean;
     frame_width?: number;
     frame_height?: number;
     features?: Record<string, unknown>;
@@ -41,6 +42,7 @@ interface CameraUpdate {
   type: 'camera_update';
   data: {
     camera_status: string;
+    camera_reconnecting?: boolean;
     fps?: number;
     frame_width?: number;
     frame_height?: number;

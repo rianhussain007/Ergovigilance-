@@ -17,6 +17,8 @@ export interface SessionInfo {
   duration: number;
   framesAnalyzed: number;
   cameraStatus: string;
+  /** True while the backend is attempting to reopen a dropped camera (RTSP). */
+  cameraReconnecting?: boolean;
 }
 
 export interface LiveStatus {
@@ -94,6 +96,8 @@ export interface ManagerSummary {
   weeklyImprovement?: number | null;
   averageCompliance?: number | null;
   healthScore?: number | null;
+  /** True when the database was unavailable and these are mock/fallback numbers. */
+  degraded?: boolean;
 }
 
 export interface RetentionPolicy {

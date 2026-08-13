@@ -27,7 +27,7 @@ export function LiveAlerts({ issues, onClose }: LiveAlertsProps) {
         <div className="flex items-center gap-md">
           <AlertTriangle className="w-5 h-5 text-orange-400" />
           <h3 className="text-title-md font-bold text-on-surface">Live Alerts</h3>
-          <span className="text-[10px] bg-red-500/15 text-red-400 px-2 py-0.5 rounded-full font-bold">
+          <span className="text-sm bg-red-500/15 text-red-400 px-2 py-0.5 rounded-full font-bold">
             {issues.filter((i) => i.severity === 'high').length}
           </span>
         </div>
@@ -54,8 +54,8 @@ export function LiveAlerts({ issues, onClose }: LiveAlertsProps) {
                       <p className="text-body-sm font-medium text-on-surface">{issue.name}</p>
                       {issue.severity === 'high' && <RefreshCw className="w-3 h-3 text-red-400 animate-spin" />}
                     </div>
-                    <p className="text-[10px] text-on-surface-variant mt-0.5">{issue.detail}</p>
-                    <p className="text-[9px] text-on-surface-variant mt-1 opacity-60">
+                    <p className="text-sm text-on-surface-variant mt-0.5">{issue.detail}</p>
+                    <p className="text-xs text-on-surface-variant mt-1 opacity-60">
                       {formatISTTime(new Date(issue.timestamp))}
                     </p>
                   </div>
@@ -67,7 +67,7 @@ export function LiveAlerts({ issues, onClose }: LiveAlertsProps) {
       </div>
 
       <div className="p-lg border-t border-outline-variant text-center">
-        <p className="text-[10px] text-on-surface-variant">{issues.length} alert{issues.length !== 1 ? 's' : ''} in the last 24h</p>
+        <p className="text-sm text-on-surface-variant">{issues.length} alert{issues.length !== 1 ? 's' : ''} in the last 24h</p>
       </div>
     </div>
   );

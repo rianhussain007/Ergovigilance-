@@ -203,7 +203,13 @@ async def get_admin_dashboard_summary(
     if service is not None:
         state = service.get_state_snapshot()
         active_session_count = 1 if state.session_active else 0
-        connected_camera_status = state.camera_status
+        # Report an explicit "reconnecting" state so the admin view shows the
+        # camera is down mid-session instead of a misleading "active".
+        connected_camera_status = (
+            "reconnecting"
+            if getattr(state, "camera_reconnecting", False)
+            else state.camera_status
+        )
 
     return AdminDashboardSummary(
         **base.model_dump(),

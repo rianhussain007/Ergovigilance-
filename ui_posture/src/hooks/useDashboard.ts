@@ -91,6 +91,7 @@ export function useDashboard(enabled: boolean = true): UseDashboardReturn {
           id: wsData.session_id ?? prev.session.id,
           duration: wsData.task_duration_seconds ? Math.round(wsData.task_duration_seconds) : prev.session.duration,
           cameraStatus: wsData.camera_status ?? prev.session.cameraStatus,
+          cameraReconnecting: wsData.camera_reconnecting ?? prev.session.cameraReconnecting,
         } : prev.session,
       };
     });

@@ -38,6 +38,9 @@ async def get_session_pdf(
     if not os.path.exists(filepath) and os.path.exists(SESSIONS_DIR):
         # Fallback: iterate all JSON files and match by session_id field
         # This handles format mismatches between session ID generation and file naming.
+        # A file whose name matches the session but fails to parse is corrupt
+        # (not missing) — report that instead of a misleading 404.
+        corrupt_candidate = None
         for fname in os.listdir(SESSIONS_DIR):
             if not fname.endswith(".json"):
                 continue
@@ -49,9 +52,18 @@ async def get_session_pdf(
                     filepath = candidate
                     break
             except Exception:
-                continue
+                if ts_part and ts_part in fname and corrupt_candidate is None:
+                    corrupt_candidate = candidate
 
     if not os.path.exists(filepath):
+        if corrupt_candidate:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"Session file {os.path.basename(corrupt_candidate)} exists "
+                    "but is corrupt or unreadable — it cannot be reported on."
+                ),
+            )
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
 
     try:

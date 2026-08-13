@@ -160,14 +160,14 @@ export default function LiveMonitoring() {
               <>
                 <Radio className="h-4 w-4 text-red-400" />
                 <span className="font-label-caps text-label-caps tracking-widest text-red-300 uppercase">Live Session</span>
-                {session.id && <span className="font-label-mono text-[10px] text-on-surface-variant truncate">{session.id}</span>}
+                {session.id && <span className="font-label-mono text-sm text-on-surface-variant truncate">{session.id}</span>}
               </>
             ) : (
               <span className="font-label-caps text-label-caps tracking-widest text-on-surface-variant uppercase">Not monitoring</span>
             )}
           </div>
           {isActive && (
-            <div className="flex items-center gap-xs text-[10px] font-label-mono text-on-surface-variant">
+            <div className="flex items-center gap-xs text-sm font-label-mono text-on-surface-variant">
               <Clock3 className="h-3.5 w-3.5" />
               <span>{sessionAnalytics.sessionDuration}</span>
             </div>
@@ -178,6 +178,7 @@ export default function LiveMonitoring() {
             status={session.cameraStatus}
             workerName={session.workerName}
             task={liveStatus.currentTask}
+            reconnecting={session.cameraReconnecting}
             onCaptureReady={registerCapture}
           />
           <TelemetrySidebar
@@ -227,7 +228,7 @@ export default function LiveMonitoring() {
                 <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${issue.severity === 'high' ? 'text-red-400' : issue.severity === 'moderate' ? 'text-orange-400' : 'text-blue-400'}`} />
                 <div>
                   <p className="text-body-sm text-on-surface font-medium">{issue.name}</p>
-                  <p className="text-[10px] text-on-surface-variant mt-0.5">{issue.detail}</p>
+                  <p className="text-sm text-on-surface-variant mt-0.5">{issue.detail}</p>
                 </div>
               </div>
             ))}
@@ -273,19 +274,19 @@ export default function LiveMonitoring() {
           onClick={() => setShowExports(true)}
           disabled={!isActive}
           title={isActive ? 'Export this session' : 'Start monitoring to export session data'}
-          className={`flex items-center gap-sm px-lg py-sm rounded-lg text-body-sm font-medium transition-colors ${isActive ? 'bg-primary text-on-primary hover:bg-primary-hover' : 'bg-surface-container-high text-on-surface-variant cursor-not-allowed'}`}
+          className={`flex items-center gap-sm h-12 px-lg rounded-lg text-body-sm font-medium transition-colors ${isActive ? 'bg-primary text-on-primary hover:bg-primary-hover' : 'bg-surface-container-high text-on-surface-variant cursor-not-allowed'}`}
         >
           <FileDown className="w-4 h-4" />
           Export Data
         </button>
-        <button onClick={() => setShowAlerts(!showAlerts)} className="flex items-center gap-sm px-lg py-sm bg-surface-container border border-outline-variant text-on-surface rounded-lg text-body-sm font-medium hover:bg-surface-container-higher transition-colors">
+        <button onClick={() => setShowAlerts(!showAlerts)} className="flex items-center gap-sm h-12 px-lg bg-surface-container border border-outline-variant text-on-surface rounded-lg text-body-sm font-medium hover:bg-surface-container-higher transition-colors">
           <AlertTriangle className="w-4 h-4" />
           Live Alerts
           {issues.filter((i) => i.severity === 'high').length > 0 && (
-            <span className="text-[9px] bg-red-500/15 text-red-400 px-1.5 py-0.5 rounded-full font-bold">{issues.filter((i) => i.severity === 'high').length}</span>
+            <span className="text-xs bg-red-500/15 text-red-400 px-1.5 py-0.5 rounded-full font-bold">{issues.filter((i) => i.severity === 'high').length}</span>
           )}
         </button>
-        <span className="text-[10px] text-on-surface-variant">Alert level: {settings.alertThreshold}</span>
+        <span className="text-sm text-on-surface-variant">Alert level: {settings.alertThreshold}</span>
       </div>
 
       {showExports && (
@@ -346,15 +347,15 @@ function TelemetrySidebar({
             : (liveStatus.currentTask || 'Not yet classified');
         return (
           <div className="rounded border border-cyan-400/30 bg-cyan-500/10 p-sm">
-            <p className="font-label-caps text-[9px] text-on-surface-variant uppercase tracking-widest">Current Task</p>
+            <p className="font-label-caps text-xs text-on-surface-variant uppercase tracking-widest">Current Task</p>
             <p className="text-title-md font-bold text-on-surface mt-0.5">
               {taskDisplay}
             </p>
             <div className="flex items-center justify-between mt-1">
-              <span className="font-label-mono text-[10px] text-on-surface-variant">
+              <span className="font-label-mono text-sm text-on-surface-variant">
                 {active ? `Conf ${confPct}%${isUncertain ? ' — baseline thresholds applied' : ''}` : '—'}
               </span>
-              <span className="font-label-mono text-[10px] text-on-surface-variant">
+              <span className="font-label-mono text-sm text-on-surface-variant">
                 {active ? (liveStatus.taskDurationSeconds ? `${Math.round(liveStatus.taskDurationSeconds)}s` : '0s') : '—'}
               </span>
             </div>
@@ -364,24 +365,24 @@ function TelemetrySidebar({
 
       {/* ── Assessment (RULA / REBA) ── */}
       <div className="rounded border border-purple-400/30 bg-purple-500/10 p-sm">
-        <p className="font-label-caps text-[9px] text-on-surface-variant uppercase tracking-widest">Assessment</p>
+        <p className="font-label-caps text-xs text-on-surface-variant uppercase tracking-widest">Assessment</p>
         {!active ? (
-          <p className="text-[11px] text-on-surface-variant mt-0.5">No active session — assessment starts when monitoring begins.</p>
+          <p className="text-sm text-on-surface-variant mt-0.5">No active session — assessment starts when monitoring begins.</p>
         ) : contextSnapshot?.assessment_method ? (
           <div className="flex items-center justify-between mt-0.5">
             <span className="text-title-md font-bold" style={{ color: riskColorHex(contextSnapshot.assessment_band || 'low') }}>
               {contextSnapshot.assessment_method} {contextSnapshot.assessment_score}
-              <span className="text-on-surface-variant text-[11px]">/{contextSnapshot.assessment_method === 'REBA' ? '15' : '7'}</span>
+              <span className="text-on-surface-variant text-sm">/{contextSnapshot.assessment_method === 'REBA' ? '15' : '7'}</span>
             </span>
             <span
-              className="text-[10px] font-medium px-1.5 py-0.5 rounded"
+              className="text-sm font-medium px-1.5 py-0.5 rounded"
               style={{ color: riskColorHex(contextSnapshot.assessment_band || 'low'), backgroundColor: `color-mix(in srgb, ${riskColorHex(contextSnapshot.assessment_band || 'low')} 13%, transparent)` }}
             >
               {contextSnapshot.assessment_band?.toUpperCase() || '—'}
             </span>
           </div>
         ) : (
-          <p className="text-[11px] text-on-surface-variant mt-0.5">Waiting for assessment…</p>
+          <p className="text-sm text-on-surface-variant mt-0.5">Waiting for assessment…</p>
         )}
       </div>
 
@@ -447,15 +448,15 @@ function RulaScoreCard({ snapshot, active }: { snapshot: ContextSnapshot | null;
             </span>
             <div>
               <p className="text-body-sm font-bold" style={{ color }}>{band?.toUpperCase() || '—'}</p>
-              <p className="text-[10px] text-on-surface-variant">{method} — {method === 'REBA' ? 'full body' : 'upper body'} assessment</p>
+              <p className="text-sm text-on-surface-variant">{method} — {method === 'REBA' ? 'full body' : 'upper body'} assessment</p>
             </div>
           </div>
           {snapshot?.rula_is_partial && method === 'RULA' && (
-            <p className="mt-sm text-[11px] text-amber-400 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1">
+            <p className="mt-sm text-sm text-amber-400 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1">
               Partial assessment — some landmarks unavailable (legs out of frame score neutral).
             </p>
           )}
-          <p className="mt-md text-[10px] text-on-surface-variant leading-relaxed">
+          <p className="mt-md text-sm text-on-surface-variant leading-relaxed">
             RULA 1–2 low · 3–4 medium · 5+ high. REBA 1–3 low · 4–7 medium · 8+ high.
           </p>
         </>
@@ -498,23 +499,23 @@ function CameraFramingCard({ snapshot, unavailableFeatures, active }: { snapshot
             {framingState === 'poor' ? 'Poor framing — worker not fully visible' : framingState === 'upper_body' ? 'Upper body only — lower body out of frame' : 'Lower body out of frame'}
           </p>
           {guidanceLines.slice(0, 2).map((g, i) => (
-            <p key={i} className="text-[11px] text-amber-400/80 mt-0.5">{g}</p>
+            <p key={i} className="text-sm text-amber-400/80 mt-0.5">{g}</p>
           ))}
           {framingQuality != null && (
-            <p className="text-[10px] font-mono text-amber-400/70 mt-1">Framing quality: {Math.round(framingQuality)}%</p>
+            <p className="text-sm font-mono text-amber-400/70 mt-1">Framing quality: {Math.round(framingQuality)}%</p>
           )}
           {lowerBodyConf != null && (
-            <p className="text-[10px] font-mono text-amber-400/70 mt-1">Lower-body confidence: {Math.round(lowerBodyConf)}%</p>
+            <p className="text-sm font-mono text-amber-400/70 mt-1">Lower-body confidence: {Math.round(lowerBodyConf)}%</p>
           )}
           {unavailableFeatures.length > 0 && (
-            <p className="text-[9px] text-amber-400/60 mt-1">Unavailable: {unavailableFeatures.join(', ')}</p>
+            <p className="text-xs text-amber-400/60 mt-1">Unavailable: {unavailableFeatures.join(', ')}</p>
           )}
         </div>
       ) : (
         <div>
           <p className="text-body-sm text-green-400 font-medium">{personCount && personCount > 1 ? `${personCount} workers in view — monitoring primary` : 'Full body in frame'}</p>
           {framingQuality != null && (
-            <p className="text-[10px] font-mono text-green-400/70 mt-0.5">Framing quality: {Math.round(framingQuality)}%</p>
+            <p className="text-sm font-mono text-green-400/70 mt-0.5">Framing quality: {Math.round(framingQuality)}%</p>
           )}
         </div>
       )}
@@ -531,7 +532,7 @@ function CameraFramingNote({ snapshot, unavailableFeatures, active }: { snapshot
     return (
       <div className="flex items-center gap-sm rounded border border-white/10 bg-white/[0.03] px-sm py-xs">
         <span className="w-1.5 h-1.5 rounded-full bg-outline" />
-        <span className="text-[10px] text-on-surface-variant">Camera not in use — framing check starts with the session</span>
+        <span className="text-sm text-on-surface-variant">Camera not in use — framing check starts with the session</span>
       </div>
     );
   }
@@ -539,14 +540,14 @@ function CameraFramingNote({ snapshot, unavailableFeatures, active }: { snapshot
     return (
       <div className="flex items-center gap-sm rounded border border-green-400/20 bg-green-500/5 px-sm py-xs">
         <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-        <span className="text-[10px] text-green-300">Full body in frame</span>
+        <span className="text-sm text-green-300">Full body in frame</span>
       </div>
     );
   }
   return (
     <div className="rounded border border-amber-400/30 bg-amber-500/10 px-sm py-xs">
-      <p className="text-[10px] font-bold text-amber-300 uppercase tracking-widest">⚠ Camera Framing</p>
-      <p className="text-[10px] text-amber-300/80 mt-0.5">Lower body out of frame — reposition camera to mid-thigh.</p>
+      <p className="text-sm font-bold text-amber-300 uppercase tracking-widest">⚠ Camera Framing</p>
+      <p className="text-sm text-amber-300/80 mt-0.5">Lower body out of frame — reposition camera to mid-thigh.</p>
     </div>
   );
 }
@@ -559,32 +560,32 @@ function RiskGauge({ liveStatus, active }: { liveStatus: LiveStatus; active: boo
   if (!active) {
     return (
       <div className="rounded border border-white/10 bg-white/[0.03] p-md text-center">
-        <p className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">Current Risk Index</p>
+        <p className="font-label-caps text-sm text-on-surface-variant uppercase tracking-widest">Current Risk Index</p>
         <div className="mx-auto mt-sm grid h-28 w-28 place-items-center rounded-full border border-white/10 bg-black/30">
           <div className="grid h-20 w-20 place-items-center rounded-full bg-[#080d13] border border-white/10">
             <div>
               <p className="font-label-mono text-2xl font-bold text-on-surface-variant">—</p>
-              <p className="font-label-caps text-[9px] uppercase tracking-widest text-on-surface-variant">Not measuring</p>
+              <p className="font-label-caps text-xs uppercase tracking-widest text-on-surface-variant">Not measuring</p>
             </div>
           </div>
         </div>
-        <p className="mt-sm text-[11px] italic text-on-surface-variant">Start monitoring to measure risk.</p>
+        <p className="mt-sm text-sm italic text-on-surface-variant">Start monitoring to measure risk.</p>
       </div>
     );
   }
 
   return (
     <div className="rounded border border-cyan-400/15 bg-white/[0.03] p-md text-center">
-      <p className="font-label-caps text-[10px] text-on-surface-variant uppercase tracking-widest">Current Risk Index</p>
+      <p className="font-label-caps text-sm text-on-surface-variant uppercase tracking-widest">Current Risk Index</p>
       <div className="mx-auto mt-sm grid h-28 w-28 place-items-center rounded-full" style={{ background: ring, boxShadow: `0 0 24px ${color}33` }}>
         <div className="grid h-20 w-20 place-items-center rounded-full bg-[#080d13] border border-white/10">
           <div>
             <p className="font-label-mono text-2xl font-bold text-on-surface">{score.toFixed(0)}</p>
-            <p className="font-label-caps text-[9px] uppercase tracking-widest" style={{ color }}>{liveStatus.riskLevel}</p>
+            <p className="font-label-caps text-xs uppercase tracking-widest" style={{ color }}>{liveStatus.riskLevel}</p>
           </div>
         </div>
       </div>
-      <p className="mt-sm text-[11px] italic text-on-surface-variant">Normal operation range maintained</p>
+      <p className="mt-sm text-sm italic text-on-surface-variant">Normal operation range maintained</p>
     </div>
   );
 }
@@ -629,8 +630,8 @@ function TelemetryRow({ feature, unavailableFeatures = [], isApproximate }: { fe
   return (
     <div className={`rounded border ${isUnavailable ? 'border-gray-800/50 bg-black/10' : isApproximate ? 'border-amber-500/20 bg-amber-500/5' : 'border-white/10 bg-black/20'} px-sm py-xs`} title={isUnavailable ? guidance : feature.name}>
       <div className="flex items-center justify-between gap-sm">
-        <span className={`text-[11px] truncate ${isUnavailable ? 'text-on-surface-variant/50' : 'text-on-surface-variant'}`}>{feature.name}</span>
-        <span className={`font-label-mono text-[11px] flex items-center gap-1 ${isUnavailable ? 'text-on-surface-variant/50' : 'text-on-surface'}`}>
+        <span className={`text-sm truncate ${isUnavailable ? 'text-on-surface-variant/50' : 'text-on-surface-variant'}`}>{feature.name}</span>
+        <span className={`font-label-mono text-sm flex items-center gap-1 ${isUnavailable ? 'text-on-surface-variant/50' : 'text-on-surface'}`}>
           {isUnavailable ? 'N/A' : isApproximate ? `~${feature.value!.toFixed(1)}${feature.unit}` : `${feature.value!.toFixed(1)}${feature.unit}`}
           {isApproximate && !isUnavailable && (
             <span className="text-[8px] text-amber-400/70 italic font-normal" title="Computed via fallback method (image-vertical instead of hip-anchored)">approx</span>
@@ -649,7 +650,7 @@ function FeatureRowCompact({ feature, isApproximate }: { feature: ErgonomicFeatu
   const color = isUnavailable ? 'text-on-surface-variant/50' : feature.status === 'high' ? 'text-red-400' : feature.status === 'moderate' ? 'text-orange-400' : feature.status === 'low' ? 'text-blue-400' : 'text-green-400';
   return (
     <div className={`rounded-lg border p-md ${isUnavailable ? 'border-outline-variant/40 bg-surface-container-low' : 'border-outline-variant/60 bg-surface-container-low'}`}>
-      <p className={`text-[10px] font-medium truncate ${isUnavailable ? 'text-on-surface-variant/50' : 'text-on-surface-variant'}`}>{feature.name}</p>
+      <p className={`text-sm font-medium truncate ${isUnavailable ? 'text-on-surface-variant/50' : 'text-on-surface-variant'}`}>{feature.name}</p>
       <p className={`font-label-mono text-title-md font-bold mt-0.5 ${color}`}>
         {isUnavailable ? 'N/A' : isApproximate ? `~${feature.value!.toFixed(1)}${feature.unit}` : `${feature.value!.toFixed(1)}${feature.unit}`}
       </p>
@@ -660,8 +661,8 @@ function FeatureRowCompact({ feature, isApproximate }: { feature: ErgonomicFeatu
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="min-w-0">
-      <p className="font-label-caps text-[9px] uppercase tracking-widest text-on-surface-variant">{label}</p>
-      <p className="mt-0.5 truncate font-label-mono text-[11px] text-on-surface">{value}</p>
+      <p className="font-label-caps text-xs uppercase tracking-widest text-on-surface-variant">{label}</p>
+      <p className="mt-0.5 truncate font-label-mono text-sm text-on-surface">{value}</p>
     </div>
   );
 }
@@ -673,7 +674,7 @@ function PlaceholderAction({ icon: Icon, label, onClick, real, disabled }: { ico
       onClick={onClick}
       disabled={disabled}
       title={disabled ? 'Start monitoring to use this action' : `${label} current frame`}
-      className={`relative flex items-center justify-center gap-xs rounded border px-sm py-sm text-[10px] font-medium transition-colors ${
+      className={`relative flex items-center justify-center gap-xs rounded border h-12 px-md text-sm font-medium transition-colors ${
         disabled
           ? 'border-white/5 bg-white/[0.02] text-on-surface-variant/40 cursor-not-allowed'
           : real
@@ -708,7 +709,7 @@ function LogButton({ onLog, workerName, disabled }: { onLog?: (note: string, cat
         onClick={() => setOpen(true)}
         disabled={disabled}
         title={disabled ? 'Start monitoring to log observations' : 'Log an observation'}
-        className={`relative flex items-center justify-center gap-xs rounded border px-sm py-sm text-[10px] font-medium transition-colors ${
+        className={`relative flex items-center justify-center gap-xs rounded border h-12 px-md text-sm font-medium transition-colors ${
           disabled
             ? 'border-white/5 bg-white/[0.02] text-on-surface-variant/40 cursor-not-allowed'
             : 'border-white/10 bg-white/[0.03] text-on-surface-variant hover:border-cyan-400/25 hover:text-cyan-100'
@@ -725,7 +726,7 @@ function LogButton({ onLog, workerName, disabled }: { onLog?: (note: string, cat
       <select
         value={category}
         onChange={(e) => setCategory(e.target.value)}
-        className="w-full bg-surface-container-high border border-outline-variant rounded px-sm py-1 text-[10px] text-on-surface"
+        className="w-full bg-surface-container-high border border-outline-variant rounded px-sm py-2 text-sm text-on-surface"
       >
         <option value="general">General</option>
         <option value="safety">Safety</option>
@@ -737,14 +738,14 @@ function LogButton({ onLog, workerName, disabled }: { onLog?: (note: string, cat
         onChange={(e) => setNote(e.target.value)}
         placeholder="Observation note..."
         rows={2}
-        className="w-full bg-surface-container-high border border-outline-variant rounded px-sm py-1 text-[10px] text-on-surface placeholder:text-on-surface-variant resize-none"
+        className="w-full bg-surface-container-high border border-outline-variant rounded px-sm py-2 text-sm text-on-surface placeholder:text-on-surface-variant resize-none"
         autoFocus
       />
       <div className="flex gap-xs">
-        <button type="button" onClick={handleSubmit} className="flex-1 rounded bg-cyan-500/20 border border-cyan-400/40 text-cyan-200 text-[10px] py-1 hover:bg-cyan-500/30">
+        <button type="button" onClick={handleSubmit} className="flex-1 rounded bg-cyan-500/20 border border-cyan-400/40 text-cyan-200 text-sm py-2 hover:bg-cyan-500/30">
           Save
         </button>
-        <button type="button" onClick={() => { setOpen(false); setNote(''); }} className="flex-1 rounded border border-white/10 text-on-surface-variant text-[10px] py-1 hover:text-cyan-100">
+        <button type="button" onClick={() => { setOpen(false); setNote(''); }} className="flex-1 rounded border border-white/10 text-on-surface-variant text-sm py-2 hover:text-cyan-100">
           Cancel
         </button>
       </div>
@@ -770,7 +771,7 @@ function OverrideButton({ onOverride, currentLevel, disabled }: { onOverride?: (
         onClick={() => setOpen(true)}
         disabled={disabled}
         title={disabled ? 'Start monitoring to override risk' : 'Manually override risk level'}
-        className={`relative flex items-center justify-center gap-xs rounded border px-sm py-sm text-[10px] font-medium transition-colors ${
+        className={`relative flex items-center justify-center gap-xs rounded border h-12 px-md text-sm font-medium transition-colors ${
           disabled
             ? 'border-white/5 bg-white/[0.02] text-on-surface-variant/40 cursor-not-allowed'
             : 'border-white/10 bg-white/[0.03] text-on-surface-variant hover:border-orange-400/40 hover:text-orange-300'
@@ -787,7 +788,7 @@ function OverrideButton({ onOverride, currentLevel, disabled }: { onOverride?: (
       <select
         value={level}
         onChange={(e) => setLevel(e.target.value)}
-        className="w-full bg-surface-container-high border border-outline-variant rounded px-sm py-1 text-[10px] text-on-surface"
+        className="w-full bg-surface-container-high border border-outline-variant rounded px-sm py-2 text-sm text-on-surface"
       >
         <option value="LOW">LOW</option>
         <option value="MEDIUM">MEDIUM</option>
@@ -797,14 +798,14 @@ function OverrideButton({ onOverride, currentLevel, disabled }: { onOverride?: (
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         placeholder="Reason (optional)"
-        className="w-full bg-surface-container-high border border-outline-variant rounded px-sm py-1 text-[10px] text-on-surface placeholder:text-on-surface-variant"
+        className="w-full bg-surface-container-high border border-outline-variant rounded px-sm py-2 text-sm text-on-surface placeholder:text-on-surface-variant"
         autoFocus
       />
       <div className="flex gap-xs">
-        <button type="button" onClick={handleSubmit} className="flex-1 rounded bg-orange-500/20 border border-orange-400/40 text-orange-300 text-[10px] py-1 hover:bg-orange-500/30">
+        <button type="button" onClick={handleSubmit} className="flex-1 rounded bg-orange-500/20 border border-orange-400/40 text-orange-300 text-sm py-2 hover:bg-orange-500/30">
           Apply
         </button>
-        <button type="button" onClick={() => { setOpen(false); setReason(''); }} className="flex-1 rounded border border-white/10 text-on-surface-variant text-[10px] py-1 hover:text-cyan-100">
+        <button type="button" onClick={() => { setOpen(false); setReason(''); }} className="flex-1 rounded border border-white/10 text-on-surface-variant text-sm py-2 hover:text-cyan-100">
           Cancel
         </button>
       </div>

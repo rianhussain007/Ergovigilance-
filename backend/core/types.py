@@ -67,6 +67,10 @@ class LiveState:
     inference_latency_ms: float = 0.0
     timestamp: str = ""
     camera_status: str = "disconnected"
+    # True while the capture loop is attempting to reopen a dropped camera
+    # (RTSP/network). ``camera_status`` stays "active" so the live UI doesn't
+    # tear down the stream; consumers should surface this flag as "reconnecting".
+    camera_reconnecting: bool = False
     frame_width: int = 0
     frame_height: int = 0
 

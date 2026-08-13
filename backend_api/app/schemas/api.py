@@ -300,6 +300,10 @@ class ManagerSummary(BaseModel):
     weeklyImprovement: Optional[float] = None
     averageCompliance: Optional[float] = None
     healthScore: Optional[float] = None
+    # True when the database was unavailable and the summary is mock/fallback
+    # data — consumers MUST surface this so mock numbers are never mistaken
+    # for real floor data.
+    degraded: bool = False
 
 
 AlertSeverity = Literal["critical", "warning", "info", "resolved", "low", "moderate", "high"]

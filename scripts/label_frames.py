@@ -19,6 +19,14 @@ exact format:
 Usage:
     venv/Scripts/python.exe scripts/label_frames.py --video recordings/worker-001/2026.../original.mp4 --kind risk --labeler "Me"
     venv/Scripts/python.exe scripts/label_frames.py --video recordings/worker-001/2026.../ --kind task --labeler "Me" --step 10
+    venv/Scripts/python.exe scripts/label_frames.py --video recordings/worker-001/2026.../ --prelabel  # seed provisional labels from timeline.json
+
+``--prelabel`` seeds each candidate frame with the prediction the pipeline
+recorded at capture time (from the recording's ``timeline.json``, matched by
+nearest timestamp). Those are **provisional placeholders only** — the tool then
+walks every seeded frame so the human confirms or overrides each one before it
+counts as ground truth. The output file notes ``prelabel_source`` so the
+provenance stays visible.
 
 Keys:
     Risk pass:  1 = LOW, 2 = MEDIUM, 3 = HIGH
@@ -38,6 +46,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from bisect import bisect_left
 from datetime import date, datetime
 from pathlib import Path
 
@@ -100,6 +109,51 @@ def load_existing(out_path: Path, labeler: str) -> tuple[dict, dict]:
     return {"session_id": "", "labeler": labeler, "date": date.today().isoformat(), "frames": []}, {}
 
 
+def load_prelabels(timeline_path: Path, total: int, fps: float, step: int,
+                   kind: str, tolerance: float = 0.5) -> dict[int, str]:
+    """Provisional labels from the recording's own timeline.json predictions.
+
+    Seeds every ``step``th frame with the nearest timeline entry's prediction
+    within ``tolerance`` seconds (default 0.5 — tight, so a prelabel only appears
+    where a prediction genuinely exists nearby; frame index converted to time
+    via ``fps``; timeline ``frame_number`` is a processed-frame counter, not a
+    video index, so timestamps are the join key). These are placeholders the
+    human confirms or overrides — never ground truth by themselves.
+    """
+    try:
+        timeline = json.loads(timeline_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"  ! Could not read {timeline_path}: {exc}")
+        return {}
+    if not isinstance(timeline, list) or not timeline:
+        print(f"  ! {timeline_path} is empty or not a list of records — no prelabels")
+        return {}
+    pairs = sorted((e.get("timestamp"), e) for e in timeline if e.get("timestamp") is not None)
+    if not pairs:
+        print(f"  ! {timeline_path} has no timestamped records — no prelabels")
+        return {}
+    keys = [p[0] for p in pairs]
+    key_field = "risk_level" if kind == "risk" else "current_task"
+    prelabels: dict[int, str] = {}
+    for idx in range(0, total, step):
+        target = idx / fps
+        pos = bisect_left(keys, target)
+        best = None
+        best_err = float("inf")
+        for cand in (pos - 1, pos, pos + 1):
+            if 0 <= cand < len(pairs):
+                err = abs(pairs[cand][0] - target)
+                if err < best_err:
+                    best_err = err
+                    best = pairs[cand][1]
+        if best is not None and best_err <= tolerance:
+            value = best.get(key_field)
+            if value is not None:
+                cleaned = str(value).strip()
+                prelabels[idx] = cleaned.upper() if kind == "risk" else cleaned
+    return prelabels
+
+
 def save(out_path: Path, meta: dict, frames: dict) -> None:
     meta["frames"] = [{"frame": int(f), "label": label} for f, label in sorted(frames.items())]
     out_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
@@ -124,6 +178,12 @@ def main() -> None:
                         help="Headless mode: extract every Nth frame as PNG into DIR/frames/ "
                              "plus a frames_manifest.json, then exit (no display needed; "
                              "supports VIA/CVAT-style offline labeling)")
+    parser.add_argument("--prelabel", action="store_true",
+                        help="Seed provisional labels from the recording's timeline.json "
+                             "predictions (matched by nearest timestamp); each is then "
+                             "confirmed or overridden manually")
+    parser.add_argument("--timeline",
+                        help="timeline.json path for --prelabel (default: <video_dir>/timeline.json)")
     args = parser.parse_args()
 
     if args.step < 1:
@@ -193,6 +253,22 @@ def main() -> None:
     print(f"\nLabeling: {video}")
     print(f"  session_id: {meta['session_id']} | kind: {args.kind} | total frames: {total} | fps: {fps:.1f}")
     print(f"  existing labels: {len(frames)} | step: {args.step}")
+
+    # ── Optional: seed provisional labels from the recording's timeline.json ──
+    confirmed = set(frames)  # human-entered labels (loaded from file or keyed this session)
+    prelabels: dict[int, str] = {}
+    if args.prelabel:
+        timeline_path = Path(args.timeline) if args.timeline else video.parent / "timeline.json"
+        if timeline_path.exists():
+            prelabels = load_prelabels(timeline_path, total, fps, args.step, args.kind)
+            prelabels = {k: v for k, v in prelabels.items() if k not in confirmed}
+            frames = {**prelabels, **frames}
+            meta.setdefault("prelabel_source",
+                            f"{timeline_path.name} (provisional, needs human review)")
+            print(f"  prelabeled {len(prelabels)} frames from {timeline_path.name} — "
+                  f"review each frame and press a key to confirm or override")
+        else:
+            print(f"  ! --prelabel set but no timeline.json at {timeline_path} — starting from scratch")
     print(f"  keys: {labels}")
     print("  Space=pause  Left/Right=step  q/ESC=save & quit\n")
 
@@ -202,10 +278,10 @@ def main() -> None:
     new_since_save = 0
     done = False
 
-    # Fast-forward to the first unlabeled frame when resuming
-    if frames:
-        labeled = sorted(frames)
-        # Next candidate after the largest labeled frame, aligned to step
+    # Fast-forward to the first unconfirmed frame when resuming
+    if confirmed:
+        labeled = sorted(confirmed)
+        # Next candidate after the largest confirmed frame, aligned to step
         start = labeled[-1] + args.step
         idx = start - (start % args.step) if start % args.step else start
         idx = min(idx, total - 1)
@@ -228,14 +304,20 @@ def main() -> None:
             done = True
             break
 
-        status = "LABELED" if idx in frames else "unlabeled"
+        if idx in confirmed:
+            status = "LABELED"
+        elif idx in prelabels:
+            status = "PRELBL"
+        else:
+            status = "unlabeled"
         overlay = frame.copy()
         cv2.putText(overlay, f"frame {idx}/{total - 1} [{status}] step={args.step}",
                     (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         cv2.putText(overlay, f"{'PAUSED' if paused else 'PLAYING'}  kind={args.kind}  labels={len(frames)}",
                     (10, 58), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
         if idx in frames:
-            cv2.putText(overlay, f"current: {frames[idx]}", (10, 88),
+            tag = " (prelabel)" if idx in prelabels and idx not in confirmed else ""
+            cv2.putText(overlay, f"current: {frames[idx]}{tag}", (10, 88),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 255), 2)
 
         cv2.imshow("ErgoVigilance ground-truth labeling", overlay)
@@ -254,13 +336,14 @@ def main() -> None:
             ch = chr(key)
             if ch in labels:
                 frames[idx] = labels[ch]
+                confirmed.add(idx)
                 new_since_save += 1
                 if new_since_save >= AUTO_SAVE_EVERY:
                     save(out_path, meta, frames)
                     new_since_save = 0
-                # Advance to the next unlabeled candidate
+                # Advance to the next unconfirmed candidate (prelabels get reviewed too)
                 nxt = idx + args.step
-                while nxt in frames and nxt < total:
+                while nxt in confirmed and nxt < total:
                     nxt += args.step
                 idx = nxt if nxt < total else idx
                 if idx >= total:

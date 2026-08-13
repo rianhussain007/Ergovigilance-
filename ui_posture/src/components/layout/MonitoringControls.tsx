@@ -49,7 +49,10 @@ export default function MonitoringControls() {
     if (isMonitoring) {
       stopSession();
     } else {
-      startSession(selectedWorkerId);
+      // No worker selected (or none registered) → start an unassigned session.
+      // The backend tags it worker_id=None so monitoring is never blocked on
+      // day one when workers haven't been registered yet.
+      startSession(selectedWorkerId || undefined);
     }
   };
 
@@ -62,29 +65,30 @@ export default function MonitoringControls() {
             <select
               value={selectedWorkerId}
               onChange={(e) => setSelectedWorkerId(e.target.value)}
-              disabled={isBusy || workers.length === 0}
-              className="h-8 rounded-md border border-transparent bg-transparent px-1 text-xs text-on-surface outline-none focus:border-primary disabled:opacity-60"
+              disabled={isBusy}
+              className="h-11 rounded-md border border-transparent bg-transparent px-2 text-sm text-on-surface outline-none focus:border-primary disabled:opacity-60"
               title="Worker for new monitoring session"
             >
-              {workers.length === 0 ? (
-                <option value="">No workers</option>
-              ) : workers.map((worker) => (
+              <option value="">
+                {workers.length === 0 ? 'Unassigned session' : 'Assign worker…'}
+              </option>
+              {workers.map((worker) => (
                 <option key={worker.worker_id} value={worker.worker_id}>
                   {worker.name} ({worker.employee_id})
                 </option>
               ))}
             </select>
             <span className="w-px h-5 bg-outline-variant/60" />
-            <span className="h-8 flex items-center px-1 text-xs text-on-surface-variant" title="Camera ID for this session">
-              <Camera className="w-3.5 h-3.5 mr-1" /> cam {settings.cameraId || '0'}
+            <span className="h-11 flex items-center px-2 text-sm text-on-surface-variant" title="Camera ID for this session">
+              <Camera className="w-4 h-4 mr-1" /> cam {settings.cameraId || '0'}
             </span>
           </div>
         </>
       )}
       <button
         onClick={handleClick}
-        disabled={isBusy || (!isMonitoring && !selectedWorkerId)}
-        className={`flex items-center gap-2 h-11 px-6 rounded-lg text-sm font-bold transition-all ${statusColors[status]}`}
+        disabled={isBusy}
+        className={`flex items-center gap-2 h-12 px-6 rounded-lg text-sm font-bold transition-all ${statusColors[status]}`}
       >
         {status === 'starting' || status === 'stopping' ? (
           <Loader2 className="w-4 h-4 animate-spin" />

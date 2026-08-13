@@ -41,6 +41,31 @@ TREND_ORDER: Dict[str, int] = {"Improving": 1, "Stable": 0, "Deteriorating": -1}
 _TREND_REVERSE: Dict[int, str] = {v: k for k, v in TREND_ORDER.items()}
 
 
+def _num(value: Any, default: float = 0.0) -> float:
+    """Coerce a value to float, returning ``default`` for anything non-numeric.
+
+    Factory-floor data can arrive corrupted (string in a numeric field, None,
+    NaN, inf, bool). Every aggregation below must degrade to a safe number
+    instead of raising TypeError/ValueError and 500-ing the report endpoint.
+    """
+    if isinstance(value, bool) or value is None:
+        return default
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return default
+    if f != f or f in (float("inf"), float("-inf")):
+        return default
+    return f
+
+
+def _as_str(value: Any) -> str:
+    """Coerce a value to str for timestamp comparisons (None-safe)."""
+    if value is None:
+        return ""
+    return str(value)
+
+
 def _compute_trend(values: List[float]) -> str:
     """Early-half vs late-half mean comparison with 5% threshold.
 
@@ -89,9 +114,16 @@ def analyze_risk_trend(sessions: List[Dict[str, Any]]) -> Dict[str, Any]:
     n = len(sessions)
 
     # --- risk_percentages ---
-    rp_low = [s.get("risk_percentages", {}).get("LOW", 0.0) for s in sessions]
-    rp_med = [s.get("risk_percentages", {}).get("MEDIUM", 0.0) for s in sessions]
-    rp_high = [s.get("risk_percentages", {}).get("HIGH", 0.0) for s in sessions]
+    # risk_percentages may be missing, None, or not a dict on corrupt files.
+    def _rp(s: Dict[str, Any], key: str) -> float:
+        rp = s.get("risk_percentages")
+        if not isinstance(rp, dict):
+            return 0.0
+        return _num(rp.get(key, 0.0))
+
+    rp_low = [_rp(s, "LOW") for s in sessions]
+    rp_med = [_rp(s, "MEDIUM") for s in sessions]
+    rp_high = [_rp(s, "HIGH") for s in sessions]
 
     avg_low = round(sum(rp_low) / n, 1)
     avg_med = round(sum(rp_med) / n, 1)
@@ -119,7 +151,7 @@ def analyze_risk_trend(sessions: List[Dict[str, Any]]) -> Dict[str, Any]:
     metric_values: Dict[str, List[float]] = {m: [] for m in METRIC_NAMES}
     for s in sessions:
         for m in METRIC_NAMES:
-            val = s.get(m, 0.0)
+            val = _num(s.get(m, 0.0))
             metric_totals[m] += val
             metric_values[m].append(val)
 
@@ -141,7 +173,11 @@ def analyze_risk_trend(sessions: List[Dict[str, Any]]) -> Dict[str, Any]:
         overall_trend = "Stable"
 
     # --- date range ---
-    timestamps = [s.get("session_timestamp", "") for s in sessions if s.get("session_timestamp")]
+    timestamps = [
+        _as_str(s.get("session_timestamp"))
+        for s in sessions
+        if _as_str(s.get("session_timestamp"))
+    ]
     earliest = min(timestamps) if timestamps else "unknown"
     latest = max(timestamps) if timestamps else "unknown"
 

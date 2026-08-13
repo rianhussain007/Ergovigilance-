@@ -19,7 +19,10 @@ router = APIRouter()
 
 class SessionStartRequest(BaseModel):
     camera_index: int = 0
-    worker_id: str
+    # Optional so an operator can start an unassigned session when no worker
+    # is registered yet (day-one flow) — the session is tagged worker_id=None
+    # and shown as unassigned in history.
+    worker_id: str | None = None
     camera_id: str | None = None
 
 
@@ -39,7 +42,7 @@ def start_session(
             )
         service.stop_session()
         logger.info("Force-stopped stale session before starting new one (user=%s)", user.id)
-    if get_worker(req.worker_id) is None:
+    if req.worker_id is not None and get_worker(req.worker_id) is None:
         raise HTTPException(status_code=400, detail=f"Unknown worker_id: {req.worker_id}")
 
     try:
@@ -54,7 +57,7 @@ def start_session(
         )
 
         # Log to audit trail
-        worker = get_worker(req.worker_id)
+        worker = get_worker(req.worker_id) if req.worker_id else None
         details = json.dumps({"worker_id": req.worker_id, "worker_name": worker["name"] if worker else None})
         insert_audit_log(
             id=f"AUD-{uuid.uuid4().hex[:8].upper()}",

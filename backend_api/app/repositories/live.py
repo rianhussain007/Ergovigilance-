@@ -202,6 +202,7 @@ class LiveRepository(DashboardRepository):
                 "duration": duration,
                 "framesAnalyzed": analytics.get("total_frames", 0),
                 "cameraStatus": state.camera_status,
+                "cameraReconnecting": bool(getattr(state, "camera_reconnecting", False)),
             },
             liveStatus={
                 "riskLevel": {"LOW": "low", "MEDIUM": "moderate", "HIGH": "high"}.get(state.risk_level, "low"),
@@ -649,7 +650,9 @@ class LiveRepository(DashboardRepository):
         except Exception:
             logger.warning("get_manager: database unavailable, using mock data")
             import app.utils.mock_data as mock_data
-            return ManagerSummary(**mock_data.MANAGER)
+            # Mark the summary as degraded so the UI can flag mock numbers
+            # instead of presenting them as real floor data.
+            return ManagerSummary(**mock_data.MANAGER, degraded=True)
 
         # ── Load all persisted alerts ────────────────────────────────
         today_alerts_count = 0

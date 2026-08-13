@@ -1,6 +1,9 @@
-"""WebSocket connection manager — stub implementation.
+"""WebSocket connection manager.
 
-Will broadcast live updates when the OpenCV/MediaPipe pipeline is connected.
+Tracks live WebSocket connections and drops stale ones. Live updates are
+currently pushed by per-connection polling loops in ``app/api/websocket.py``
+(each connection receives a fresh payload every 2–3s); ``broadcast()`` is kept
+for event-driven fan-out but is not yet wired to the event bus.
 """
 
 import json

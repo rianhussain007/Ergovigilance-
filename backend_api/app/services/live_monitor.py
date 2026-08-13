@@ -59,6 +59,13 @@ RECORDINGS_DIR = os.environ.get(
 # ~20k entries at 10 fps covers ~33 minutes of history for the LiveMonitoring
 # timeline bar; the full record is persisted to disk on stop anyway.
 _TIMELINE_MAX = 20000
+# Consecutive `cap.read()` failures before the capture loop attempts to reopen
+# the camera source. Factory IP cameras (RTSP) drop constantly — a single
+# failed read is normal jitter, but a persistent failure means the stream is
+# dead and must be reopened with backoff instead of spinning forever.
+_CAPTURE_FAILURE_THRESHOLD = 3
+_CAPTURE_RECONNECT_BASE_S = 0.5
+_CAPTURE_RECONNECT_MAX_S = 10.0
 
 # Capture/processing decoupling (Tier 0). A dedicated capture thread reads the
 # camera at its native rate into a bounded ring buffer; the process thread pops
@@ -164,6 +171,7 @@ def build_ws_payload(state) -> dict:
         "inference_latency_ms": _f(state.inference_latency_ms),
         "timestamp": state.timestamp,
         "camera_status": state.camera_status,
+        "camera_reconnecting": bool(getattr(state, "camera_reconnecting", False)),
         "frame_width": state.frame_width,
         "frame_height": state.frame_height,
         "features": clean_feature_values(state.features),
@@ -326,6 +334,12 @@ class LiveMonitoringService:
         self._pose_history: deque = deque(maxlen=4)
         self._ai_explanation_cache: str = ""
         self._ai_expl_last_attempt: float = 0.0
+        # Guards against spawning overlapping AI-explanation threads (one in
+        # flight at a time; a hung Ollama call can never accumulate threads).
+        self._ai_expl_running: bool = False
+        # Camera reconnect bookkeeping (capture thread only).
+        self._read_failures: int = 0
+        self._reconnect_delay: float = _CAPTURE_RECONNECT_BASE_S
 
     def start_session(
         self,
@@ -414,6 +428,9 @@ class LiveMonitoringService:
         self._fps_count = 0
 
         self._running = True
+        self._read_failures = 0
+        self._reconnect_delay = _CAPTURE_RECONNECT_BASE_S
+        self.state.camera_reconnecting = False
         # Capture runs on its own thread so the camera is drained continuously
         # (raw recording + ring buffer) regardless of inference latency.
         self._capture_thread = threading.Thread(
@@ -498,6 +515,7 @@ class LiveMonitoringService:
 
         self.state.session_active = False
         self.state.camera_status = "disconnected"
+        self.state.camera_reconnecting = False
 
         # Post-process: burn the skeleton overlay into the recorded video
         # in a background thread so the API response isn't blocked.
@@ -712,6 +730,13 @@ class LiveMonitoringService:
         video recording) proceeds at the camera's native rate no matter how
         slow pose inference gets — the root cause of the "feed freezes /
         backend hangs" symptom during live monitoring.
+
+        Camera resilience: a factory IP camera (RTSP) drops constantly. After
+        ``_CAPTURE_FAILURE_THRESHOLD`` consecutive read failures the loop stops
+        spinning on a dead handle and reopens the source with exponential
+        backoff, setting ``state.camera_reconnecting`` so the UI can show the
+        operator that the feed is temporarily down. The session keeps running
+        the whole time; frames resume as soon as the camera is back.
         """
         while self._running:
             if self.cap is None:
@@ -720,8 +745,17 @@ class LiveMonitoringService:
             try:
                 ret, frame = self.cap.read()
                 if not ret:
-                    time.sleep(0.01)
+                    self._handle_camera_read_failure()
                     continue
+                # Camera is delivering frames again — reset reconnect state.
+                if self._read_failures > 0 or self.state.camera_reconnecting:
+                    logger.info(
+                        "Camera recovered after %d read failures",
+                        self._read_failures,
+                    )
+                self._read_failures = 0
+                self._reconnect_delay = _CAPTURE_RECONNECT_BASE_S
+                self.state.camera_reconnecting = False
                 # Record the RAW camera frame — evidence-grade, and video-review
                 # re-analysis expects the raw (non-mirrored) stream so
                 # MediaPipe's left/right labels stay anatomically correct.
@@ -747,7 +781,70 @@ class LiveMonitoringService:
                 logger.error(
                     "Capture loop error: %s", exc, exc_info=True,
                 )
+                self._handle_camera_read_failure()
                 time.sleep(0.5)
+
+    def _handle_camera_read_failure(self) -> None:
+        """Count consecutive read failures and reopen the camera with backoff.
+
+        Called from the capture thread when ``cap.read()`` fails. Below the
+        threshold we treat it as jitter and retry immediately; at/above it we
+        release the dead handle, reopen the configured source, and back off
+        exponentially (0.5s → 1s → … capped at 10s) between attempts.
+        """
+        self._read_failures += 1
+        if self._read_failures < _CAPTURE_FAILURE_THRESHOLD:
+            time.sleep(0.05)
+            return
+
+        if not self.state.camera_reconnecting:
+            logger.warning(
+                "Camera read failing (%d consecutive) — attempting reconnect",
+                self._read_failures,
+            )
+            self.state.camera_reconnecting = True
+
+        delay = min(self._reconnect_delay, _CAPTURE_RECONNECT_MAX_S)
+        time.sleep(delay)
+        self._reconnect_delay = min(delay * 2, _CAPTURE_RECONNECT_MAX_S)
+        self._try_reopen_camera()
+
+    def _try_reopen_camera(self) -> None:
+        """Release the dead handle and reopen the session's camera source.
+
+        ``current_camera_source`` is the resolved source (int index or RTSP
+        URL) recorded at session start, so reconnects target the same camera.
+        Bounded open/read timeouts keep a dead RTSP stream from blocking the
+        capture thread forever.
+        """
+        source = self.current_camera_source
+        if source is None:
+            return
+        try:
+            if self.cap is not None:
+                self.cap.release()
+            self.cap = cv2.VideoCapture(source)
+            # Bound the connect + read so a dead stream fails fast instead of
+            # hanging the capture thread (guarded for older OpenCV builds).
+            open_timeout = getattr(cv2, "CAP_PROP_OPEN_TIMEOUT_MSEC", None)
+            read_timeout = getattr(cv2, "CAP_PROP_READ_TIMEOUT_MSEC", None)
+            for prop, ms in ((open_timeout, 3000), (read_timeout, 3000)):
+                if prop is not None:
+                    self.cap.set(prop, ms)
+            if self.cap.isOpened():
+                logger.info("Camera reconnected at source %s", source)
+                self._read_failures = 0
+                self._reconnect_delay = _CAPTURE_RECONNECT_BASE_S
+                self.state.camera_reconnecting = False
+            else:
+                logger.warning(
+                    "Camera reopen failed at source %s — will retry in %.1fs",
+                    source, self._reconnect_delay,
+                )
+        except Exception as exc:
+            logger.warning(
+                "Camera reopen error at source %s: %s", source, exc,
+            )
 
     def _process_loop(self):
         risk_order = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
@@ -891,11 +988,12 @@ class LiveMonitoringService:
                 context_snapshot = _ds_replace(
                     context_snapshot, ai_explanation=self._ai_explanation_cache
                 )
-            if time.perf_counter() - self._ai_expl_last_attempt >= 8.0:
+            if time.perf_counter() - self._ai_expl_last_attempt >= 8.0 and not self._ai_expl_running:
                 self._ai_expl_last_attempt = time.perf_counter()
                 snapshot_copy = context_snapshot
 
                 def _generate_explanation_in_background():
+                    self._ai_expl_running = True
                     try:
                         from backend.context.engine import generate_ai_explanation
                         expl = generate_ai_explanation(snapshot_copy)
@@ -905,6 +1003,8 @@ class LiveMonitoringService:
                         # Best-effort: never block the pipeline, but surface the
                         # failure in logs instead of swallowing it silently.
                         logger.warning("AI explanation generation failed: %s", exc, exc_info=True)
+                    finally:
+                        self._ai_expl_running = False
 
                 threading.Thread(
                     target=_generate_explanation_in_background,

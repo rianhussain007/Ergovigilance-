@@ -77,6 +77,14 @@ export default function ManagerDashboard() {
         <p className="text-body-sm text-on-surface-variant mt-xs">Factory-wide ergonomic overview</p>
       </div>
 
+      {manager?.degraded && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-md py-sm text-[12px] text-amber-300">
+          <strong>Data degraded — database unavailable.</strong> The numbers below are
+          sample/mock data, not live floor data. Check the backend database and restart
+          it to restore real reporting.
+        </div>
+      )}
+
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-md">
         <AnalyticCard label="Registered Workers" value={data.manager.registeredWorkers} accent />
         <AnalyticCard 

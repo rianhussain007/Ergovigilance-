@@ -43,7 +43,7 @@ export default function TimelineBar({ timeline, seekTime, seekTo, alerts }: Prop
     <div className="rounded-lg border border-outline-variant bg-surface-container-low p-md">
       <div className="flex items-center justify-between gap-md mb-sm">
         <h3 className="text-body-sm font-bold text-on-surface">Risk Timeline</h3>
-        <div className="flex items-center gap-2 text-[9px] text-on-surface-variant">
+        <div className="flex items-center gap-2 text-xs text-on-surface-variant">
           <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-green-400" /> Low</span>
           <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-orange-400" /> Med</span>
           <span className="flex items-center gap-1"><i className="w-2 h-2 rounded-full bg-red-400" /> High</span>
@@ -61,12 +61,12 @@ export default function TimelineBar({ timeline, seekTime, seekTo, alerts }: Prop
         </div>
         {alertTimes.map((a, i) => (
           <div key={i} className="absolute top-0" style={{ left: `${a.pct}%`, transform: 'translateX(-50%)' }}>
-            <span className="text-[10px]" title={a.title}>{'▲'}</span>
+            <span className="text-sm" title={a.title}>{'▲'}</span>
           </div>
         ))}
         <div className="absolute top-0 w-0.5 h-full bg-white opacity-90" style={{ left: `${seekPct}%` }} />
       </div>
-      <div className="flex justify-between mt-1 text-[9px] text-on-surface-variant">
+      <div className="flex justify-between mt-1 text-xs text-on-surface-variant">
         <span>0s</span>
         <span>{(maxTime / 2).toFixed(0)}s</span>
         <span>{maxTime.toFixed(0)}s</span>

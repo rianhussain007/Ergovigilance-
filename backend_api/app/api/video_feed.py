@@ -2,8 +2,12 @@
 
 import logging
 import os
+import time
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
+
+# Timestamp of the last overlay-failure warning (rate-limited logging).
+_last_overlay_warn_ts: float = 0.0
 
 from app.core.auth import require_live_session_access
 from app.core.database import get_user_by_id
@@ -95,8 +99,18 @@ def _generate_mjpeg(overlay: bool = True):
                         payload.get("features") or {},
                         standard_assessment=payload.get("standard_assessment"),
                     )
-            except Exception:
-                pass  # never let overlay drawing kill the stream
+            except Exception as exc:
+                # Never let overlay drawing kill the stream, but surface the
+                # failure so a permanently broken overlay is diagnosable
+                # (rate-limited to one warning per 30s).
+                global _last_overlay_warn_ts
+                now = time.time()
+                if now - _last_overlay_warn_ts >= 30.0:
+                    _last_overlay_warn_ts = now
+                    logger.warning(
+                        "Skeleton overlay failed (stream continues without it): %s",
+                        exc,
+                    )
 
         ret, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
         if not ret:

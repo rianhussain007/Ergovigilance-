@@ -7,12 +7,16 @@ interface CameraPanelProps {
   status: string;
   workerName: string;
   task?: string;
+  /** True while the backend is attempting to reopen a dropped camera (RTSP).
+   *  Kept separate from ``status`` so the live UI doesn't tear down the
+   *  stream — the operator just sees the Reconnecting… badge. */
+  reconnecting?: boolean;
   /** Register the internal frame-capture handler so sibling controls (e.g. the
    *  Live Monitoring telemetry sidebar) can trigger a screenshot. */
   onCaptureReady?: (fn: () => void) => void;
 }
 
-export function CameraPanel({ status, workerName, task, onCaptureReady }: CameraPanelProps) {
+export function CameraPanel({ status, workerName, task, reconnecting, onCaptureReady }: CameraPanelProps) {
   const [fps, setFps] = useState(29.97);
   const [streamLoading, setStreamLoading] = useState(true);
   const [streamError, setStreamError] = useState(false);
@@ -126,7 +130,10 @@ export function CameraPanel({ status, workerName, task, onCaptureReady }: Camera
   // frame (or no session is active).
   const showImg = isActive;
   const showPlaceholder = !isActive || (streamLoading && !streamReady);
-  const showReconnecting = isActive && streamError && frameCountRef.current > 0;
+  // Show the badge when the backend reports it is reopening the camera
+  // (RTSP drop) OR the frontend observed the stream break.
+  const showReconnecting = (isActive && !!reconnecting)
+    || (isActive && streamError && frameCountRef.current > 0);
 
   const handleManualRetry = useCallback(() => {
     setStreamError(false);
@@ -211,7 +218,7 @@ export function CameraPanel({ status, workerName, task, onCaptureReady }: Camera
           />
         )}
         {showReconnecting && (
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 flex items-center gap-xs px-md py-sm rounded bg-black/70 backdrop-blur-md border border-amber-400/30 text-amber-200 text-[11px] font-medium uppercase tracking-wider">
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 flex items-center gap-xs px-md py-md rounded bg-black/70 backdrop-blur-md border border-amber-400/30 text-amber-200 text-sm font-medium uppercase tracking-wider">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
             Reconnecting…
           </div>
@@ -251,7 +258,7 @@ export function CameraPanel({ status, workerName, task, onCaptureReady }: Camera
           <button
             type="button"
             onClick={toggleOverlay}
-            className={`flex items-center gap-xs px-md py-sm rounded border text-[10px] font-medium uppercase tracking-wider transition-colors ${
+            className={`flex items-center gap-xs px-md py-md rounded border text-sm font-medium uppercase tracking-wider transition-colors ${
               showOverlay
                 ? 'border-cyan-400/40 bg-cyan-400/10 text-cyan-200'
                 : 'border-white/10 bg-white/[0.03] text-on-surface-variant hover:text-cyan-100 hover:border-cyan-400/25'
@@ -275,7 +282,7 @@ function ActionButton({ title, onClick, icon: Icon }: { title: string; onClick: 
     <button
       type="button"
       onClick={onClick}
-      className="p-sm rounded border border-white/10 bg-white/[0.03] text-on-surface-variant hover:text-cyan-100 hover:border-cyan-400/25 transition-colors"
+      className="p-md rounded border border-white/10 bg-white/[0.03] text-on-surface-variant hover:text-cyan-100 hover:border-cyan-400/25 transition-colors"
       title={title}
     >
       <Icon className="w-4 h-4" />

@@ -16,6 +16,23 @@ SEVERITY_ORDER = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "WARNING": 3, "LOW": 4}
 _ALERT_TRACKING_START = "2026-07-06"  # earliest alert-bearing session date
 
 
+def _num(value: Any, default: float = 0.0) -> float:
+    """Coerce a value to float, returning ``default`` for anything non-numeric.
+
+    Corrupt session data (string duration, NaN, inf) must degrade to a safe
+    number instead of 500-ing the safety report endpoint.
+    """
+    if isinstance(value, bool) or value is None:
+        return default
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return default
+    if f != f or f in (float("inf"), float("-inf")):
+        return default
+    return f
+
+
 def analyze_safety(sessions: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Analyze safety alerts across sessions that have alert data.
 
@@ -27,8 +44,14 @@ def analyze_safety(sessions: List[Dict[str, Any]]) -> Dict[str, Any]:
     Returns:
         Structured JSON dict for the /api/reports/safety-report endpoint.
     """
-    # Isolate sessions that genuinely have alert data
-    alert_sessions = [s for s in sessions if s.get("alerts") and len(s["alerts"]) > 0]
+    # Isolate sessions that genuinely have alert data. ``alerts`` must be a
+    # non-empty list of dicts — corrupt files may carry a string, None, or
+    # non-dict entries instead, all of which are excluded (not crashed on).
+    alert_sessions = [
+        s for s in sessions
+        if isinstance(s.get("alerts"), list)
+        and any(isinstance(a, dict) for a in s["alerts"])
+    ]
     n = len(alert_sessions)
 
     if n == 0:
@@ -64,11 +87,13 @@ def analyze_safety(sessions: List[Dict[str, Any]]) -> Dict[str, Any]:
     session_alert_list: List[Dict[str, Any]] = []
 
     for s in alert_sessions:
-        session_alerts = s["alerts"]
+        # Keep only well-formed alert dicts — a corrupt entry must not crash
+        # the whole report (previously: AttributeError on a.get).
+        session_alerts = [a for a in s["alerts"] if isinstance(a, dict)]
         session_count = len(session_alerts)
         for a in session_alerts:
-            sev_counter[a.get("severity", "UNKNOWN")] += 1
-            rule_counter[a.get("trigger_rule", "UNKNOWN")] += 1
+            sev_counter[str(a.get("severity", "UNKNOWN"))] += 1
+            rule_counter[str(a.get("trigger_rule", "UNKNOWN"))] += 1
 
         session_alert_list.append({
             "session_timestamp": s.get("session_timestamp", "unknown"),
@@ -94,7 +119,7 @@ def analyze_safety(sessions: List[Dict[str, Any]]) -> Dict[str, Any]:
     ]
 
     # --- alert density ---
-    total_seconds = sum(s.get("session_duration_seconds", 0) for s in alert_sessions)
+    total_seconds = sum(_num(s.get("session_duration_seconds", 0)) for s in alert_sessions)
     total_hours = total_seconds / 3600 if total_seconds > 0 else 0.01
     avg_per_session = round(total_alerts / n, 1) if n > 0 else 0
     alerts_per_hour = round(total_alerts / total_hours, 1) if total_hours > 0 else 0
