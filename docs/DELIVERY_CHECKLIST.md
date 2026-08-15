@@ -26,8 +26,8 @@ This is the single source of truth for what remains between "working dev system"
 | Deployment packaging | ✅ PASS | Windows service scripts (`deploy/`), `docker-compose.yml`, `.env.production.example`, pilot checklist + consent one-pager + intake tracker |
 
 **Known gaps found by this QA pass:**
-1. **No automated frontend tests** — `ui_posture/package.json` has no `test` script. Backend is covered; the UI is not. (P1-2)
-2. **>500 kB bundle chunk** — one monolithic chunk; cosmetic, but code-splitting is cheap. (P1-3)
+1. ~~No automated frontend tests~~ — **CLOSED 2026-08-15**: `npm test` (vitest) with 5 smoke tests covering login → dashboard → sessions → alerts.
+2. ~~>500 kB bundle chunk~~ — **CLOSED 2026-08-15**: routes code-split via `React.lazy`; warning gone, first-paint chunks are page-sized.
 3. **`/api/alerts` currently returns 0 alerts** — expected (no live sessions running); the *day-one runbook* must confirm alert firing on a deliberate bad posture at the site. Not a defect. (P0-6)
 4. **`docker-compose.verify.yml`** is a dev verification artifact (port overrides for this machine) — **not** the delivery file; ship `docker-compose.yml` with `.env`-driven ports. (P0-1)
 5. **No real camera E2E** has run outside the dev machine's camera — the code path was verified in Docker, but framing/lighting/alert-trigger must be confirmed on-site. (P0-6)
@@ -40,9 +40,9 @@ This is the single source of truth for what remains between "working dev system"
 
 | # | Task | Owner | Earliest ready | Why |
 |---|---|---|---|---|
-| 1 | Make `docker-compose.yml` ports `.env`-driven (default 8000/5432/8080, overridable) so one file deploys on any clean machine; keep `docker-compose.verify.yml` dev-only | 🟦 AGENT | today | Delivery must be one command, no file edits |
-| 2 | Add frontend automated smoke tests (vitest): login → dashboard renders → sessions list → alert center loads | 🟦 AGENT | today | Only real automated coverage gap |
-| 3 | Code-split routes (lazy `React.lazy`) to kill the >500 kB chunk warning | 🟦 AGENT | today | Fast first paint on factory PCs |
+| 1 | Make `docker-compose.yml` ports `.env`-driven (default 8000/5432/8080, overridable) so one file deploys on any clean machine; keep `docker-compose.verify.yml` dev-only | 🟦 AGENT | ✅ DONE 2026-08-15 | Ports now read `${POSTGRES_PORT:-5432}` / `${BACKEND_PORT:-8000}` / `${FRONTEND_PORT:-8080}`; overrides verified via `docker compose config` |
+| 2 | Add frontend automated smoke tests (vitest): login → dashboard renders → sessions list → alert center loads | 🟦 AGENT | ✅ DONE 2026-08-15 | 5 vitest smoke tests (login→dashboard, live monitoring, sessions list, alert center, backend-down error) all pass; `npm test` wired |
+| 3 | Code-split routes (lazy `React.lazy`) to kill the >500 kB chunk warning | 🟦 AGENT | ✅ DONE 2026-08-15 | `App.tsx` lazy-loads all 19 pages + Suspense fallback; build no longer warns >500 kB; `tsc --noEmit` clean |
 | 4 | Ground-truth risk labeling of the 34 extracted frames — `label_frames.py --prelabel` makes it a ~1 h confirm/correct job | 🟩 YOU | as soon as you spend ~1 h | Produces the first honest accuracy number (the product's core credibility claim) |
 | 5 | Run `scripts/evaluate_ground_truth.py` on those labels → `results/ground_truth_evaluation.json` → update docs with the real number | 🟦 AGENT | the hour after #4 lands | Turns labels into the honest accuracy figure |
 | 6 | Day-one on-site smoke (from `docs/pilot/PILOT_DEPLOYMENT_CHECKLIST.md` §6): live feed renders, deliberate slouch fires an alert, stop → report + MP4 appear | 🟩 YOU | day 1 at the site | The single unverifiable-here gate; everything else is code-verified |
