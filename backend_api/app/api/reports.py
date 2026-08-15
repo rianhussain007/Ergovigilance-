@@ -21,7 +21,9 @@ router = APIRouter()
 ROOT = Path(__file__).resolve().parents[3]
 if not (ROOT / "backend_api").is_dir() and (Path(__file__).resolve().parents[2] / "app").is_dir():
     ROOT = Path(__file__).resolve().parents[2]
-SESSIONS_DIR = os.path.join(str(ROOT), "outputs", "sessions")
+# Honor SESSIONS_DIR env override (container mode mounts /data/sessions) before
+# falling back to the source-tree outputs/sessions path.
+SESSIONS_DIR = os.environ.get("SESSIONS_DIR") or os.path.join(str(ROOT), "outputs", "sessions")
 
 
 def _get_session_files(current_user: AuthenticatedUser | None = None) -> List[dict]:

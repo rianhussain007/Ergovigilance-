@@ -22,7 +22,7 @@ from backend.services.report_pdf import render_safety_report_pdf
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-SESSIONS_DIR = os.path.join(str(ROOT), "outputs", "sessions")
+SESSIONS_DIR = os.environ.get("SESSIONS_DIR") or os.path.join(str(ROOT), "outputs", "sessions")
 
 
 def _load_filtered_sessions(user: AuthenticatedUser) -> list[dict]:

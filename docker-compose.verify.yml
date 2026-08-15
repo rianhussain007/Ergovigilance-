@@ -2,6 +2,11 @@
 # mapped to free host ports so the container checks (login, PDF export,
 # persistence) never touch the local Postgres on 5432 or the dev backend on
 # 8000. Used only for the verification pass; not part of the normal deployment.
+#
+# NOTE: run with `docker compose -f docker-compose.verify.yml up -d` ONLY —
+# do NOT merge with docker-compose.yml (`-f a -f b`). Compose appends `ports`
+# lists on merge, so db would bind BOTH 5432 and 5433 (5432 collides with any
+# local Postgres). This file is self-contained and defines all services.
 services:
   db:
     image: postgres:16-alpine

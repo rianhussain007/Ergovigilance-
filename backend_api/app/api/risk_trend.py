@@ -23,7 +23,7 @@ from backend.services.report_pdf import render_risk_trend_pdf
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-SESSIONS_DIR = os.path.join(str(ROOT), "outputs", "sessions")
+SESSIONS_DIR = os.environ.get("SESSIONS_DIR") or os.path.join(str(ROOT), "outputs", "sessions")
 
 
 def _sanitize(val, default=0.0):
