@@ -537,6 +537,23 @@ def _analyze_video_file(
     all_unavailable_features: set[str] = set()
     frames_with_unavailable_count = 0
 
+    # ── Temporal continuity (same fix as label_frames.py generate_timeline) ──
+    # 1) Process EVERY frame through PoseEngine so MediaPipe VIDEO-mode
+    #    tracking + the Kalman smoother stay warm (no left/right flips or
+    #    random keypoint jumps), but only STORE a result record every
+    #    frame_step-th frame to keep the payload bounded.
+    #    ``force_process=True`` bypasses the shared time-based frame skipper
+    #    (which targets live capture at ~15 fps wall-clock — offline, frames
+    #    are read as fast as disk allows, so the skipper would silently drop
+    #    MOST sampled frames -> sparse, jittery keypoints). This is a
+    #    dedicated per-job engine instance, so the live pipeline's pacing is
+    #    unaffected.
+    #    ERGOVIGILANCE_ANALYZE_EVERY_FRAME=0 restores the old sampled-only
+    #    behavior (faster on long clips, jitterier keypoints).
+    analyze_every_frame = (
+        os.environ.get("ERGOVIGILANCE_ANALYZE_EVERY_FRAME", "1").strip().lower()
+        not in ("0", "false", "no", "off")
+    )
     try:
         engine.initialize()
         while True:
@@ -547,9 +564,9 @@ def _analyze_video_file(
             if progress_cb is not None and frame_index % max(frame_step, 10) == 0:
                 progress_cb(frame_index, total_frames)
 
-            if frame_index % frame_step == 0:
-                result = engine.process_frame(frame)
-                if result.person_detected:
+            if analyze_every_frame or frame_index % frame_step == 0:
+                result = engine.process_frame(frame, force_process=analyze_every_frame)
+                if result.person_detected and frame_index % frame_step == 0:
                     timestamp = frame_index / fps if fps > 0 else float(len(frames))
                     delta_seconds = frame_step / fps if fps > 0 else 0.033
                     task_name = "Neutral Standing"

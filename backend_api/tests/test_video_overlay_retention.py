@@ -28,6 +28,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "backend_api"))
 
+from app.api import video_analysis as video_analysis_module  # noqa: E402
 from app.api.video_analysis import _burn_overlay  # noqa: E402
 from app.schemas.api import VideoAnalysisFrame  # noqa: E402
 
@@ -178,6 +179,130 @@ class BurnOverlayRetentionTest(unittest.TestCase):
         # Only codec noise (~5 mean), never an overlay: identical to the raw
         # frames within a generous bound (overlay would add far more).
         self.assertTrue(all(d < 12.0 for d in diffs), f"diffs: {diffs}")
+
+
+class AnalyzeEveryFrameTemporalTest(unittest.TestCase):
+    """Fix 3: offline video analysis must process EVERY frame so MediaPipe
+    VIDEO-mode tracking + Kalman stay warm (no keypoint flips), storing only
+    every frame_step-th record.
+
+    Regression: the old loop called engine.process_frame only on every 10th
+    frame AND let the shared time-based frame skipper drop most of those, so
+    result keypoints were sparse and jittery on the website's Video Review.
+    """
+
+    def test_process_frame_called_every_frame_but_stored_every_step(self):
+        import tempfile
+        from unittest import mock
+        from app.schemas.api import VideoAnalysisFrame, VideoAnalysisSummary, VideoAnalysisResponse
+
+        class _FakeResult:
+            def __init__(self, person_detected=True):
+                self.person_detected = person_detected
+                self.keypoints = [[10 * i, 10 * i, 0.0, 0.9] for i in range(33)]
+                self.features = {"neck_flexion": 12.0, "trunk_flexion": 8.0}
+                self.unavailable_features = []
+                self.lower_body_confidence = 0.9
+                self.confidence = 0.8
+                self.issues = []
+                self.task_info = {"task": "Neutral Standing", "confidence": 90.0}
+                self.standard_assessment = {}
+
+        calls = []
+        real_process = None
+
+        class _FakeEngine:
+            def initialize(self):
+                pass
+
+            def release(self):
+                pass
+
+            def process_frame(self, frame, force_process=False):
+                calls.append(force_process)
+                return _FakeResult()
+
+        fake_engine = _FakeEngine()
+        frames_out = []
+
+        def _fake_evaluate(**kwargs):
+            return mock.MagicMock(risk_level="LOW", feature_scores={})
+
+        def _fake_region_levels(features, level, std):
+            return {}
+
+        # 45-frame synthetic video @ 25 fps, frame_step=10 -> 5 stored frames.
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "src.mp4"
+            _make_synthetic_video(src, frames=45, fps=25.0)
+            model_file = Path(tmp) / "model.task"
+            model_file.write_bytes(b"dummy")
+            with mock.patch.object(video_analysis_module, "MODEL_PATH", model_file), \
+                 mock.patch.object(video_analysis_module, "PoseEngine", return_value=fake_engine), \
+                 mock.patch.object(video_analysis_module, "ContextIntelligenceEngine",
+                                   return_value=mock.MagicMock(evaluate=_fake_evaluate)), \
+                 mock.patch.object(video_analysis_module, "compute_region_levels", _fake_region_levels):
+                resp = video_analysis_module._analyze_video_file(str(src), "t.mp4", frame_step=10)
+
+        self.assertEqual(len(calls), 45, "process_frame must run on EVERY frame")
+        self.assertTrue(all(calls), "every call must force_process (skip the frame skipper)")
+        self.assertEqual(len(resp.frames), 5, "only every 10th frame stored")
+        indices = [f.frame_index for f in resp.frames]
+        self.assertEqual(indices, [0, 10, 20, 30, 40])
+
+    def test_sampled_only_mode_preserved_via_env(self):
+        import os
+        import tempfile
+        from unittest import mock
+
+        calls = []
+
+        class _FakeEngine:
+            def initialize(self):
+                pass
+
+            def release(self):
+                pass
+
+            def process_frame(self, frame, force_process=False):
+                calls.append(force_process)
+                from types import SimpleNamespace
+                return SimpleNamespace(
+                    person_detected=True,
+                    keypoints=[[10 * i, 10 * i, 0.0, 0.9] for i in range(33)],
+                    features={"neck_flexion": 12.0},
+                    unavailable_features=[],
+                    lower_body_confidence=0.9,
+                    confidence=0.8,
+                    issues=[],
+                    task_info=None,
+                    standard_assessment={},
+                )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "src.mp4"
+            _make_synthetic_video(src, frames=30, fps=25.0)
+            model_file = Path(tmp) / "model.task"
+            model_file.write_bytes(b"dummy")
+            old = os.environ.get("ERGOVIGILANCE_ANALYZE_EVERY_FRAME")
+            os.environ["ERGOVIGILANCE_ANALYZE_EVERY_FRAME"] = "0"
+            try:
+                with mock.patch.object(video_analysis_module, "MODEL_PATH", model_file), \
+                     mock.patch.object(video_analysis_module, "PoseEngine", return_value=_FakeEngine()), \
+                     mock.patch.object(video_analysis_module, "ContextIntelligenceEngine",
+                                       return_value=mock.MagicMock(evaluate=lambda **k: mock.MagicMock(
+                                           risk_level="LOW", feature_scores={}))), \
+                     mock.patch.object(video_analysis_module, "compute_region_levels", lambda *a: {}):
+                    resp = video_analysis_module._analyze_video_file(str(src), "t.mp4", frame_step=10)
+            finally:
+                if old is None:
+                    os.environ.pop("ERGOVIGILANCE_ANALYZE_EVERY_FRAME", None)
+                else:
+                    os.environ["ERGOVIGILANCE_ANALYZE_EVERY_FRAME"] = old
+
+        self.assertEqual(len(calls), 3, "sampled-only mode: 30 frames / step 10 = 3 calls")
+        self.assertTrue(all(not c for c in calls), "no force_process in sampled-only mode")
+        self.assertEqual(len(resp.frames), 3)
 
 
 class TimelineOverlayIndexTest(unittest.TestCase):

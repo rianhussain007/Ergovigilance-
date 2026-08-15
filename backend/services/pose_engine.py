@@ -111,18 +111,25 @@ class PoseEngine:
         self._initialized = True
         self._init_time = time.perf_counter()  # For accurate MediaPipe timestamps
 
-    def process_frame(self, frame: np.ndarray) -> ProcessedFrame:
+    def process_frame(self, frame: np.ndarray, force_process: bool = False) -> ProcessedFrame:
         """Process one camera frame through the full CV pipeline.
 
         Performance note: this method is the hot path during live monitoring.
         Each sub-step (MediaPipe inference, feature extraction, context eval)
         is bounded to keep total latency under the POSE_PROCESS_FPS target.
+
+        ``force_process=True`` bypasses the global time-based frame skipper so
+        offline consumers (video analysis, timeline generation) can process
+        EVERY frame for temporal tracking continuity. Use it only on a
+        dedicated engine instance — never on the live engine — because it
+        overrides the shared skipper's pacing.
         """
         if not self._initialized or self.pose_landmarker is None:
             raise RuntimeError("PoseEngine not initialized. Call initialize() first.")
 
-        # Performance: skip frames if we're ahead of schedule
-        if not frame_skipper.should_process():
+        # Performance: skip frames if we're ahead of schedule (unless the
+        # caller explicitly needs every frame processed for temporal tracking).
+        if not force_process and not frame_skipper.should_process():
             # Return a lightweight result indicating frame was skipped
             return ProcessedFrame(
                 keypoints=[],
@@ -295,7 +302,11 @@ class PoseEngine:
             # ("Unknown" task, zero confidence — no real classification ran,
             # e.g. torso out of frame) so they don't skew the fallback rate.
             try:
-                if task_info and task_info.get("task") != "Unknown":
+                # Skip the drift canary for forced offline processing: an
+                # analysis job bursts hundreds of frames in seconds, which
+                # would skew the live fallback-rate stats. The canary exists
+                # to measure the LIVE pipeline.
+                if not force_process and task_info and task_info.get("task") != "Unknown":
                     get_drift_monitor().record(
                         source="model" if self.task_recognizer.using_model else "gaussian",
                         confidence=float(task_info.get("confidence", 0.0)),

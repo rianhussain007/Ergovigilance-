@@ -371,7 +371,7 @@ export default function VideoReviewPage() {
   const riskPath = useMemo(() => buildRiskPath(result!), [result]);
   const timeLabels = useMemo(() => buildTimeLabels(result!), [result]);
 
-  // Helper 1: find current frame
+  // Helper 1: find current frame (nearest stored sample)
   const findCurrentFrame = useCallback(
     (time: number): VideoAnalysisFrame | null => {
       if (!result || result.frames.length === 0) return null;
@@ -389,10 +389,70 @@ export default function VideoReviewPage() {
     [result]
   );
 
+  // Helper 1b: temporally-interpolated keypoints for the overlay.
+  // The backend stores one analysis record every frame_step frames (default
+  // 10 -> ~0.4 s at 25 fps), so drawing the raw nearest sample makes the
+  // skeleton STEP between samples during playback. Blend the two surrounding
+  // stored samples' keypoints by playback position so the skeleton glides
+  // continuously and stays locked to the person on screen (the same
+  // temporal-smoothing idea the CLI labeling tool uses).
+  const interpolatedKeypoints = useCallback(
+    (time: number): number[][] | null => {
+      if (!result || result.frames.length === 0) return null;
+      const frames = result.frames;
+      const first = frames[0];
+      // Note: [] is truthy in JS — always check length, or an empty-keypoints
+      // edge would short-circuit the overlay fallback and blank the skeleton.
+      if (time <= first.timestamp_seconds) {
+        return first.keypoints?.length ? first.keypoints : null;
+      }
+      const last = frames[frames.length - 1];
+      if (time >= last.timestamp_seconds) {
+        return last.keypoints?.length ? last.keypoints : null;
+      }
+      for (let i = 0; i < frames.length - 1; i++) {
+        const a = frames[i];
+        const b = frames[i + 1];
+        if (time >= a.timestamp_seconds && time <= b.timestamp_seconds) {
+          const span = b.timestamp_seconds - a.timestamp_seconds;
+          if (span <= 0) return a.keypoints?.length ? a.keypoints : null;
+          const f = (time - a.timestamp_seconds) / span;
+          const ka = a.keypoints || [];
+          const kb = b.keypoints || [];
+          if (ka.length === 0) return kb.length ? kb : null;
+          if (kb.length === 0) return ka;
+          const n = Math.max(ka.length, kb.length);
+          const out: number[][] = [];
+          for (let j = 0; j < n; j++) {
+            const pa = ka[j] || [0, 0, 0, 0];
+            const pb = kb[j] || pa;
+            out.push([
+              pa[0] + (pb[0] - pa[0]) * f,
+              pa[1] + (pb[1] - pa[1]) * f,
+              pa[2] + (pb[2] - pa[2]) * f,
+              pa[3] + (pb[3] - pa[3]) * f,
+            ]);
+          }
+          return out;
+        }
+      }
+      return last.keypoints || null;
+    },
+    [result]
+  );
+
   const currentFrame = useMemo(() => findCurrentFrame(currentTime), [
     currentTime,
     findCurrentFrame,
   ]);
+
+  // Keypoints actually drawn on the canvas: interpolated between the two
+  // surrounding stored samples (falls back to the nearest sample's raw
+  // keypoints when no interpolation is possible, e.g. first/last frame).
+  const overlayKeypoints = useMemo(
+    () => interpolatedKeypoints(currentTime) || currentFrame?.keypoints || null,
+    [currentTime, interpolatedKeypoints, currentFrame]
+  );
 
   const handleTimeUpdate = useCallback(() => {
     const video = videoRef.current;
@@ -408,11 +468,17 @@ export default function VideoReviewPage() {
     canvas.width = video.clientWidth || canvas.width;
     canvas.height = video.clientHeight || canvas.height;
     if (currentFrame) {
-      drawSkeleton(ctx, currentFrame, canvas.width, canvas.height, getContentRect(video));
+      // Draw with the temporally-interpolated keypoints so the skeleton
+      // tracks the person smoothly between stored samples instead of stepping.
+      const drawFrame: VideoAnalysisFrame = {
+        ...currentFrame,
+        keypoints: overlayKeypoints || currentFrame.keypoints,
+      };
+      drawSkeleton(ctx, drawFrame, canvas.width, canvas.height, getContentRect(video));
     } else {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
-  }, [result, showOverlay, currentFrame]);
+  }, [result, showOverlay, currentFrame, overlayKeypoints]);
 
   // Redraw the skeleton immediately when the overlay is re-enabled (the canvas
   // only mounts while the overlay is on, so a fresh frame is needed).
@@ -425,8 +491,12 @@ export default function VideoReviewPage() {
     if (!ctx) return;
     canvas.width = video.clientWidth || canvas.width;
     canvas.height = video.clientHeight || canvas.height;
-    drawSkeleton(ctx, currentFrame, canvas.width, canvas.height, getContentRect(video));
-  }, [showOverlay, currentFrame]);
+    const drawFrame: VideoAnalysisFrame = {
+      ...currentFrame,
+      keypoints: overlayKeypoints || currentFrame.keypoints,
+    };
+    drawSkeleton(ctx, drawFrame, canvas.width, canvas.height, getContentRect(video));
+  }, [showOverlay, currentFrame, overlayKeypoints]);
 
   const handleVideoLoadedMetadata = useCallback(() => {
     const video = videoRef.current;
@@ -763,7 +833,7 @@ export default function VideoReviewPage() {
                 />
               </div>
               <p className="text-[10px] text-on-surface-variant">
-                Sampled frames through PoseEngine + Context Intelligence. You can keep browsing — results appear here when ready.
+                Every frame runs through PoseEngine + Context Intelligence for smooth tracking (results stored at ~10-frame intervals). You can keep browsing — results appear here when ready.
               </p>
             </div>
           )}
