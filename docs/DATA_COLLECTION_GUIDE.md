@@ -155,6 +155,39 @@ rounded shoulders, trunk bending, etc.). An ergonomist or physiotherapist is ide
    }
    ```
 
+#### Faster path — offline bundle + one-command evaluation (implemented 2026-08-15)
+
+If running the interactive player on a machine with a display is inconvenient, extract frames
+headlessly and label in a spreadsheet:
+
+```bash
+# 1. Extract every Nth frame as PNGs + frames_manifest.json (no display needed)
+venv/Scripts/python.exe scripts/label_frames.py \
+    --video recordings/worker-001/<ts> \
+    --export-frames outputs/ground_truth/<ts> --step 45
+
+# 2. Seed the template with the model's predictions (nearest timeline entry)
+#    — the template CSV gets a predicted_label column and a blank human_label column.
+
+# 3. Human reviews the PNGs (or the generated contact_sheet.png grid) and fills
+#    human_label = LOW / MEDIUM / HIGH per row. ~30–60 min for ~50 frames.
+
+# 4. One command converts the CSV to ground_truth_risk.json (with the labeler's
+#    name and a prelabel_source note) and runs the evaluation:
+venv/Scripts/python.exe scripts/apply_human_labels.py \
+    --template outputs/ground_truth/<ts>/label_template.csv --labeler "Your Name"
+```
+
+A ready-to-label bundle already exists for session `SESH-2026-08-14_20-13-48` (all three risk
+classes present) at `outputs/ground_truth/20260814_201348/` (48 frames, contact sheet + template
+pre-seeded 47/48).
+
+> **Self-consistency trap:** `label_frames.py --prelabel` without human confirmation produces a
+> file whose labels *are* the model's own predictions — evaluating against it yields ~100%
+> accuracy that means nothing. Such a file was quarantined to
+> `outputs/video_review/prelabel_dump_CIRCULAR.json`. Only files written by
+> `apply_human_labels.py` (or the interactive player) with a named `labeler` count as ground truth.
+
 ### Pass B — Task Labels (5 classes + Unknown)
 
 **Requires:** Anyone familiar with what the tasks look like. No special training needed.
@@ -179,6 +212,8 @@ The evaluation script (`scripts/evaluate_ground_truth.py`) is **implemented as o
 Once labels exist it compares them against the model's per-frame predictions from `timeline.json`
 and writes `results/ground_truth_evaluation.json`:
 
+> Shortcut: if you labeled via a template CSV, `scripts/apply_human_labels.py` performs the
+> conversion *and* this evaluation in one command (see Phase 2).
 ```bash
 # Risk pass (default): labels file + the recording's timeline.json (co-located)
 venv/Scripts/python.exe scripts/evaluate_ground_truth.py \
