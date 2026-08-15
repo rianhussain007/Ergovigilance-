@@ -43,6 +43,17 @@ Remaining amends (UI/human): #2 power-loss recovery (design decision), #18/#19 l
 
 New regression coverage: `tests/test_video_overlay_retention.py` (5 tests — burn retention, sample replacement, copy-through, overlay index, prelabel seeding). Full suite now **231 passed, 1 skipped**.
 
+### 0.1.3 Docker end-to-end verification addendum (2026-08-15 — build, login, PDF, persistence)
+
+| Item | Finding | Fix applied | Verified by |
+|------|---------|-------------|-------------|
+| Container build | `docker compose -f docker-compose.verify.yml build` had never been verified end-to-end | Built both images (`posture_analysis-backend:latest` 2.97 GB, `posture_analysis-frontend:latest` 137 MB); stack came up on free ports (db 5433 / backend 8001 / frontend 8080) | `docker compose ps` — db/backend healthy, frontend up; login + health on 8001 |
+| Session PDF 404 in container | Report PDF modules (`reports.py`, `risk_trend.py`, `safety_report.py`, `session_report.py`) hardcoded the source-tree `outputs/sessions` path while `app/main.py` honors the `SESSIONS_DIR` env var — in the container sessions live on `/data/sessions`, so `/reports/session/{id}/pdf` returned 404 (safety-report PDF worked because it reads via the live repo) | All 4 modules now read `os.environ.get("SESSIONS_DIR")` first, falling back to the source-tree path — matches `main.py` | Local TestClient: session PDF 200, 132 KB, `%PDF-`; in-container after rebuild: **HTTP 200, 99 370 bytes, valid `%PDF-`** (was 404) |
+| `ports` merge hazard | `docker compose -f docker-compose.yml -f docker-compose.verify.yml` APPENDS `ports` lists → db binds BOTH 5432 and 5433 → bind error on a host with local Postgres | Documented in `docker-compose.verify.yml` header: must run standalone, never merged with the base file | `docker compose config` showed both published ports before fix; standalone `up -d` binds only 5433/8001/8080 |
+| Login in container | Seed creds (`admin@example.local` / `AdminPass123!`) | — | Login → 201-char JWT; `/api/sessions`, `/api/reports` 200 |
+| PDF export in container | — | — | Safety-report PDF: HTTP 200, 61 649 bytes, `application/pdf`; session PDF: 200 after fix |
+| Persistence across down/up | — | — | Created user `persist_test@qa.local` → full `down` + `up` → user still present (auth DB on `/data` volume survives container recreation); sessions count 10 → 10 |
+
 ---
 
 ## 0. What didn't work — the amend list (priority order)
