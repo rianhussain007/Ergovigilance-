@@ -194,14 +194,18 @@ def _compute_segment_colors(features, overall: str, standard_assessment=None, re
     joint_regions: dict[int, list[str]] = {}
     for a, b in POSE_CONNECTIONS:
         region = _region_for_connection(a, b)
-        conn_color[(a, b)] = RISK_COLORS.get(region_level[region], RISK_COLORS[overall])
+        # A missing region key (partial/legacy region_risks dict) falls back
+        # to the overall color instead of raising KeyError — a single missing
+        # region must never blank the whole skeleton silently.
+        band = region_level.get(region, overall)
+        conn_color[(a, b)] = RISK_COLORS.get(band, RISK_COLORS[overall])
         joint_regions.setdefault(a, []).append(region)
         joint_regions.setdefault(b, []).append(region)
 
     joint_color: dict[int, tuple[int, int, int]] = {}
     for idx, regions in joint_regions.items():
-        worst = max(regions, key=lambda r: _RISK_ORDER[region_level[r]])
-        joint_color[idx] = RISK_COLORS.get(region_level[worst], RISK_COLORS[overall])
+        worst = max(regions, key=lambda r: _RISK_ORDER.get(region_level.get(r, overall), 0))
+        joint_color[idx] = RISK_COLORS.get(region_level.get(worst, overall), RISK_COLORS[overall])
     return conn_color, joint_color
 
 # MediaPipe Pose connections for skeleton drawing

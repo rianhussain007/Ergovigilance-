@@ -32,6 +32,17 @@ Remaining amends (UI/human): #2 power-loss recovery (design decision), #18/#19 l
 
 **Re-verified this pass (no amends needed):** 222 pytest pass + 1 skip; `tsc --noEmit` clean; production `vite build` succeeds; all 62 OpenAPI paths registered; 19-endpoint happy-path battery all 200; error paths 401/404/422 correct; PDF exports valid (`%PDF-` magic, 87 KB / 107 KB); sessions paginated (99 total, 25/page); synthetic edge-data test 8/8 PASS (2 env-skips); WS strict-JSON parse OK; memory bounds asserted in `test_tier0_stability.py` + `test_perf_regressions.py`; WS client backoff 3 s→48 s + malformed-message guard verified.
 
+### 0.1.2 Video-review overlay + ground-truth labeling addendum (2026-08-14)
+
+| Item | Root cause | Fix applied | Verified by |
+|------|------------|-------------|-------------|
+| Overlay flicker on downloaded review videos | `_burn_overlay` (video_analysis.py) drew the skeleton ONLY on every `frame_step`th (10th) sampled frame — 9 of 10 frames played raw, so the overlay blinked on/off | **Sample retention**: hold the last analyzed frame and keep drawing its skeleton/risk until a newer analyzed frame replaces it | Pixel-level headless test: every frame of a 12-frame clip differs from a no-overlay burn (was: only frames 0/10); + 2 new unit tests |
+| Overlay vanishing on partial region data | `pose_overlay._compute_segment_colors` did `region_level[region]` — a missing region key raised KeyError, silently caught → whole skeleton blanked | Fall back to the overall risk color for missing region keys (`.get(region, overall)` + order-safe worst-band) | 5/5 new tests pass; live overlay path unchanged when all 6 regions present |
+| `--prelabel` had no timeline for review clips | `outputs/video_review/timeline.json` didn't exist → "starting from scratch", zero prelabels | `label_frames.py` auto-generates a timeline on the fly: runs `PoseEngine` sequentially over EVERY frame (temporal tracking stays active → no keypoint flips), stores per-frame `risk_level`/`current_task`/`features`/normalized keypoints, then seeds prelabels from it as usual | Real run on `VIDJOB-e73df75d.mp4` (656 frames @25fps): 635 pose records, 66 prelabels seeded at step 10 |
+| Labeling window had no skeleton | The tool is text-overlay only | Persistent overlay in the labeling window: nearest-timestamp match (≤0.5 s), holds last valid pose across unsampled frames, shows "overlay RISK: X (held)" | `build_overlay_index` unit test + nearest-match verified on generated timeline |
+
+New regression coverage: `tests/test_video_overlay_retention.py` (5 tests — burn retention, sample replacement, copy-through, overlay index, prelabel seeding). Full suite now **231 passed, 1 skipped**.
+
 ---
 
 ## 0. What didn't work — the amend list (priority order)

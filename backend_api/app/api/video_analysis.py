@@ -438,12 +438,15 @@ async def _save_limited_upload(file: UploadFile, suffix: str) -> str:
 
 
 def _burn_overlay(video_path: str, frames: list[VideoAnalysisFrame], frame_step: int, output_path: str) -> bool:
-    """Re-encode the video with the ML pose overlay burned into the sampled frames.
+    """Re-encode the video with the ML pose overlay burned into all frames.
 
-    Uses the same ``draw_skeleton`` rendering as the live MJPEG feed, so the
-    downloaded video is pixel-identical to what the operator sees live. Frames
-    that were not pose-sampled are copied through unchanged. Returns True when
-    the output file was written.
+    Pose was analyzed only every ``frame_step``th frame; to keep the skeleton
+    continuously visible (no flicker), the last analyzed frame's overlay is
+    held and re-drawn on every intermediate frame until a newer analyzed
+    frame replaces it (sample retention). Uses the same ``draw_skeleton``
+    rendering as the live MJPEG feed, so the downloaded video is pixel-
+    identical to what the operator sees live. Returns True when the output
+    file was written.
     """
     try:
         cap = cv2.VideoCapture(video_path)
@@ -465,6 +468,13 @@ def _burn_overlay(video_path: str, frames: list[VideoAnalysisFrame], frame_step:
             if not writer.isOpened():
                 return False
             by_index = {frame.frame_index: frame for frame in frames}
+            # Sample retention: pose was analyzed only every ``frame_step``th
+            # frame, so drawing only on those indices made the overlay blink
+            # on/off (1 analyzed frame, then 9 raw frames at 25 fps). Hold the
+            # last analyzed frame and keep its skeleton on the video until a
+            # newer analyzed frame replaces it — zero flicker, and the overlay
+            # tracks the person between samples instead of vanishing.
+            last_analyzed = None
             frame_index = 0
             while True:
                 ok, frame = cap.read()
@@ -472,13 +482,15 @@ def _burn_overlay(video_path: str, frames: list[VideoAnalysisFrame], frame_step:
                     break
                 analyzed = by_index.get(frame_index)
                 if analyzed is not None:
+                    last_analyzed = analyzed
+                if last_analyzed is not None and last_analyzed.keypoints:
                     try:
                         frame = draw_skeleton(
                             frame,
-                            analyzed.keypoints,
-                            analyzed.risk_level,
-                            features=analyzed.features,
-                            region_levels=analyzed.region_risks,
+                            last_analyzed.keypoints,
+                            last_analyzed.risk_level,
+                            features=last_analyzed.features,
+                            region_levels=last_analyzed.region_risks,
                         )
                     except Exception:  # noqa: BLE001 - never fail the whole job on one frame
                         pass

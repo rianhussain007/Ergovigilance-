@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from bisect import bisect_left
 from datetime import date, datetime
@@ -154,6 +155,100 @@ def load_prelabels(timeline_path: Path, total: int, fps: float, step: int,
     return prelabels
 
 
+def generate_timeline(video: Path, timeline_path: Path, model_path: Path,
+                       progress_every: int = 60) -> list[dict]:
+    """Run pose extraction frame-by-frame and write a ``timeline.json``.
+
+    Processes **every** video frame sequentially through ``PoseEngine`` so
+    MediaPipe's VIDEO-mode temporal tracking stays active — the fix for
+    randomly jumping keypoints on recorded videos (sampled/fast-forwarded
+    extraction resets the tracker between frames). Also records normalized
+    keypoints per frame so the labeling window can draw a persistent skeleton
+    overlay that never blinks between samples.
+
+    The output is the same list-of-records format ``load_prelabels()`` reads
+    (``timestamp`` + ``risk_level`` / ``current_task`` keys), so a freshly
+    generated timeline feeds ``--prelabel`` identically to a recording's own
+    timeline. Returns the records written.
+    """
+    from backend.services.performance import frame_skipper
+    from backend.services.pose_engine import PoseEngine
+
+    cap = cv2.VideoCapture(str(video))
+    if not cap.isOpened():
+        sys.exit(f"OpenCV could not open {video}")
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    fps = cap.get(cv2.CAP_PROP_FPS) or 1.0
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 1)
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 1)
+
+    engine = PoseEngine(str(model_path))
+    # Deterministically process every frame: the time-based frame skipper is
+    # designed for live capture and could drop frames here.
+    _orig_should = frame_skipper.should_process
+    frame_skipper.should_process = lambda: True
+    records: list[dict] = []
+    frame_idx = 0
+    print(f"  [timeline] generating {total} frames sequentially (temporal tracking on)...")
+    try:
+        engine.initialize()  # inside try/finally: failure must release cap + engine
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            result = engine.process_frame(frame)
+            if result.person_detected and result.keypoints:
+                # Normalize to 0-1 like the video-analysis pipeline so the
+                # same draw_skeleton overlay used on the live feed can render.
+                kps = [[kp[0] / width, kp[1] / height, kp[2], kp[3]] for kp in result.keypoints]
+                task = (result.task_info or {}).get("task", "Unknown") if result.task_info else "Unknown"
+                records.append({
+                    "timestamp": round(frame_idx / fps, 3),
+                    "frame_number": frame_idx,
+                    "risk_level": result.risk_level,
+                    "current_task": task,
+                    "confidence": round(float(result.confidence), 2),
+                    # NaN and ±inf -> None so the file stays strict-JSON-safe
+                    # (bare Infinity/NaN tokens break JSON.parse in JS tools).
+                    "features": {k: (None if v != v or abs(v) == float("inf")
+                                     else round(float(v), 4))
+                                 for k, v in result.features.items()},
+                    "keypoints": kps,
+                })
+            frame_idx += 1
+            if progress_every and frame_idx % progress_every == 0:
+                print(f"  [timeline] {frame_idx}/{total} frames ({len(records)} with pose)")
+    finally:
+        frame_skipper.should_process = _orig_should
+        cap.release()
+        engine.release()
+
+    timeline_path.parent.mkdir(parents=True, exist_ok=True)
+    timeline_path.write_text(json.dumps(records, indent=2), encoding="utf-8")
+    print(f"  [timeline] wrote {len(records)} records to {timeline_path} "
+          f"({len(records)} of {frame_idx} frames had a person)")
+    return records
+
+
+def build_overlay_index(timeline_path: Path) -> list[tuple[float, dict]]:
+    """Load a timeline and return ``[(timestamp, record), ...]`` sorted by time.
+
+    Records are matched to the displayed frame by nearest timestamp (the same
+    join key ``load_prelabels`` uses) so the skeleton overlay tracks the pose
+    across playback instead of only on the frames pose was sampled on.
+    """
+    try:
+        timeline = json.loads(timeline_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(timeline, list):
+        return []
+    pairs = [(e.get("timestamp"), e) for e in timeline
+             if isinstance(e, dict) and e.get("timestamp") is not None]
+    pairs.sort(key=lambda p: p[0])
+    return pairs
+
+
 def save(out_path: Path, meta: dict, frames: dict) -> None:
     meta["frames"] = [{"frame": int(f), "label": label} for f, label in sorted(frames.items())]
     out_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
@@ -257,18 +352,27 @@ def main() -> None:
     # ── Optional: seed provisional labels from the recording's timeline.json ──
     confirmed = set(frames)  # human-entered labels (loaded from file or keyed this session)
     prelabels: dict[int, str] = {}
+    timeline_path: Path | None = None
     if args.prelabel:
         timeline_path = Path(args.timeline) if args.timeline else video.parent / "timeline.json"
-        if timeline_path.exists():
-            prelabels = load_prelabels(timeline_path, total, fps, args.step, args.kind)
-            prelabels = {k: v for k, v in prelabels.items() if k not in confirmed}
-            frames = {**prelabels, **frames}
-            meta.setdefault("prelabel_source",
-                            f"{timeline_path.name} (provisional, needs human review)")
-            print(f"  prelabeled {len(prelabels)} frames from {timeline_path.name} — "
-                  f"review each frame and press a key to confirm or override")
-        else:
-            print(f"  ! --prelabel set but no timeline.json at {timeline_path} — starting from scratch")
+        if not timeline_path.exists():
+            # No timeline on disk (e.g. a review clip exported by the video
+            # analyzer): generate one frame-by-frame on the fly. Sequential
+            # processing keeps MediaPipe temporal tracking alive, so the
+            # overlay keypoints stay stable and prelabels appear immediately.
+            model_path = Path(os.environ.get("POSE_MODEL_PATH", ROOT / "models" / "pose_landmarker_lite.task"))
+            if not model_path.exists():
+                sys.exit(f"Pose model not found at {model_path} — cannot auto-generate a timeline. "
+                         f"Set POSE_MODEL_PATH or copy the .task file into models/.")
+            print(f"  ! --prelabel set but no timeline.json at {timeline_path} — generating one now")
+            generate_timeline(video, timeline_path, model_path)
+        prelabels = load_prelabels(timeline_path, total, fps, args.step, args.kind)
+        prelabels = {k: v for k, v in prelabels.items() if k not in confirmed}
+        frames = {**prelabels, **frames}
+        meta.setdefault("prelabel_source",
+                        f"{timeline_path.name} (provisional, needs human review)")
+        print(f"  prelabeled {len(prelabels)} frames from {timeline_path.name} — "
+              f"review each frame and press a key to confirm or override")
     print(f"  keys: {labels}")
     print("  Space=pause  Left/Right=step  q/ESC=save & quit\n")
 
@@ -277,6 +381,33 @@ def main() -> None:
     paused = True  # start paused so the first frame is examined deliberately
     new_since_save = 0
     done = False
+
+    # ── Persistent skeleton overlay (sample retention) ────────────────
+    # Pose was analyzed on a subset of frames; without retention the skeleton
+    # would blink on/off on every unsampled frame. Hold the last valid pose
+    # and risk, refresh it whenever the displayed frame hits a nearby timeline
+    # record, and keep drawing it until a newer pose replaces it.
+    overlay_index: list[tuple[float, dict]] = (
+        build_overlay_index(timeline_path) if timeline_path is not None else []
+    )
+    overlay_keys = [t for t, _ in overlay_index]
+    last_pose: list | None = None
+    last_pose_risk = "LOW"
+    last_pose_features: dict = {}
+    last_pose_hit = -1
+    # Expire the held pose after this many seconds without a refresh — if the
+    # worker left the frame, a lingering "ghost" skeleton would mislead the
+    # labeler. Timeline gaps = no person detected, so gaps expire naturally.
+    POSE_HOLD_SECONDS = 2.0
+    last_pose_frame = -10**9  # video frame index when last_pose was refreshed
+    _draw_overlay = None
+    if overlay_index and any(rec.get("keypoints") for _, rec in overlay_index):
+        try:
+            from backend_api.app.services.pose_overlay import draw_skeleton as _draw_overlay
+        except ImportError:
+            _draw_overlay = None
+        if _draw_overlay is not None:
+            print(f"  overlay: persistent skeleton on ({len(overlay_index)} timeline records)")
 
     # Fast-forward to the first unconfirmed frame when resuming
     if confirmed:
@@ -310,11 +441,47 @@ def main() -> None:
             status = "PRELBL"
         else:
             status = "unlabeled"
+
+        # Refresh the retained pose from the nearest timeline record (within
+        # 0.5s, same tolerance as prelabel matching) — the overlay persists
+        # across unsampled frames instead of flickering off.
+        if overlay_index:
+            target = idx / fps
+            pos = bisect_left(overlay_keys, target)
+            best_i, best_err = -1, float("inf")
+            for cand in (pos - 1, pos, pos + 1):
+                if 0 <= cand < len(overlay_index):
+                    err = abs(overlay_index[cand][0] - target)
+                    if err < best_err:
+                        best_err, best_i = err, cand
+            if best_i >= 0 and best_err <= 0.5 and best_i != last_pose_hit:
+                rec = overlay_index[best_i][1]
+                kps = rec.get("keypoints")
+                if kps:
+                    last_pose = kps
+                    last_pose_risk = rec.get("risk_level", "LOW")
+                    last_pose_features = rec.get("features") or {}
+                    last_pose_hit = best_i
+                    last_pose_frame = idx
+        # Ghost-pose expiry: no fresh sample for POSE_HOLD_SECONDS -> clear.
+        if last_pose is not None and (idx - last_pose_frame) / fps > POSE_HOLD_SECONDS:
+            last_pose = None
+
+        if _draw_overlay is not None and last_pose is not None:
+            try:
+                frame = _draw_overlay(frame, last_pose, last_pose_risk,
+                                      features=last_pose_features)
+            except Exception:  # noqa: BLE001 - overlay must never block labeling
+                pass
+
         overlay = frame.copy()
         cv2.putText(overlay, f"frame {idx}/{total - 1} [{status}] step={args.step}",
                     (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         cv2.putText(overlay, f"{'PAUSED' if paused else 'PLAYING'}  kind={args.kind}  labels={len(frames)}",
                     (10, 58), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+        if _draw_overlay is not None and last_pose is not None:
+            cv2.putText(overlay, f"overlay RISK: {last_pose_risk} (held from last sample)", (10, 118),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2)
         if idx in frames:
             tag = " (prelabel)" if idx in prelabels and idx not in confirmed else ""
             cv2.putText(overlay, f"current: {frames[idx]}{tag}", (10, 88),
