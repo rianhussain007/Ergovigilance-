@@ -1,0 +1,134 @@
+"""Tests for worker face enrollment (SFace embeddings) and person detection.
+
+Covers the pure matching logic with synthetic embeddings (fast, no model
+dependency) plus one end-to-end round-trip through the real YuNet + SFace
+models when they're present on disk.
+"""
+
+import os
+import sys
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.core.database import init_local_database  # noqa: E402
+from app.services import worker_faces  # noqa: E402
+
+init_local_database()
+
+
+def _vec(seed: int) -> np.ndarray:
+    """Deterministic unit vector for synthetic embedding tests."""
+    rng = np.random.default_rng(seed)
+    v = rng.standard_normal(128).astype(np.float32)
+    return v / np.linalg.norm(v)
+
+
+class TestEmbeddingMatching:
+    def test_self_match_is_high(self):
+        v = _vec(1)
+        assert float(np.dot(v, v)) > 0.999
+
+    def test_different_vectors_are_far_apart(self):
+        a, b = _vec(1), _vec(2)
+        assert float(np.dot(a, b)) < 0.35
+
+
+class TestEnrollAndIdentify:
+    def test_enroll_then_identify_round_trip(self, monkeypatch):
+        worker_id = "worker-999-test"
+        emb = _vec(42)
+        # Stub the real model call so the test runs without the ONNX models.
+        monkeypatch.setattr(worker_faces, "embedding_from_image", lambda _b: emb)
+
+        status = worker_faces.enroll_worker(worker_id, b"fake-image-bytes")
+        assert status["enrolled"] is True
+        assert worker_faces.get_face_status(worker_id)["enrolled"] is True
+
+        result = worker_faces.identify_face(emb)
+        assert result["matched"] is True
+        assert result["worker_id"] == worker_id
+
+        worker_faces.delete_worker_face(worker_id)
+        assert worker_faces.get_face_status(worker_id)["enrolled"] is False
+
+    def test_unmatched_face_reports_unknown(self, monkeypatch):
+        worker_id = "worker-888-test"
+        monkeypatch.setattr(worker_faces, "embedding_from_image", lambda _b: _vec(7))
+        worker_faces.enroll_worker(worker_id, b"fake")
+
+        result = worker_faces.identify_face(_vec(8))
+        assert result["matched"] is False
+        assert result["worker_id"] is None
+
+        worker_faces.delete_worker_face(worker_id)
+
+    def test_no_face_raises_value_error(self, monkeypatch):
+        worker_id = "worker-777-test"
+        monkeypatch.setattr(worker_faces, "embedding_from_image", lambda _b: None)
+        with pytest.raises(ValueError):
+            worker_faces.enroll_worker(worker_id, b"no-face")
+
+    def test_reenroll_updates_embedding(self, monkeypatch):
+        worker_id = "worker-666-test"
+        monkeypatch.setattr(worker_faces, "embedding_from_image", lambda _b: _vec(11))
+        worker_faces.enroll_worker(worker_id, b"first")
+        monkeypatch.setattr(worker_faces, "embedding_from_image", lambda _b: _vec(12))
+        worker_faces.enroll_worker(worker_id, b"second")
+
+        assert worker_faces.identify_face(_vec(12))["worker_id"] == worker_id
+        assert worker_faces.identify_face(_vec(11))["worker_id"] is None
+
+        worker_faces.delete_worker_face(worker_id)
+
+
+def _models_present() -> bool:
+    from app.core.config import settings
+    return os.path.exists(
+        os.path.join(settings.MODEL_DIR, "face_detection_yunet_2023mar.onnx")
+    )
+
+
+@pytest.mark.skipif(
+    not _models_present(),
+    reason="YuNet/SFace models not present on disk",
+)
+class TestRealModelRoundTrip:
+    def test_real_face_embedding_round_trip(self):
+        """Enroll a real photo through YuNet+SFace, then match its own embedding."""
+        # matplotlib ships a real face photo in its sample data.
+        hop = Path(sys.prefix) / "Lib/site-packages/matplotlib/mpl-data/sample_data/grace_hopper.jpg"
+        if not hop.exists():
+            pytest.skip("grace_hopper.jpg sample image not available")
+        image_bytes = hop.read_bytes()
+        worker_id = "worker-555-test"
+
+        emb = worker_faces.embedding_from_image(image_bytes)
+        assert emb is not None, "expected a face to be detected in the sample photo"
+        assert emb.shape == (128,)
+
+        worker_faces.enroll_worker(worker_id, image_bytes)
+        result = worker_faces.identify_face(emb)
+        assert result["matched"] is True
+        assert result["worker_id"] == worker_id
+
+        worker_faces.delete_worker_face(worker_id)
+
+
+class TestIdentifyPersonsInFrame:
+    def test_no_boxes_returns_empty(self):
+        frame = np.zeros((240, 320, 3), np.uint8)
+        assert worker_faces.identify_persons_in_frame(frame, []) == []
+
+
+class TestPersonDetectorDegradation:
+    def test_detect_persons_returns_list_when_unavailable(self):
+        from app.services import person_detector
+        person_detector.reset_person_detector()
+        frame = np.zeros((240, 320, 3), np.uint8)
+        # With no model path configured this must degrade to [] — never raise.
+        boxes = person_detector.detect_persons(frame)
+        assert isinstance(boxes, list)

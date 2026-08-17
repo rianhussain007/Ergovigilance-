@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import Layout from './components/Layout';
 import { SearchModal } from './components/common/SearchModal';
+import { RouteErrorBoundary } from './components/RouteErrorBoundary';
 import { useAuth } from './auth/AuthContext';
 
 // ── Route code-splitting ──────────────────────────────────────────────────
@@ -55,32 +56,34 @@ function AppSuspense({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <BrowserRouter>
-      <AppSuspense>
-        <Routes>
-          <Route path="/" element={<HomeRoute />} />
-          <Route path="/request-pilot" element={<RequestPilot />} />
-          <Route path="/login" element={<LoginPage />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route element={<Layout />}>
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/monitoring" element={<LiveMonitoring />} />
-            <Route path="/video-review" element={<VideoReviewPage />} />
-            <Route path="/replay/:sessionId" element={<ReplayPage />} />
-            <Route path="/analytics" element={<AnalyticsPage />} />
-            <Route path="/sessions" element={<SessionHistory />} />
-            <Route path="/trends" element={<Navigate to="/reports?view=risk-trend" replace />} />
-            <Route path="/reports" element={<ReportsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-            <Route path="/manager" element={<ManagerDashboard />} />
-            <Route path="/deployment" element={<DeploymentCenter />} />
-            <Route path="/cameras" element={<MultiCameraView />} />
-            <Route path="/audit" element={<AuditTrail />} />
-            <Route path="/workers" element={<WorkersPage />} />
-            <Route path="/users" element={<UsersPage />} />
-            <Route path="/pilot-requests" element={<PilotRequestsPage />} />
-          </Route>
-        </Routes>
-      </AppSuspense>
+      <RouteErrorBoundary>
+        <AppSuspense>
+          <Routes>
+            <Route path="/" element={<HomeRoute />} />
+            <Route path="/request-pilot" element={<RequestPilot />} />
+            <Route path="/login" element={<LoginPage />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route element={<Layout />}>
+              <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/monitoring" element={<LiveMonitoring />} />
+              <Route path="/video-review" element={<VideoReviewPage />} />
+              <Route path="/replay/:sessionId" element={<ReplayPage />} />
+              <Route path="/analytics" element={<AnalyticsPage />} />
+              <Route path="/sessions" element={<SessionHistory />} />
+              <Route path="/trends" element={<Navigate to="/reports?view=risk-trend" replace />} />
+              <Route path="/reports" element={<ReportsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/manager" element={<ManagerDashboard />} />
+              <Route path="/deployment" element={<DeploymentCenter />} />
+              <Route path="/cameras" element={<MultiCameraView />} />
+              <Route path="/audit" element={<AuditTrail />} />
+              <Route path="/workers" element={<WorkersPage />} />
+              <Route path="/users" element={<UsersPage />} />
+              <Route path="/pilot-requests" element={<PilotRequestsPage />} />
+            </Route>
+          </Routes>
+        </AppSuspense>
+      </RouteErrorBoundary>
       <SearchModal />
     </BrowserRouter>
   );

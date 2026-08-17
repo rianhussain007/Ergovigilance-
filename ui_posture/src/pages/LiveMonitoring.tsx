@@ -480,6 +480,10 @@ function CameraFramingCard({ snapshot, unavailableFeatures, active }: { snapshot
   const missingLower = unavailableFeatures.some((f) => ['trunk_flexion', 'knee_angle', 'stance_stability', 'weight_shift_offset'].includes(f));
   const bad = framingState === 'poor' || framingState === 'upper_body'
     || (!framingState && (missingLower || (lowerBodyConf != null && lowerBodyConf < 50)));
+  const idWorker = snapshot?.identified_worker;
+  const idName = idWorker?.name || idWorker?.worker_id;
+  const idConf = idWorker?.confidence;
+  const idMatched = !!idWorker?.matched;
 
   const guidanceLines = framingGuidance?.length
     ? framingGuidance
@@ -514,6 +518,14 @@ function CameraFramingCard({ snapshot, unavailableFeatures, active }: { snapshot
       ) : (
         <div>
           <p className="text-body-sm text-green-400 font-medium">{personCount && personCount > 1 ? `${personCount} workers in view — monitoring primary` : 'Full body in frame'}</p>
+          {idWorker && idName ? (
+            <p className="text-body-sm text-emerald-300 font-medium mt-1">
+              {idMatched ? `✓ Identified: ${idName}` : `Face seen: ${idName} (low confidence)`}
+              {idConf != null && idMatched && <span className="font-mono text-emerald-300/70"> · {(idConf * 100).toFixed(0)}%</span>}
+            </p>
+          ) : active && personCount ? (
+            <p className="text-body-sm text-on-surface-variant mt-1">Worker identity: not enrolled / unseen</p>
+          ) : null}
           {framingQuality != null && (
             <p className="text-sm font-mono text-green-400/70 mt-0.5">Framing quality: {Math.round(framingQuality)}%</p>
           )}

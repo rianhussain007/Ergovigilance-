@@ -80,6 +80,14 @@ class LiveState:
     framing: dict = field(default_factory=dict)
     person_count: int = 1
 
+    # Person bounding boxes (normalized xyxy from YOLO) + the worker identity
+    # recognized by face matching, if any. Kept as plain dicts/lists so the
+    # WebSocket payload stays JSON-safe.
+    person_boxes: list = field(default_factory=list)
+    # Identified worker for the PRIMARY monitored person:
+    # {worker_id, name, confidence, matched} or {} when unrecognized.
+    identified_worker: dict = field(default_factory=dict)
+
     # Monotonic frame counter for the current processed frame — lets stream
     # consumers (e.g. the MJPEG feed) skip re-encoding identical frames.
     frame_number: int = 0

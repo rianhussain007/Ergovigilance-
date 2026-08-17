@@ -17,7 +17,7 @@ from app.services.live_monitor import get_live_service
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-from app.services.pose_overlay import draw_skeleton
+from app.services.pose_overlay import draw_skeleton, draw_person_boxes
 
 # Serve the MJPEG stream at the camera's native rate (~30 fps). The pose
 # pipeline is throttled separately (POSE_PROCESS_FPS) — the VIDEO path is
@@ -99,6 +99,13 @@ def _generate_mjpeg(overlay: bool = True):
                         payload.get("features") or {},
                         standard_assessment=payload.get("standard_assessment"),
                     )
+                # Person bounding boxes + worker identity tag (YOLO + face
+                # recognition). Drawn after the skeleton so the box frames it.
+                draw_person_boxes(
+                    frame,
+                    payload.get("person_boxes") or [],
+                    payload.get("identified_worker") or {},
+                )
             except Exception as exc:
                 # Never let overlay drawing kill the stream, but surface the
                 # failure so a permanently broken overlay is diagnosable

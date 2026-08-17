@@ -468,6 +468,10 @@ class ContextSnapshotResponse(BaseModel):
     # Tier 3 framing intelligence + person count (optional for legacy payloads)
     framing: Optional[dict] = None
     person_count: Optional[int] = None
+    # YOLO person boxes + face-recognized worker identity (optional for
+    # legacy payloads and sessions without detection enabled).
+    person_boxes: Optional[list] = None
+    identified_worker: Optional[dict] = None
 
 
 class HistoryPoint(BaseModel):

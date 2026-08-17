@@ -64,10 +64,15 @@ describe('frontend smoke', () => {
 
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
-    // After the mocked login, the form navigates to /dashboard.
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: /my dashboard/i })).toBeInTheDocument();
-    });
+    // After the mocked login, the form navigates to /dashboard. The route
+    // pages are code-split (React.lazy), so the first navigation loads the
+    // dashboard chunk dynamically — give it generous time in CI.
+    await waitFor(
+      () => {
+        expect(screen.getByRole('heading', { name: /my dashboard/i })).toBeInTheDocument();
+      },
+      { timeout: 5000 },
+    );
   });
 
   it('shows the live monitoring page for a signed-in operator', async () => {
@@ -75,12 +80,15 @@ describe('frontend smoke', () => {
     renderApp();
     await screen.findByRole('heading', { name: /sign in/i });
     await user.click(screen.getByRole('button', { name: /sign in/i }));
-    await screen.findByRole('heading', { name: /my dashboard/i });
+    await screen.findByRole('heading', { name: /my dashboard/i }, { timeout: 5000 });
 
     await user.click(screen.getByRole('link', { name: /live monitoring/i }));
-    await waitFor(() => {
-      expect(screen.getByText(/live monitoring/i)).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByText(/live monitoring/i)).toBeInTheDocument();
+      },
+      { timeout: 5000 },
+    );
   });
 
   it('loads the sessions list', async () => {
@@ -88,14 +96,18 @@ describe('frontend smoke', () => {
     renderApp();
     await screen.findByRole('heading', { name: /sign in/i });
     await user.click(screen.getByRole('button', { name: /sign in/i }));
-    await screen.findByRole('heading', { name: /my dashboard/i });
+    await screen.findByRole('heading', { name: /my dashboard/i }, { timeout: 5000 });
 
     await user.click(screen.getByRole('link', { name: /sessions/i }));
     // The mocked sessions fixture has one completed session. The ID may
     // appear in more than one row/column, so assert at least one match.
-    await waitFor(() => {
-      expect(screen.getAllByText(/SESH-2026-06-30-001/i).length).toBeGreaterThan(0);
-    });
+    // Generous timeout: the lazy chunk loads on first navigation.
+    await waitFor(
+      () => {
+        expect(screen.getAllByText(/SESH-2026-06-30-001/i).length).toBeGreaterThan(0);
+      },
+      { timeout: 5000 },
+    );
   });
 
   it('renders the alert center with no-alerts state', async () => {
@@ -103,12 +115,15 @@ describe('frontend smoke', () => {
     renderApp();
     await screen.findByRole('heading', { name: /sign in/i });
     await user.click(screen.getByRole('button', { name: /sign in/i }));
-    await screen.findByRole('heading', { name: /my dashboard/i });
+    await screen.findByRole('heading', { name: /my dashboard/i }, { timeout: 5000 });
 
     // The operator dashboard shows the alerts feed card (empty state).
-    await waitFor(() => {
-      expect(screen.getByText(/no alerts visible for your current scope/i)).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByText(/no alerts visible for your current scope/i)).toBeInTheDocument();
+      },
+      { timeout: 5000 },
+    );
   });
 
   it('shows a friendly error when the backend is unreachable', async () => {

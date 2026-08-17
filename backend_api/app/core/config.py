@@ -67,6 +67,13 @@ class Settings:
         "POSE_MODEL_PATH",
         os.path.join(os.path.dirname(__file__), "..", "..", "..", "models", "pose_landmarker_lite.task"),
     )
+    # Directory holding the additional ML models (YOLO person detector,
+    # YuNet face detector, SFace recognizer). Defaults to repo-root/models,
+    # same as POSE_MODEL_PATH.
+    MODEL_DIR: str = os.getenv(
+        "MODEL_DIR",
+        os.path.join(os.path.dirname(__file__), "..", "..", "..", "models"),
+    )
     # Configured IP/RTSP cameras: JSON array of {"id", "name", "url"}.
     # Physical USB cameras are auto-detected; these are added on top so
     # factory IP cameras (rtsp://...) appear in Settings + Multi-Camera.

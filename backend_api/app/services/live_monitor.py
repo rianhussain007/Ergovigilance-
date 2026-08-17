@@ -50,6 +50,16 @@ try:
 except ImportError:  # pragma: no cover - local layout where only the repo root is on sys.path
     from backend_api.app.services.pose_overlay import draw_skeleton
 
+try:
+    from app.services.person_detector import detect_persons, PERSON_DETECT_INTERVAL_S
+except ImportError:  # pragma: no cover - local layout where only the repo root is on sys.path
+    from backend_api.app.services.person_detector import detect_persons, PERSON_DETECT_INTERVAL_S
+
+try:
+    from app.services.worker_faces import identify_persons_in_frame
+except ImportError:  # pragma: no cover - local layout where only the repo root is on sys.path
+    from backend_api.app.services.worker_faces import identify_persons_in_frame
+
 RECORDINGS_DIR = os.environ.get(
     "RECORDINGS_DIR",
     os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "recordings")),
@@ -178,6 +188,9 @@ def build_ws_payload(state) -> dict:
         # Tier 3 framing intelligence + person count
         "framing": dict(getattr(state, "framing", {}) or {}),
         "person_count": int(getattr(state, "person_count", 1) or 1),
+        # YOLO person boxes + face-recognized worker identity.
+        "person_boxes": list(getattr(state, "person_boxes", []) or []),
+        "identified_worker": dict(getattr(state, "identified_worker", {}) or {}),
     }
 
 
@@ -337,6 +350,12 @@ class LiveMonitoringService:
         # Guards against spawning overlapping AI-explanation threads (one in
         # flight at a time; a hung Ollama call can never accumulate threads).
         self._ai_expl_running: bool = False
+        # Person detection + face recognition state. Detection is throttled to
+        # PERSON_DETECT_INTERVAL_S so YOLO never contends with pose inference.
+        self._person_detect_last: float = 0.0
+        self._person_boxes: list = []
+        self._identified_worker: dict = {}
+        self._worker_name_cache: dict[str, str] = {}
         # Camera reconnect bookkeeping (capture thread only).
         self._read_failures: int = 0
         self._reconnect_delay: float = _CAPTURE_RECONNECT_BASE_S
@@ -919,6 +938,45 @@ class LiveMonitoringService:
             ]
         inference_end = time.perf_counter()
         inference_latency_ms = (inference_end - inference_start) * 1000
+
+        # ── Person detection + face identification (throttled) ────────
+        # YOLO person boxes + SFace worker identity refresh every
+        # PERSON_DETECT_INTERVAL_S seconds, not per frame — the boxes tag the
+        # primary worker while pose inference keeps its own pacing. Any
+        # failure here must never interrupt the pose pipeline.
+        try:
+            now_detect = time.perf_counter()
+            if now_detect - self._person_detect_last >= PERSON_DETECT_INTERVAL_S:
+                self._person_detect_last = now_detect
+                boxes = detect_persons(frame)
+                self._person_boxes = boxes
+                identified = identify_persons_in_frame(frame, boxes)
+                if identified:
+                    # Prefer the largest person box (primary subject).
+                    primary = max(identified, key=lambda r: (r["x2"] - r["x1"]) * (r["y2"] - r["y1"]))
+                    if primary.get("matched") and primary.get("worker_id"):
+                        wid = primary["worker_id"]
+                        name = self._worker_name_cache.get(wid) or primary.get("name")
+                        if not name:
+                            try:
+                                from app.core.database import get_worker as _gw
+                                _row = _gw(wid)
+                                name = _row["name"] if _row else wid
+                            except Exception:
+                                name = wid
+                        self._worker_name_cache[wid] = name
+                        self._identified_worker = {
+                            "worker_id": wid,
+                            "name": name,
+                            "confidence": primary.get("confidence", 0.0),
+                            "matched": True,
+                        }
+                    else:
+                        self._identified_worker = {}
+                else:
+                    self._identified_worker = {}
+        except Exception as exc:
+            logger.warning("Person detection/identification failed (skipped): %s", exc)
     
         self._fps_count += 1
         elapsed = time.perf_counter() - self._fps_start
@@ -1120,6 +1178,8 @@ class LiveMonitoringService:
             self.state.standard_assessment = dict(result.standard_assessment or {})
             self.state.framing = dict(result.framing or {})
             self.state.person_count = result.person_count
+            self.state.person_boxes = list(self._person_boxes)
+            self.state.identified_worker = dict(self._identified_worker)
         # No sleep here — the _process_interval throttle above already pacing.
     
     def get_frame(self, overlaid: bool = True) -> Optional[np.ndarray]:
@@ -1185,6 +1245,8 @@ class LiveMonitoringService:
             std = getattr(self.state, "standard_assessment", None) or {}
             keypoints = list(self.state.keypoints)
             hist = list(self._pose_history)
+            person_boxes = list(self._person_boxes)
+            identified_worker = dict(self._identified_worker)
 
         if capture_counter is not None and keypoints and len(hist) >= 2:
             (c0, k0), (c1, k1) = hist[-2], hist[-1]
@@ -1215,6 +1277,8 @@ class LiveMonitoringService:
             # regions from the same per-joint sub-scores that produced
             # the overall level — the skeleton and badge stay consistent.
             "standard_assessment": dict(std),
+            "person_boxes": person_boxes,
+            "identified_worker": identified_worker,
         }
 
     def get_ws_payload(self) -> dict:

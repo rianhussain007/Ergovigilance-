@@ -436,6 +436,9 @@ export interface ContextSnapshot {
     detail?: string;
   };
   person_count?: number;
+  // YOLO person boxes + face-recognized worker identity
+  person_boxes?: { x1: number; y1: number; x2: number; y2: number; confidence: number }[];
+  identified_worker?: { worker_id?: string; name?: string; confidence?: number; matched?: boolean };
 }
 
 export interface AlertData {

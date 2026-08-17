@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Pencil, Trash2, X, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Search, Camera, CheckCircle2, Loader2 } from 'lucide-react';
 import { SectionHeader, EmptyState } from '@/src/components/common';
 import { useAuth } from '@/src/auth/AuthContext';
 import { apiFetch } from '@/src/services/apiClient';
@@ -11,6 +11,12 @@ interface Worker {
   name: string;
   department: string;
   shift: string;
+}
+
+interface FaceStatus {
+  worker_id: string;
+  enrolled: boolean;
+  enrolled_at?: string;
 }
 
 interface FormData {
@@ -44,6 +50,13 @@ export default function WorkersPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
+  // Face enrollment state: worker_id -> status, plus in-flight uploads.
+  const [faceStatus, setFaceStatus] = useState<Record<string, FaceStatus>>({});
+  const [faceUploading, setFaceUploading] = useState<Record<string, boolean>>({});
+  const [faceError, setFaceError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [faceTargetId, setFaceTargetId] = useState<string | null>(null);
+
   const fetchWorkers = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -59,6 +72,71 @@ export default function WorkersPage() {
   }, []);
 
   useEffect(() => { fetchWorkers(); }, [fetchWorkers]);
+
+  const fetchFaceStatus = useCallback(async (workerId: string) => {
+    try {
+      const res = await apiFetch(`/api/workers/${workerId}/face`);
+      if (res.ok) {
+        const data = (await res.json()) as FaceStatus;
+        setFaceStatus((prev) => ({ ...prev, [workerId]: data }));
+      }
+    } catch {
+      // Non-fatal: face enrollment is an enhancement; ignore status errors.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (workers.length > 0) workers.forEach((w) => fetchFaceStatus(w.worker_id));
+  }, [workers, fetchFaceStatus]);
+
+  const openFacePicker = (workerId: string) => {
+    setFaceTargetId(workerId);
+    setFaceError(null);
+    // Reuse a single hidden input; clicking it opens the file dialog.
+    window.setTimeout(() => fileInputRef.current?.click(), 0);
+  };
+
+  const handleFaceFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file
+    if (!file || !faceTargetId) return;
+    const workerId = faceTargetId;
+    setFaceUploading((prev) => ({ ...prev, [workerId]: true }));
+    setFaceError(null);
+    try {
+      const form = new FormData();
+      form.append('file', file);
+      const res = await apiFetch(`/api/workers/${workerId}/face`, {
+        method: 'POST',
+        body: form,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || `Face upload failed (${res.status})`);
+      }
+      const data = (await res.json()) as FaceStatus;
+      setFaceStatus((prev) => ({ ...prev, [workerId]: data }));
+    } catch (err: unknown) {
+      setFaceError(err instanceof Error ? err.message : 'Face upload failed');
+    } finally {
+      setFaceUploading((prev) => ({ ...prev, [workerId]: false }));
+      setFaceTargetId(null);
+    }
+  };
+
+  const removeFace = async (workerId: string) => {
+    setFaceError(null);
+    try {
+      const res = await apiFetch(`/api/workers/${workerId}/face`, { method: 'DELETE' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || `Removal failed (${res.status})`);
+      }
+      setFaceStatus((prev) => ({ ...prev, [workerId]: { worker_id: workerId, enrolled: false } }));
+    } catch (err: unknown) {
+      setFaceError(err instanceof Error ? err.message : 'Removal failed');
+    }
+  };
 
   const filtered = search
     ? workers.filter(
@@ -195,6 +273,7 @@ export default function WorkersPage() {
                 <th className="text-left py-sm px-md font-medium">Name</th>
                 <th className="text-left py-sm px-md font-medium">Department</th>
                 <th className="text-left py-sm px-md font-medium">Shift</th>
+                <th className="text-left py-sm px-md font-medium" title="Face recognition enrollment">Face ID</th>
                 {isManager && <th className="text-right py-sm px-md font-medium">Actions</th>}
               </tr>
             </thead>
@@ -208,6 +287,33 @@ export default function WorkersPage() {
                   <td className="py-sm px-md text-on-surface">{w.name}</td>
                   <td className="py-sm px-md text-on-surface">{w.department}</td>
                   <td className="py-sm px-md text-on-surface">{w.shift}</td>
+                  <td className="py-sm px-md">
+                    {faceUploading[w.worker_id] ? (
+                      <span className="inline-flex items-center gap-xs text-on-surface-variant text-body-sm">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Enrolling…
+                      </span>
+                    ) : faceStatus[w.worker_id]?.enrolled ? (
+                      <button
+                        onClick={() => removeFace(w.worker_id)}
+                        className="inline-flex items-center gap-xs text-body-sm text-green-400 hover:text-red-400 transition-colors"
+                        title={`Enrolled ${faceStatus[w.worker_id]?.enrolled_at ? new Date(faceStatus[w.worker_id]!.enrolled_at!).toLocaleString() : ''} — click to remove`}
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        Enrolled
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => openFacePicker(w.worker_id)}
+                        disabled={!isManager}
+                        className="inline-flex items-center gap-xs text-body-sm text-on-surface-variant hover:text-primary transition-colors disabled:opacity-40"
+                        title={isManager ? 'Upload a face photo to enable recognition' : 'Supervisor or admin can enroll a face'}
+                      >
+                        <Camera className="w-4 h-4" />
+                        Enroll
+                      </button>
+                    )}
+                  </td>
                   {isManager && (
                     <td className="py-sm px-md text-right">
                       <div className="flex items-center justify-end gap-sm">
@@ -304,6 +410,19 @@ export default function WorkersPage() {
         </div>,
         document.body
       )}
+
+      {faceError && (
+        <div className="p-sm rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-body-sm">{faceError}</div>
+      )}
+
+      {/* Hidden file input reused for any worker's face upload. */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={handleFaceFile}
+      />
 
       {deleteTarget && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)' }} onClick={() => !deleting && setDeleteTarget(null)}>

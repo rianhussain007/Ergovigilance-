@@ -370,3 +370,66 @@ def draw_skeleton(frame, keypoints, risk_level, features=None, feature_scores=No
                 cv2.FONT_HERSHEY_SIMPLEX, 0.58, overall_color, 2, cv2.LINE_AA)
 
     return frame
+
+
+def draw_person_boxes(frame, person_boxes, identified_worker=None):
+    """Draw YOLO person bounding boxes with worker identity tags.
+
+    *person_boxes*: list of normalized ``{x1, y1, x2, y2, confidence}`` dicts
+    (0-1 xyxy). *identified_worker*: ``{worker_id, name, confidence}`` for the
+    primary person (from face recognition), or None/{} when unknown.
+
+    The primary (largest) box is drawn in the worker accent color; secondary
+    boxes are dimmed. When the primary person is identified by face, the box
+    is tagged with the worker's name + confidence; otherwise the tag reads
+    "Unidentified".
+    """
+    if not person_boxes:
+        return frame
+
+    h, w = frame.shape[:2]
+    id_conf = float((identified_worker or {}).get("confidence", 0.0))
+    id_name = (identified_worker or {}).get("name") or (identified_worker or {}).get("worker_id")
+    identified = bool((identified_worker or {}).get("matched")) and bool(id_name)
+
+    # Primary box = largest area (the person the pipeline is monitoring).
+    primary = max(person_boxes, key=lambda b: (b["x2"] - b["x1"]) * (b["y2"] - b["y1"]))
+
+    for box in person_boxes:
+        x1 = int(box["x1"] * w)
+        y1 = int(box["y1"] * h)
+        x2 = int(box["x2"] * w)
+        y2 = int(box["y2"] * h)
+        is_primary = box is primary
+
+        if is_primary and identified:
+            color = (64, 224, 120)  # worker green
+        elif is_primary:
+            color = (80, 170, 255)  # primary amber-blue
+        else:
+            color = (120, 140, 170)  # dimmed secondary
+
+        thickness = 3 if is_primary else 1
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness, cv2.LINE_AA)
+
+        # Identity tag above the box.
+        if is_primary:
+            if identified:
+                tag = f"{id_name}  ({id_conf:.0%})" if id_conf > 0 else id_name
+            else:
+                tag = "Unidentified"
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            scale = 0.5
+            thick = 2
+            (tw, th), base = cv2.getTextSize(tag, font, scale, thick)
+            pad = 6
+            tx1 = max(0, min(x1, w - tw - pad * 2))
+            ty1 = max(0, y1 - th - pad * 2 - 6)
+            cv2.rectangle(frame, (tx1, ty1), (tx1 + tw + pad * 2, ty1 + th + pad * 2),
+                          (8, 12, 18), -1)
+            cv2.rectangle(frame, (tx1, ty1), (tx1 + tw + pad * 2, ty1 + th + pad * 2),
+                          color, 1)
+            cv2.putText(frame, tag, (tx1 + pad, ty1 + th + pad - 4),
+                        font, scale, color, thick, cv2.LINE_AA)
+
+    return frame

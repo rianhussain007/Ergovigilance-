@@ -7,7 +7,7 @@ import json
 from datetime import datetime, timezone
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
 
 from app.core.auth import get_current_user, require_roles
@@ -21,6 +21,11 @@ from app.core.database import (
     worker_has_sessions,
 )
 from app.core.security import AuthenticatedUser
+from app.services.worker_faces import (
+    enroll_worker,
+    delete_worker_face,
+    get_face_status,
+)
 
 router = APIRouter()
 
@@ -182,3 +187,83 @@ def get_worker_by_employee_id(employee_id: str) -> dict | None:
             "SELECT * FROM workers WHERE lower(employee_id) = lower(?)", (employee_id,)
         ).fetchone()
         return dict(row) if row else None
+
+
+# ── Face enrollment ───────────────────────────────────────────────────────
+
+
+@router.get("/workers/{worker_id}/face", response_model=dict)
+async def get_worker_face_status(
+    worker_id: str,
+    _: AuthenticatedUser = Depends(get_current_user),
+):
+    """Return whether a worker has an enrolled face photo."""
+    if not get_worker(worker_id):
+        raise HTTPException(status_code=404, detail="Worker not found")
+    return get_face_status(worker_id)
+
+
+@router.post("/workers/{worker_id}/face", response_model=dict)
+async def upload_worker_face(
+    worker_id: str,
+    file: UploadFile = File(..., description="Face photo (jpg/png)"),
+    user: AuthenticatedUser = Depends(require_roles("supervisor", "safety_mgr", "admin")),
+):
+    """Enroll a worker's face photo for live recognition.
+
+    Accepts a single image (jpg/png/webp). Computes a 128-dim SFace
+    embedding and stores it keyed by worker_id. Returns 422 if the photo
+    contains no usable face.
+    """
+    if not get_worker(worker_id):
+        raise HTTPException(status_code=404, detail="Worker not found")
+    image_bytes = await file.read()
+    if not image_bytes:
+        raise HTTPException(status_code=422, detail="Empty file uploaded")
+    # Guard against absurd uploads (10 MB cap) so a huge file can't pin the
+    # worker thread decoding it.
+    if len(image_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Image too large (max 10 MB)")
+    try:
+        result = enroll_worker(worker_id, image_bytes)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    # Log to audit trail
+    insert_audit_log(
+        id=f"AUD-{uuid.uuid4().hex[:8].upper()}",
+        actor_id=user.id,
+        actor_email=user.email,
+        actor_role=user.role,
+        action_type="worker_face_enrolled",
+        target_type="worker",
+        target_id=worker_id,
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        details=json.dumps({"worker_id": worker_id, "enrolled_at": result.get("enrolled_at")}),
+    )
+    return result
+
+
+@router.delete("/workers/{worker_id}/face", status_code=204)
+async def remove_worker_face(
+    worker_id: str,
+    user: AuthenticatedUser = Depends(require_roles("supervisor", "safety_mgr", "admin")),
+):
+    """Remove a worker's face enrollment."""
+    if not get_worker(worker_id):
+        raise HTTPException(status_code=404, detail="Worker not found")
+    deleted = delete_worker_face(worker_id)
+
+    # Log to audit trail
+    insert_audit_log(
+        id=f"AUD-{uuid.uuid4().hex[:8].upper()}",
+        actor_id=user.id,
+        actor_email=user.email,
+        actor_role=user.role,
+        action_type="worker_face_removed",
+        target_type="worker",
+        target_id=worker_id,
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        details=json.dumps({"worker_id": worker_id, "had_enrollment": deleted}),
+    )
+    return None
