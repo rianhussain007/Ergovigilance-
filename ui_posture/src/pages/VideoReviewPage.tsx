@@ -137,6 +137,36 @@ function getContentRect(video: HTMLVideoElement) {
   return { x: (elW - width) / 2, y: (elH - height) / 2, width, height };
 }
 
+// ── Keypoint validity guard (mirrors backend `_kp_valid` in pose_overlay.py) ──
+// MediaPipe emits (0,0)-style snaps or out-of-frame coordinates for occluded /
+// missing landmarks. The backend burn path and live feed reject those before
+// drawing; the in-browser canvas must apply the same rules or the skeleton
+// draws "lines to the corner" and the overlay misaligns from the person.
+const MIN_KP_VISIBILITY = 0.35;
+// Face landmarks that MediaPipe can snap to frame edges when occluded.
+const FACE_LANDMARK_INDICES = new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+
+function isKeypointValid(kp: number[] | undefined): kp is number[] {
+  if (!kp || kp.length < 2) return false;
+  const visibility = kp[3] !== undefined ? kp[3] : 1.0;
+  if (visibility < MIN_KP_VISIBILITY) return false;
+  const x = kp[0];
+  const y = kp[1];
+  // Tight bounds for body landmarks (5% margin for edge jitter).
+  if (x < -0.05 || x > 1.05 || y < -0.05 || y > 1.05) return false;
+  return true;
+}
+
+// Face landmarks near the frame edge are almost certainly MediaPipe snapping an
+// occluded face point to (0,0)/(1,0) — reject the outer band (same rule as the
+// backend) to kill diagonal lines without losing real face data.
+function isFaceEdgeSnap(idx: number, kp: number[]): boolean {
+  if (!FACE_LANDMARK_INDICES.has(idx)) return false;
+  const x = kp[0];
+  const y = kp[1];
+  return x < 0.1 || x > 0.9 || y < 0.05 || y > 0.9;
+}
+
 function drawSkeleton(
   ctx: CanvasRenderingContext2D,
   frame: VideoAnalysisFrame,
@@ -182,47 +212,53 @@ function drawSkeleton(
     contentRect.y + kp[1] * contentRect.height,
   ];
 
-  // Draw connections (each segment colored by its own region's risk)
+  // Draw connections (each segment colored by its own region's risk).
+  // Skip any segment touching an invalid keypoint (occluded / out-of-frame /
+  // low-visibility) — same rule the backend burn path uses, so the browser
+  // overlay never draws "lines to the corner" from a (0,0) snap.
   for (const [startIdx, endIdx] of POSE_CONNECTIONS) {
-    if (startIdx < frame.keypoints.length && endIdx < frame.keypoints.length) {
-      const startKp = frame.keypoints[startIdx];
-      const endKp = frame.keypoints[endIdx];
-      if (startKp.length >= 2 && endKp.length >= 2) {
-        const [x1, y1] = px(startKp);
-        const [x2, y2] = px(endKp);
-        const visibility = Math.min(
-          startKp[3] !== undefined ? startKp[3] : 1.0,
-          endKp[3] !== undefined ? endKp[3] : 1.0
-        );
-        ctx.globalAlpha = 0.35 + visibility * 0.65;
-        ctx.beginPath();
-        ctx.strokeStyle = dimColor(regionColor(regionForConnection(startIdx, endIdx)), visibility);
-        ctx.lineWidth = 3.5;
-        ctx.lineCap = "round";
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-        ctx.stroke();
-        ctx.globalAlpha = 1.0;
-      }
+    if (startIdx >= frame.keypoints.length || endIdx >= frame.keypoints.length) {
+      continue;
     }
+    const startKp = frame.keypoints[startIdx];
+    const endKp = frame.keypoints[endIdx];
+    if (!isKeypointValid(startKp) || !isKeypointValid(endKp)) continue;
+    if (isFaceEdgeSnap(startIdx, startKp) || isFaceEdgeSnap(endIdx, endKp)) continue;
+    const [x1, y1] = px(startKp);
+    const [x2, y2] = px(endKp);
+    const visibility = Math.min(
+      startKp[3] !== undefined ? startKp[3] : 1.0,
+      endKp[3] !== undefined ? endKp[3] : 1.0
+    );
+    ctx.globalAlpha = 0.35 + visibility * 0.65;
+    ctx.beginPath();
+    ctx.strokeStyle = dimColor(regionColor(regionForConnection(startIdx, endIdx)), visibility);
+    ctx.lineWidth = 3.5;
+    ctx.lineCap = "round";
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+    ctx.globalAlpha = 1.0;
   }
 
-  // Draw joints (colored by their worst touching region)
+  // Draw joints (colored by their worst touching region).
+  // Skip invalid keypoints so a (0,0) snap never draws a joint dot in the
+  // top-left corner of the frame.
   for (let i = 0; i < Math.min(frame.keypoints.length, 33); i++) {
     const kp = frame.keypoints[i];
-    if (kp.length >= 2) {
-      const [x, y] = px(kp);
-      const visibility = kp[3] !== undefined ? kp[3] : 1.0;
-      ctx.globalAlpha = 0.35 + visibility * 0.65;
-      ctx.beginPath();
-      ctx.fillStyle = dimColor(jointColor(i), visibility);
-      ctx.arc(x, y, 7, 0, 2 * Math.PI);
-      ctx.fill();
-      ctx.strokeStyle = "rgba(240, 250, 245, 0.9)";
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      ctx.globalAlpha = 1.0;
-    }
+    if (!isKeypointValid(kp)) continue;
+    if (isFaceEdgeSnap(i, kp)) continue;
+    const [x, y] = px(kp);
+    const visibility = kp[3] !== undefined ? kp[3] : 1.0;
+    ctx.globalAlpha = 0.35 + visibility * 0.65;
+    ctx.beginPath();
+    ctx.fillStyle = dimColor(jointColor(i), visibility);
+    ctx.arc(x, y, 7, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(240, 250, 245, 0.9)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.globalAlpha = 1.0;
   }
 
   // Per-joint angle labels (same joints/labels as the live overlay)
@@ -244,6 +280,9 @@ function drawSkeleton(
     // Skip null / undefined / NaN values (NaN may arrive serialized as null).
     if (value == null || value !== value) continue;
     const kp = frame.keypoints[kpIdx];
+    // Don't anchor an angle label to an occluded / out-of-frame joint — the
+    // label would float at a bogus position and mislead the viewer.
+    if (!isKeypointValid(kp) || isFaceEdgeSnap(kpIdx, kp)) continue;
     const [baseX, baseY] = px(kp);
     const x = Math.max(4, Math.min(baseX + offset[0], canvasWidth - 90));
     const y = Math.max(14, Math.min(baseY + offset[1], canvasHeight - 4));
@@ -426,6 +465,24 @@ export default function VideoReviewPage() {
           for (let j = 0; j < n; j++) {
             const pa = ka[j] || [0, 0, 0, 0];
             const pb = kb[j] || pa;
+            // Never interpolate toward an invalid (occluded / out-of-frame)
+            // keypoint — that would drag the skeleton toward a (0,0) snap
+            // between samples. Hold the valid endpoint's value instead, so the
+            // overlay only moves when both samples are trustworthy.
+            const aValid = isKeypointValid(pa) && !isFaceEdgeSnap(j, pa);
+            const bValid = isKeypointValid(pb) && !isFaceEdgeSnap(j, pb);
+            if (!aValid && bValid) {
+              out.push(pb);
+              continue;
+            }
+            if (aValid && !bValid) {
+              out.push(pa);
+              continue;
+            }
+            if (!aValid && !bValid) {
+              out.push(pa);
+              continue;
+            }
             out.push([
               pa[0] + (pb[0] - pa[0]) * f,
               pa[1] + (pb[1] - pa[1]) * f,
