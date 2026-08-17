@@ -481,9 +481,11 @@ function CameraFramingCard({ snapshot, unavailableFeatures, active }: { snapshot
   const bad = framingState === 'poor' || framingState === 'upper_body'
     || (!framingState && (missingLower || (lowerBodyConf != null && lowerBodyConf < 50)));
   const idWorker = snapshot?.identified_worker;
-  const idName = idWorker?.name || idWorker?.worker_id;
+  const idEmp = idWorker?.employee_id || idWorker?.worker_id;
   const idConf = idWorker?.confidence;
   const idMatched = !!idWorker?.matched;
+  const idLive = idWorker?.liveness;
+  const idSpoofed = idMatched && idLive === 'suspicious';
   // ALL detected persons with per-person identity (box + worker_id + name).
   // This is the source of truth — the primary card entry is just the largest
   // matched box. Unknown faces show as "Not recognized".
@@ -525,17 +527,19 @@ function CameraFramingCard({ snapshot, unavailableFeatures, active }: { snapshot
           {personIdentities.length > 0 ? (
             <ul className="mt-1 space-y-0.5">
               {personIdentities.map((p, i) => {
-                const name = p.name || p.worker_id;
+                const emp = p.employee_id || p.worker_id;
                 const matched = !!p.matched && !!p.worker_id;
+                const spoofed = matched && p.liveness === 'suspicious';
+                // Tag by Employee ID; flag spoofed (photo) faces explicitly.
                 const tag = matched
-                  ? `${name}${p.confidence && p.confidence > 0 ? ` · ${(p.confidence * 100).toFixed(0)}%` : ''}`
+                  ? `${emp}${p.confidence && p.confidence > 0 ? ` · ${(p.confidence * 100).toFixed(0)}%` : ''}${spoofed ? ' · PHOTO?' : ''}`
                   : p.seen || (p.confidence && p.confidence > 0)
                     ? 'Not recognized'
                     : null;
                 if (!tag) return null;
                 return (
-                  <li key={i} className={`text-body-sm ${matched ? 'text-emerald-300' : 'text-amber-300'} font-medium`}>
-                    {matched ? '✓ ' : ''}{tag}
+                  <li key={i} className={`text-body-sm ${spoofed ? 'text-orange-400' : matched ? 'text-emerald-300' : 'text-amber-300'} font-medium`}>
+                    {spoofed ? '⚠ ' : matched ? '✓ ' : ''}{tag}
                   </li>
                 );
               })}

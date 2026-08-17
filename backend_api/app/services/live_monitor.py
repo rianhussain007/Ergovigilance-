@@ -60,6 +60,11 @@ try:
 except ImportError:  # pragma: no cover - local layout where only the repo root is on sys.path
     from backend_api.app.services.worker_faces import identify_persons_in_frame
 
+try:
+    from app.services.liveness import FaceLivenessTracker
+except ImportError:  # pragma: no cover - local layout where only the repo root is on sys.path
+    from backend_api.app.services.liveness import FaceLivenessTracker
+
 RECORDINGS_DIR = os.environ.get(
     "RECORDINGS_DIR",
     os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "recordings")),
@@ -363,6 +368,13 @@ class LiveMonitoringService:
         # Primary (largest) recognized worker — kept for the dashboard card.
         self._identified_worker: dict = {}
         self._worker_name_cache: dict[str, str] = {}
+        # Anti-photo-spoof liveness. Sampled at its own faster throttle (the
+        # identity pass runs every ~2s; blinks last ~150-400ms and would be
+        # missed at that rate). FaceLivenessTracker associates boxes across
+        # samples by IoU and counts blinks + face-region motion per person.
+        self._liveness_tracker = FaceLivenessTracker()
+        self._liveness_last: float = 0.0
+        self._liveness_interval: float = 0.4
         # Camera reconnect bookkeeping (capture thread only).
         self._read_failures: int = 0
         self._reconnect_delay: float = _CAPTURE_RECONNECT_BASE_S
@@ -902,6 +914,47 @@ class LiveMonitoringService:
                 # which froze the MJPEG feed and "collapsed" the UI mid-session.
                 time.sleep(0.5)
 
+    def _derive_identified_worker(self) -> None:
+        """Set ``self._identified_worker`` from the current person identities.
+
+        The primary card worker = the largest box that matched an enrolled
+        face. Liveness is attached so the UI can show "photo?" instead of
+        "present" when the face is a spoof (no blinks, no motion).
+        """
+        matched = [
+            r for r in self._person_identities
+            if r.get("matched") and r.get("worker_id")
+        ]
+        if not matched:
+            self._identified_worker = {}
+            return
+        primary = max(
+            matched,
+            key=lambda r: (r["box"]["x2"] - r["box"]["x1"]) * (r["box"]["y2"] - r["box"]["y1"]),
+        )
+        wid = primary["worker_id"]
+        name = self._worker_name_cache.get(wid) or primary.get("name")
+        if not name:
+            try:
+                from app.core.database import get_worker as _gw
+                _row = _gw(wid)
+                name = _row["name"] if _row else wid
+            except Exception:
+                name = wid
+        self._worker_name_cache[wid] = name
+        self._identified_worker = {
+            "worker_id": wid,
+            "name": name,
+            "employee_id": primary.get("employee_id"),
+            "confidence": primary.get("confidence", 0.0),
+            "matched": True,
+            # Liveness verdict from the anti-spoof tracker: "live",
+            # "suspicious" (likely photo/video), or "unverified".
+            "liveness": primary.get("liveness", "unverified"),
+            "blinks": primary.get("blinks", 0),
+            "observed_seconds": primary.get("observed_seconds", 0.0),
+        }
+
     def _process_one_frame(self, frame: np.ndarray, risk_order: dict[str, int]) -> None:
         """Process one camera frame: pose inference -> context -> state.
 
@@ -962,34 +1015,31 @@ class LiveMonitoringService:
                 # entry already carries its own box, so the overlay can tag
                 # each person individually — recognized or "Not recognized".
                 self._person_identities = identified or []
-                # Primary worker for the dashboard card = the largest box that
-                # matched an enrolled face.
-                matched = [r for r in self._person_identities if r.get("matched") and r.get("worker_id")]
-                if matched:
-                    primary = max(
-                        matched,
-                        key=lambda r: (r["box"]["x2"] - r["box"]["x1"]) * (r["box"]["y2"] - r["box"]["y1"]),
-                    )
-                    wid = primary["worker_id"]
-                    name = self._worker_name_cache.get(wid) or primary.get("name")
-                    if not name:
-                        try:
-                            from app.core.database import get_worker as _gw
-                            _row = _gw(wid)
-                            name = _row["name"] if _row else wid
-                        except Exception:
-                            name = wid
-                    self._worker_name_cache[wid] = name
-                    self._identified_worker = {
-                        "worker_id": wid,
-                        "name": name,
-                        "confidence": primary.get("confidence", 0.0),
-                        "matched": True,
-                    }
-                else:
-                    self._identified_worker = {}
+                self._derive_identified_worker()
         except Exception as exc:
             logger.warning("Person detection/identification failed (skipped): %s", exc)
+
+        # ── Liveness (anti-photo-spoof) sampling ────────────────────
+        # Runs at ~2.5 Hz (own throttle) so blinks — 150-400ms events — are
+        # actually observed. The tracker associates boxes by IoU and returns a
+        # per-person verdict that gets merged into the identities below. Any
+        # failure only degrades the liveness signal, never the pipeline.
+        try:
+            now_live = time.perf_counter()
+            if now_live - self._liveness_last >= self._liveness_interval:
+                self._liveness_last = now_live
+                if self._person_boxes:
+                    verdicts = self._liveness_tracker.update(frame, self._person_boxes)
+                    if verdicts and self._person_identities:
+                        for idx, verdict in verdicts.items():
+                            if idx < len(self._person_identities):
+                                self._person_identities[idx].update(verdict)
+                        # Liveness can flip a matched identity to "suspicious"
+                        # (photo) — re-derive the primary card so it reflects
+                        # the fresh verdict immediately, not on the next 2s pass.
+                        self._derive_identified_worker()
+        except Exception as exc:
+            logger.warning("Liveness sampling failed (skipped): %s", exc)
     
         self._fps_count += 1
         elapsed = time.perf_counter() - self._fps_start

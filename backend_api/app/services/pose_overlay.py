@@ -396,9 +396,17 @@ def draw_person_boxes(frame, person_boxes, identified_worker=None, person_identi
     def _tag_text(entry: dict) -> str | None:
         """Return the identity tag text for an entry, or None for untagged."""
         if entry.get("matched") and entry.get("worker_id"):
-            name = entry.get("name") or entry.get("worker_id")
+            # Tag with the EMPLOYEE ID (HR-facing number), not the name.
+            emp = entry.get("employee_id") or entry.get("worker_id")
+            liveness = entry.get("liveness", "unverified")
             conf = float(entry.get("confidence", 0.0) or 0.0)
-            return f"{name}  ({conf:.0%})" if conf > 0 else name
+            base = f"{emp}  ({conf:.0%})" if conf > 0 else emp
+            if liveness == "suspicious":
+                # Face matched an enrolled worker but shows NO blinks and NO
+                # motion — consistent with a photo / frozen frame, not a live
+                # person. Never present it as physically present.
+                return f"{base}  PHOTO?"
+            return base
         if entry.get("seen"):
             return "Not recognized"
         return None
@@ -437,8 +445,10 @@ def draw_person_boxes(frame, person_boxes, identified_worker=None, person_identi
         is_primary = entry is primary_key
         tag = _tag_text(entry)
 
-        if entry.get("matched"):
-            color = (64, 224, 120)  # recognized worker green
+        if entry.get("matched") and entry.get("liveness") == "suspicious":
+            color = (0, 120, 255)  # matched but PHOTO (amber-orange) — spoofed
+        elif entry.get("matched"):
+            color = (64, 224, 120)  # recognized live worker green
         elif tag:
             color = (80, 170, 255)  # seen but not recognized amber-blue
         else:

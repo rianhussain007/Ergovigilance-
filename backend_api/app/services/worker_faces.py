@@ -240,6 +240,7 @@ def identify_persons_in_frame(frame, person_boxes: list[dict]) -> list[dict]:
         return []
     h, w = frame.shape[:2]
     names = enrolled_worker_names()
+    employee_ids = enrolled_worker_employee_ids()
     results = []
     for box in person_boxes:
         x1 = int(box["x1"] * w)
@@ -251,7 +252,7 @@ def identify_persons_in_frame(frame, person_boxes: list[dict]) -> list[dict]:
         pad_y = int((y2 - y1) * 0.10)
         cx1, cy1 = max(0, x1 - pad_x), max(0, y1 - pad_y)
         cx2, cy2 = min(w, x2 + pad_x), min(h, y2 + pad_y)
-        identity = {"worker_id": None, "name": None, "confidence": 0.0, "matched": False, "seen": False}
+        identity = {"worker_id": None, "name": None, "employee_id": None, "confidence": 0.0, "matched": False, "seen": False}
         if cx2 - cx1 >= 16 and cy2 - cy1 >= 16:
             crop = frame[cy1:cy2, cx1:cx2]
             fd = cv2.FaceDetectorYN.create(_yunet_path(), "",
@@ -269,6 +270,7 @@ def identify_persons_in_frame(frame, person_boxes: list[dict]) -> list[dict]:
                 identity["seen"] = True
                 if identity.get("matched") and identity.get("worker_id"):
                     identity["name"] = names.get(identity["worker_id"])
+                    identity["employee_id"] = employee_ids.get(identity["worker_id"])
         results.append({"box": dict(box), **identity})
     return results
 
@@ -281,4 +283,15 @@ def enrolled_worker_names() -> dict[str, str]:
         row = get_worker(rec["worker_id"])
         if row:
             out[rec["worker_id"]] = row["name"]
+    return out
+
+
+def enrolled_worker_employee_ids() -> dict[str, str]:
+    """Map worker_id -> employee_id for enrolled workers (overlay tags)."""
+    from app.core.database import get_worker
+    out = {}
+    for rec in list_enrolled_embeddings():
+        row = get_worker(rec["worker_id"])
+        if row:
+            out[rec["worker_id"]] = row["employee_id"]
     return out

@@ -442,11 +442,16 @@ export interface ContextSnapshot {
     box: { x1: number; y1: number; x2: number; y2: number; confidence: number };
     worker_id?: string | null;
     name?: string | null;
+    employee_id?: string | null;
     confidence?: number;
     matched?: boolean;
     seen?: boolean;
+    // Anti-photo-spoof liveness: 'live' | 'suspicious' (likely photo) | 'unverified'
+    liveness?: string;
+    blinks?: number;
+    observed_seconds?: number;
   }[];
-  identified_worker?: { worker_id?: string; name?: string; confidence?: number; matched?: boolean };
+  identified_worker?: { worker_id?: string; name?: string; employee_id?: string | null; confidence?: number; matched?: boolean; liveness?: string; blinks?: number };
 }
 
 export interface AlertData {
@@ -551,9 +556,13 @@ export interface VideoAnalysisFrame {
     box: { x1: number; y1: number; x2: number; y2: number; confidence: number };
     worker_id?: string | null;
     name?: string | null;
+    employee_id?: string | null;
     confidence?: number;
     matched?: boolean;
     seen?: boolean;
+    liveness?: string;
+    blinks?: number;
+    observed_seconds?: number;
   }[];
 }
 

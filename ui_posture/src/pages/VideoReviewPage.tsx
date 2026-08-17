@@ -318,16 +318,18 @@ function drawPersonIdentities(
   const toY = (ny: number) => contentRect.y + ny * contentRect.height;
 
   // Normalize to per-person entries (same fallback the backend uses).
-  type Entry = { box: { x1: number; y1: number; x2: number; y2: number }; worker_id?: string | null; name?: string | null; confidence?: number; matched?: boolean; seen?: boolean };
+  type Entry = { box: { x1: number; y1: number; x2: number; y2: number }; worker_id?: string | null; name?: string | null; employee_id?: string | null; confidence?: number; matched?: boolean; seen?: boolean; liveness?: string };
   let entriesNorm: Entry[];
   if (entries && entries.length > 0) {
     entriesNorm = entries.map((e) => ({
       box: e.box,
       worker_id: e.worker_id,
       name: e.name,
+      employee_id: e.employee_id,
       confidence: e.confidence,
       matched: e.matched,
       seen: e.seen !== undefined ? e.seen : !!e.confidence && e.confidence > 0,
+      liveness: e.liveness,
     }));
   } else {
     entriesNorm = (boxes || []).map((b) => ({ box: b }));
@@ -340,14 +342,18 @@ function drawPersonIdentities(
   for (const entry of entriesNorm) {
     const isPrimary = entry === primary;
     const matched = !!entry.matched && !!entry.worker_id;
+    const spoofed = matched && entry.liveness === 'suspicious';
+    // Tag with the EMPLOYEE ID (HR-facing number), not the name; append
+    // PHOTO? when the anti-spoof liveness check flags the face as a photo.
+    const emp = entry.employee_id || entry.worker_id || '';
     const tag =
       matched
-        ? (entry.name || entry.worker_id || '') + (entry.confidence && entry.confidence > 0 ? `  (${(entry.confidence * 100).toFixed(0)}%)` : '')
+        ? emp + (entry.confidence && entry.confidence > 0 ? `  (${(entry.confidence * 100).toFixed(0)}%)` : '') + (spoofed ? '  PHOTO?' : '')
         : entry.seen
           ? 'Not recognized'
           : null;
 
-    const color = matched ? '#40e078' : tag ? '#55aaff' : '#788aa8';
+    const color = spoofed ? '#ff7830' : matched ? '#40e078' : tag ? '#55aaff' : '#788aa8';
     const x1 = toX(entry.box.x1);
     const y1 = toY(entry.box.y1);
     const x2 = toX(entry.box.x2);

@@ -50,6 +50,11 @@ try:
 except ImportError:  # pragma: no cover - alternate layout
     from backend_api.app.services.worker_faces import identify_persons_in_frame
 
+try:
+    from app.services.liveness import FaceLivenessTracker
+except ImportError:  # pragma: no cover - alternate layout
+    from backend_api.app.services.liveness import FaceLivenessTracker
+
 router = APIRouter()
 
 MAX_VIDEO_BYTES = 200 * 1024 * 1024
@@ -556,6 +561,11 @@ def _analyze_video_file(
     # Aggregate unavailable features tracking
     all_unavailable_features: set[str] = set()
     frames_with_unavailable_count = 0
+    # Anti-photo-spoof liveness over the clip. Stored frames are sampled every
+    # frame_step (~2.5 Hz at 25 fps/step-10) — close enough to the live
+    # pipeline's liveness cadence to catch blinks, so Video Review shows the
+    # same live/suspicious verdict as the monitoring feed.
+    liveness_tracker = FaceLivenessTracker()
 
     # ── Temporal continuity (same fix as label_frames.py generate_timeline) ──
     # 1) Process EVERY frame through PoseEngine so MediaPipe VIDEO-mode
@@ -638,6 +648,13 @@ def _analyze_video_file(
                     try:
                         person_boxes = detect_persons(frame)
                         person_identities = identify_persons_in_frame(frame, person_boxes)
+                        # Liveness verdicts (blinks + face motion) per person,
+                        # merged into each identity so Video Review shows
+                        # "live" vs "photo?" exactly like the monitoring feed.
+                        verdicts = liveness_tracker.update(frame, person_boxes)
+                        for idx, verdict in verdicts.items():
+                            if idx < len(person_identities):
+                                person_identities[idx].update(verdict)
                     except Exception:  # noqa: BLE001 - detection is best-effort
                         person_boxes, person_identities = [], []
 
