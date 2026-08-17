@@ -164,11 +164,18 @@ async def get_recording_timeline(
 async def get_recording_video(
     session_id: str,
     token: str = Query(None),
+    raw: bool = Query(False),
 ):
     """Stream the MP4 video for a recorded session.
     
     Accepts optional `token` query param for <video> elements that
     cannot set the Authorization header directly.
+
+    By default prefers the overlaid video (skeleton burned in) for the
+    Replay screen. Pass ``raw=true`` to force the clean original — the
+    Video Review screen needs this because it draws its own analysis
+    skeleton on a canvas; playing the pre-burned overlay would stack two
+    skeletons from different runs on top of each other.
     """
     if token:
         try:
@@ -178,9 +185,12 @@ async def get_recording_video(
     rec_dir = _find_recording_dir(session_id)
     if not rec_dir:
         raise HTTPException(status_code=404, detail=f"Recording {session_id} not found")
-    # Prefer the overlaid video (skeleton burned in) when available
-    overlay_path = Path(rec_dir) / "overlay.mp4"
-    video_path = overlay_path if overlay_path.exists() else Path(rec_dir) / "original.mp4"
+    if raw:
+        video_path = Path(rec_dir) / "original.mp4"
+    else:
+        # Prefer the overlaid video (skeleton burned in) when available
+        overlay_path = Path(rec_dir) / "overlay.mp4"
+        video_path = overlay_path if overlay_path.exists() else Path(rec_dir) / "original.mp4"
     if not video_path.exists():
         raise HTTPException(status_code=404, detail="Video not found for this recording")
     return FileResponse(str(video_path), media_type="video/mp4")

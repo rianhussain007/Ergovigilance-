@@ -6,7 +6,7 @@ import {
   startRecordingAnalysis,
   downloadVideoWithOverlay,
   getRecordings,
-  getRecordingVideoUrl,
+  getRecordingRawVideoUrl,
 } from "@/src/services/dashboardService";
 import type { VideoAnalysisResponse, VideoAnalysisFrame, RecordingListItem } from "@/src/types/api";
 import SessionCalendar, {
@@ -790,8 +790,11 @@ export default function VideoReviewPage() {
     setRecordingLoading(true);
     try {
       const { job_id } = await startRecordingAnalysis(selectedSessionId);
-      // Play the session's stored video from the server while the job runs.
-      setVideoUrl(getRecordingVideoUrl(selectedSessionId));
+      // Play the session's CLEAN original video while the job runs. The raw
+      // file is required: the server prefers the live-burned overlay.mp4, and
+      // drawing the analysis skeleton on top of that would stack two
+      // skeletons from different runs (the "overlay not matching" bug).
+      setVideoUrl(getRecordingRawVideoUrl(selectedSessionId));
       setSelectedFile(null);
       await pollJob(job_id);
     } catch (err) {

@@ -172,6 +172,15 @@ export function getRecordingVideoUrl(sessionId: string): string {
   return token ? `${base}?token=${encodeURIComponent(token)}` : base;
 }
 
+// Raw (un-burned) video for the Video Review screen, which draws its own
+// analysis skeleton on a canvas. Playing the pre-burned overlay.mp4 there
+// stacks two skeletons from different runs on top of each other.
+export function getRecordingRawVideoUrl(sessionId: string): string {
+  const base = `${import.meta.env.VITE_API_URL ?? ''}/api/recordings/${sessionId}/video`;
+  const token = getStoredToken();
+  return `${base}?raw=true${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+}
+
 export async function getDeployment(): Promise<import('@/src/types/api').DeploymentMetrics> {
   return getRepository().getDeployment();
 }
