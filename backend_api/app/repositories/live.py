@@ -910,6 +910,9 @@ class LiveRepository(DashboardRepository):
             framing=dict(getattr(state, "framing", {}) or {}),
             person_count=int(getattr(state, "person_count", 1) or 1),
             person_boxes=list(getattr(state, "person_boxes", []) or []),
+            person_identities=[
+                dict(r) for r in (getattr(state, "person_identities", []) or [])
+            ],
             identified_worker=dict(getattr(state, "identified_worker", {}) or {}),
         )
 

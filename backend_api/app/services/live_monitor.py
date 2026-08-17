@@ -190,6 +190,9 @@ def build_ws_payload(state) -> dict:
         "person_count": int(getattr(state, "person_count", 1) or 1),
         # YOLO person boxes + face-recognized worker identity.
         "person_boxes": list(getattr(state, "person_boxes", []) or []),
+        "person_identities": [
+            dict(r) for r in (getattr(state, "person_identities", []) or [])
+        ],
         "identified_worker": dict(getattr(state, "identified_worker", {}) or {}),
     }
 
@@ -354,6 +357,10 @@ class LiveMonitoringService:
         # PERSON_DETECT_INTERVAL_S so YOLO never contends with pose inference.
         self._person_detect_last: float = 0.0
         self._person_boxes: list = []
+        # One entry per detected person: {"box": {...}, "worker_id", "name",
+        # "confidence", "matched"} — ALL persons, not just the primary.
+        self._person_identities: list = []
+        # Primary (largest) recognized worker — kept for the dashboard card.
         self._identified_worker: dict = {}
         self._worker_name_cache: dict[str, str] = {}
         # Camera reconnect bookkeeping (capture thread only).
@@ -951,28 +958,34 @@ class LiveMonitoringService:
                 boxes = detect_persons(frame)
                 self._person_boxes = boxes
                 identified = identify_persons_in_frame(frame, boxes)
-                if identified:
-                    # Prefer the largest person box (primary subject).
-                    primary = max(identified, key=lambda r: (r["x2"] - r["x1"]) * (r["y2"] - r["y1"]))
-                    if primary.get("matched") and primary.get("worker_id"):
-                        wid = primary["worker_id"]
-                        name = self._worker_name_cache.get(wid) or primary.get("name")
-                        if not name:
-                            try:
-                                from app.core.database import get_worker as _gw
-                                _row = _gw(wid)
-                                name = _row["name"] if _row else wid
-                            except Exception:
-                                name = wid
-                        self._worker_name_cache[wid] = name
-                        self._identified_worker = {
-                            "worker_id": wid,
-                            "name": name,
-                            "confidence": primary.get("confidence", 0.0),
-                            "matched": True,
-                        }
-                    else:
-                        self._identified_worker = {}
+                # Keep EVERY person's identity (box + worker_id + name). Each
+                # entry already carries its own box, so the overlay can tag
+                # each person individually — recognized or "Not recognized".
+                self._person_identities = identified or []
+                # Primary worker for the dashboard card = the largest box that
+                # matched an enrolled face.
+                matched = [r for r in self._person_identities if r.get("matched") and r.get("worker_id")]
+                if matched:
+                    primary = max(
+                        matched,
+                        key=lambda r: (r["box"]["x2"] - r["box"]["x1"]) * (r["box"]["y2"] - r["box"]["y1"]),
+                    )
+                    wid = primary["worker_id"]
+                    name = self._worker_name_cache.get(wid) or primary.get("name")
+                    if not name:
+                        try:
+                            from app.core.database import get_worker as _gw
+                            _row = _gw(wid)
+                            name = _row["name"] if _row else wid
+                        except Exception:
+                            name = wid
+                    self._worker_name_cache[wid] = name
+                    self._identified_worker = {
+                        "worker_id": wid,
+                        "name": name,
+                        "confidence": primary.get("confidence", 0.0),
+                        "matched": True,
+                    }
                 else:
                     self._identified_worker = {}
         except Exception as exc:
@@ -1179,6 +1192,7 @@ class LiveMonitoringService:
             self.state.framing = dict(result.framing or {})
             self.state.person_count = result.person_count
             self.state.person_boxes = list(self._person_boxes)
+            self.state.person_identities = [dict(r) for r in self._person_identities]
             self.state.identified_worker = dict(self._identified_worker)
         # No sleep here — the _process_interval throttle above already pacing.
     
@@ -1246,6 +1260,7 @@ class LiveMonitoringService:
             keypoints = list(self.state.keypoints)
             hist = list(self._pose_history)
             person_boxes = list(self._person_boxes)
+            person_identities = [dict(r) for r in self._person_identities]
             identified_worker = dict(self._identified_worker)
 
         if capture_counter is not None and keypoints and len(hist) >= 2:
@@ -1278,6 +1293,7 @@ class LiveMonitoringService:
             # the overall level — the skeleton and badge stay consistent.
             "standard_assessment": dict(std),
             "person_boxes": person_boxes,
+            "person_identities": person_identities,
             "identified_worker": identified_worker,
         }
 

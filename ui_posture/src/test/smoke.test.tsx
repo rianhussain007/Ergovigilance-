@@ -60,43 +60,44 @@ describe('frontend smoke', () => {
     renderApp();
 
     // /login renders the sign-in form (no stored auth).
-    await screen.findByRole('heading', { name: /sign in/i });
+    await screen.findByRole('heading', { name: /sign in/i }, { timeout: 10000 });
 
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     // After the mocked login, the form navigates to /dashboard. The route
     // pages are code-split (React.lazy), so the first navigation loads the
-    // dashboard chunk dynamically — give it generous time in CI.
+    // dashboard chunk dynamically — give it generous time in CI (smoke tests
+    // routinely see 4-6s chunk loads on a loaded dev machine).
     await waitFor(
       () => {
         expect(screen.getByRole('heading', { name: /my dashboard/i })).toBeInTheDocument();
       },
-      { timeout: 5000 },
+      { timeout: 10000 },
     );
   });
 
   it('shows the live monitoring page for a signed-in operator', async () => {
     const user = userEvent.setup();
     renderApp();
-    await screen.findByRole('heading', { name: /sign in/i });
+    await screen.findByRole('heading', { name: /sign in/i }, { timeout: 10000 });
     await user.click(screen.getByRole('button', { name: /sign in/i }));
-    await screen.findByRole('heading', { name: /my dashboard/i }, { timeout: 5000 });
+    await screen.findByRole('heading', { name: /my dashboard/i }, { timeout: 10000 });
 
     await user.click(screen.getByRole('link', { name: /live monitoring/i }));
     await waitFor(
       () => {
         expect(screen.getByText(/live monitoring/i)).toBeInTheDocument();
       },
-      { timeout: 5000 },
+      { timeout: 10000 },
     );
   });
 
   it('loads the sessions list', async () => {
     const user = userEvent.setup();
     renderApp();
-    await screen.findByRole('heading', { name: /sign in/i });
+    await screen.findByRole('heading', { name: /sign in/i }, { timeout: 10000 });
     await user.click(screen.getByRole('button', { name: /sign in/i }));
-    await screen.findByRole('heading', { name: /my dashboard/i }, { timeout: 5000 });
+    await screen.findByRole('heading', { name: /my dashboard/i }, { timeout: 10000 });
 
     await user.click(screen.getByRole('link', { name: /sessions/i }));
     // The mocked sessions fixture has one completed session. The ID may
@@ -106,23 +107,23 @@ describe('frontend smoke', () => {
       () => {
         expect(screen.getAllByText(/SESH-2026-06-30-001/i).length).toBeGreaterThan(0);
       },
-      { timeout: 5000 },
+      { timeout: 10000 },
     );
   });
 
   it('renders the alert center with no-alerts state', async () => {
     const user = userEvent.setup();
     renderApp();
-    await screen.findByRole('heading', { name: /sign in/i });
+    await screen.findByRole('heading', { name: /sign in/i }, { timeout: 10000 });
     await user.click(screen.getByRole('button', { name: /sign in/i }));
-    await screen.findByRole('heading', { name: /my dashboard/i }, { timeout: 5000 });
+    await screen.findByRole('heading', { name: /my dashboard/i }, { timeout: 10000 });
 
     // The operator dashboard shows the alerts feed card (empty state).
     await waitFor(
       () => {
         expect(screen.getByText(/no alerts visible for your current scope/i)).toBeInTheDocument();
       },
-      { timeout: 5000 },
+      { timeout: 10000 },
     );
   });
 
@@ -133,12 +134,15 @@ describe('frontend smoke', () => {
     );
     const user = userEvent.setup();
     renderApp();
-    await screen.findByRole('heading', { name: /sign in/i });
+    await screen.findByRole('heading', { name: /sign in/i }, { timeout: 10000 });
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     // Login failure surfaces the backend's message without crashing.
-    await waitFor(() => {
-      expect(screen.getByRole('alert')).toBeInTheDocument();
-    });
+    await waitFor(
+      () => {
+        expect(screen.getByRole('alert')).toBeInTheDocument();
+      },
+      { timeout: 10000 },
+    );
   });
 });

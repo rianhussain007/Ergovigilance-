@@ -436,8 +436,16 @@ export interface ContextSnapshot {
     detail?: string;
   };
   person_count?: number;
-  // YOLO person boxes + face-recognized worker identity
+  // YOLO person boxes + face-recognized worker identities (ALL persons)
   person_boxes?: { x1: number; y1: number; x2: number; y2: number; confidence: number }[];
+  person_identities?: {
+    box: { x1: number; y1: number; x2: number; y2: number; confidence: number };
+    worker_id?: string | null;
+    name?: string | null;
+    confidence?: number;
+    matched?: boolean;
+    seen?: boolean;
+  }[];
   identified_worker?: { worker_id?: string; name?: string; confidence?: number; matched?: boolean };
 }
 
@@ -537,6 +545,16 @@ export interface VideoAnalysisFrame {
   keypoints: number[][]; // [[x, y, z, visibility], x/y 0-1]
   // Worst risk band per body region (head/torso/left_arm/right_arm/left_leg/right_leg)
   region_risks: Record<string, string>;
+  // YOLO person boxes + per-person face identities (mirrors the live overlay)
+  person_boxes?: { x1: number; y1: number; x2: number; y2: number; confidence: number }[];
+  person_identities?: {
+    box: { x1: number; y1: number; x2: number; y2: number; confidence: number };
+    worker_id?: string | null;
+    name?: string | null;
+    confidence?: number;
+    matched?: boolean;
+    seen?: boolean;
+  }[];
 }
 
 export interface VideoAnalysisSummary {

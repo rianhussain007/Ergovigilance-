@@ -38,7 +38,17 @@ from backend.context.engine import ContextIntelligenceEngine
 from backend.services.features import unavailable_features_from_keypoints, lower_body_confidence
 from backend.services.pose_engine import PoseEngine
 
-from app.services.pose_overlay import compute_region_levels, draw_skeleton
+from app.services.pose_overlay import compute_region_levels, draw_skeleton, draw_person_boxes
+
+try:
+    from app.services.person_detector import detect_persons
+except ImportError:  # pragma: no cover - alternate layout
+    from backend_api.app.services.person_detector import detect_persons
+
+try:
+    from app.services.worker_faces import identify_persons_in_frame
+except ImportError:  # pragma: no cover - alternate layout
+    from backend_api.app.services.worker_faces import identify_persons_in_frame
 
 router = APIRouter()
 
@@ -492,6 +502,16 @@ def _burn_overlay(video_path: str, frames: list[VideoAnalysisFrame], frame_step:
                             features=last_analyzed.features,
                             region_levels=last_analyzed.region_risks,
                         )
+                        # Person boxes + per-person identity tags (same rules
+                        # as the live feed). Unknown faces are tagged
+                        # "Not recognized" by draw_person_boxes.
+                        if getattr(last_analyzed, "person_boxes", None) or getattr(last_analyzed, "person_identities", None):
+                            draw_person_boxes(
+                                frame,
+                                last_analyzed.person_boxes or [],
+                                identified_worker=None,
+                                person_identities=last_analyzed.person_identities or [],
+                            )
                     except Exception:  # noqa: BLE001 - never fail the whole job on one frame
                         pass
                 writer.write(frame)
@@ -608,6 +628,19 @@ def _analyze_video_file(
                         result.features, snapshot.risk_level, result.standard_assessment
                     )
 
+                    # Person boxes + per-person face identities (YOLO + SFace)
+                    # on stored frames. Mirrors the live pipeline so Video
+                    # Review tags every person the same way the feed does.
+                    # Detection is bounded to stored frames, so a 10-min clip
+                    # adds ~60 YOLO passes, not thousands.
+                    person_boxes: list = []
+                    person_identities: list = []
+                    try:
+                        person_boxes = detect_persons(frame)
+                        person_identities = identify_persons_in_frame(frame, person_boxes)
+                    except Exception:  # noqa: BLE001 - detection is best-effort
+                        person_boxes, person_identities = [], []
+
                     frames.append(
                         VideoAnalysisFrame(
                             frame_index=frame_index,
@@ -620,6 +653,8 @@ def _analyze_video_file(
                             lower_body_confidence=result.lower_body_confidence,
                             keypoints=normalized_keypoints,
                             region_risks=region_risks,
+                            person_boxes=person_boxes,
+                            person_identities=person_identities,
                         )
                     )
             frame_index += 1

@@ -123,6 +123,35 @@ class TestIdentifyPersonsInFrame:
         frame = np.zeros((240, 320, 3), np.uint8)
         assert worker_faces.identify_persons_in_frame(frame, []) == []
 
+    def test_each_person_gets_nested_box_entry(self, monkeypatch):
+        """Every person box yields {box, worker_id, name, confidence, matched}."""
+        # No enrolled faces -> identify_face returns no match for any box;
+        # the entry shape must still be complete (box nested, seen=False).
+        frame = np.zeros((240, 320, 3), np.uint8)
+        boxes = [
+            {"x1": 0.1, "y1": 0.1, "x2": 0.4, "y2": 0.9, "confidence": 0.9},
+            {"x1": 0.6, "y1": 0.2, "x2": 0.9, "y2": 0.8, "confidence": 0.8},
+        ]
+        # Without the real models, identify_persons_in_frame returns [] early;
+        # monkeypatch the model loader + detector to exercise the box loop.
+        class _FakeDetector:
+            def detect(self, img):
+                return None, None  # no faces in the blank frame
+
+        monkeypatch.setattr(worker_faces, "_load_models", lambda: (object(), object()))
+        monkeypatch.setattr(
+            worker_faces.cv2, "FaceDetectorYN",
+            type("FDYN", (), {"create": staticmethod(lambda *a, **k: _FakeDetector())}),
+        )
+        out = worker_faces.identify_persons_in_frame(frame, boxes)
+        # No faces detected in a blank frame -> seen=False, no identity.
+        assert len(out) == 2
+        for entry in out:
+            assert "box" in entry and entry["box"]["x1"] >= 0
+            assert entry["worker_id"] is None
+            assert entry["matched"] is False
+            assert entry["seen"] is False
+
 
 class TestPersonDetectorDegradation:
     def test_detect_persons_returns_list_when_unavailable(self):

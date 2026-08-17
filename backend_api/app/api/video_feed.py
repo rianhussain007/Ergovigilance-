@@ -105,6 +105,7 @@ def _generate_mjpeg(overlay: bool = True):
                     frame,
                     payload.get("person_boxes") or [],
                     payload.get("identified_worker") or {},
+                    payload.get("person_identities") or [],
                 )
             except Exception as exc:
                 # Never let overlay drawing kill the stream, but surface the

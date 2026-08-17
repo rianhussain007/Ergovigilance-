@@ -484,6 +484,10 @@ function CameraFramingCard({ snapshot, unavailableFeatures, active }: { snapshot
   const idName = idWorker?.name || idWorker?.worker_id;
   const idConf = idWorker?.confidence;
   const idMatched = !!idWorker?.matched;
+  // ALL detected persons with per-person identity (box + worker_id + name).
+  // This is the source of truth — the primary card entry is just the largest
+  // matched box. Unknown faces show as "Not recognized".
+  const personIdentities = snapshot?.person_identities || [];
 
   const guidanceLines = framingGuidance?.length
     ? framingGuidance
@@ -517,12 +521,25 @@ function CameraFramingCard({ snapshot, unavailableFeatures, active }: { snapshot
         </div>
       ) : (
         <div>
-          <p className="text-body-sm text-green-400 font-medium">{personCount && personCount > 1 ? `${personCount} workers in view — monitoring primary` : 'Full body in frame'}</p>
-          {idWorker && idName ? (
-            <p className="text-body-sm text-emerald-300 font-medium mt-1">
-              {idMatched ? `✓ Identified: ${idName}` : `Face seen: ${idName} (low confidence)`}
-              {idConf != null && idMatched && <span className="font-mono text-emerald-300/70"> · {(idConf * 100).toFixed(0)}%</span>}
-            </p>
+          <p className="text-body-sm text-green-400 font-medium">{personCount && personCount > 1 ? `${personCount} workers in view` : 'Full body in frame'}</p>
+          {personIdentities.length > 0 ? (
+            <ul className="mt-1 space-y-0.5">
+              {personIdentities.map((p, i) => {
+                const name = p.name || p.worker_id;
+                const matched = !!p.matched && !!p.worker_id;
+                const tag = matched
+                  ? `${name}${p.confidence && p.confidence > 0 ? ` · ${(p.confidence * 100).toFixed(0)}%` : ''}`
+                  : p.seen || (p.confidence && p.confidence > 0)
+                    ? 'Not recognized'
+                    : null;
+                if (!tag) return null;
+                return (
+                  <li key={i} className={`text-body-sm ${matched ? 'text-emerald-300' : 'text-amber-300'} font-medium`}>
+                    {matched ? '✓ ' : ''}{tag}
+                  </li>
+                );
+              })}
+            </ul>
           ) : active && personCount ? (
             <p className="text-body-sm text-on-surface-variant mt-1">Worker identity: not enrolled / unseen</p>
           ) : null}

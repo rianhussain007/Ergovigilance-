@@ -299,6 +299,81 @@ function drawSkeleton(
   }
 }
 
+// ── Person boxes + identity tags (mirrors backend draw_person_boxes) ──
+// Draws one YOLO bounding box per person with an identity tag: the worker's
+// name when face-matched, "Not recognized" when a face was seen but not
+// enrolled/matched. Same colors as the live feed so Video Review matches the
+// monitoring overlay. Boxes use normalized 0-1 xyxy mapped into the letterboxed
+// video rect (same mapping as the skeleton's px() helper).
+function drawPersonIdentities(
+  ctx: CanvasRenderingContext2D,
+  frame: VideoAnalysisFrame,
+  contentRect: { x: number; y: number; width: number; height: number },
+): void {
+  const entries = frame.person_identities;
+  const boxes = frame.person_boxes;
+  if ((!entries || entries.length === 0) && (!boxes || boxes.length === 0)) return;
+
+  const toX = (nx: number) => contentRect.x + nx * contentRect.width;
+  const toY = (ny: number) => contentRect.y + ny * contentRect.height;
+
+  // Normalize to per-person entries (same fallback the backend uses).
+  type Entry = { box: { x1: number; y1: number; x2: number; y2: number }; worker_id?: string | null; name?: string | null; confidence?: number; matched?: boolean; seen?: boolean };
+  let entriesNorm: Entry[];
+  if (entries && entries.length > 0) {
+    entriesNorm = entries.map((e) => ({
+      box: e.box,
+      worker_id: e.worker_id,
+      name: e.name,
+      confidence: e.confidence,
+      matched: e.matched,
+      seen: e.seen !== undefined ? e.seen : !!e.confidence && e.confidence > 0,
+    }));
+  } else {
+    entriesNorm = (boxes || []).map((b) => ({ box: b }));
+  }
+  if (entriesNorm.length === 0) return;
+
+  const area = (e: Entry) => (e.box.x2 - e.box.x1) * (e.box.y2 - e.box.y1);
+  const primary = entriesNorm.reduce((best, e) => (area(e) > area(best) ? e : best), entriesNorm[0]);
+
+  for (const entry of entriesNorm) {
+    const isPrimary = entry === primary;
+    const matched = !!entry.matched && !!entry.worker_id;
+    const tag =
+      matched
+        ? (entry.name || entry.worker_id || '') + (entry.confidence && entry.confidence > 0 ? `  (${(entry.confidence * 100).toFixed(0)}%)` : '')
+        : entry.seen
+          ? 'Not recognized'
+          : null;
+
+    const color = matched ? '#40e078' : tag ? '#55aaff' : '#788aa8';
+    const x1 = toX(entry.box.x1);
+    const y1 = toY(entry.box.y1);
+    const x2 = toX(entry.box.x2);
+    const y2 = toY(entry.box.y2);
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = isPrimary ? 3 : 1;
+    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+
+    if (tag) {
+      ctx.font = 'bold 13px system-ui, sans-serif';
+      const tw = ctx.measureText(tag).width;
+      const pad = 5;
+      const tx = Math.max(0, Math.min(x1, contentRect.width - tw - pad * 2));
+      const ty = Math.max(0, y1 - 24);
+      ctx.fillStyle = 'rgba(8, 12, 18, 0.92)';
+      ctx.fillRect(tx, ty, tw + pad * 2, 22);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(tx, ty, tw + pad * 2, 22);
+      ctx.fillStyle = color;
+      ctx.fillText(tag, tx + pad, ty + 16);
+    }
+  }
+}
+
 function RiskLegend() {
   return (
     <div className="flex items-center gap-4 text-sm text-on-surface">
@@ -531,7 +606,11 @@ export default function VideoReviewPage() {
         ...currentFrame,
         keypoints: overlayKeypoints || currentFrame.keypoints,
       };
-      drawSkeleton(ctx, drawFrame, canvas.width, canvas.height, getContentRect(video));
+      const contentRect = getContentRect(video);
+      drawSkeleton(ctx, drawFrame, canvas.width, canvas.height, contentRect);
+      // Person boxes + identity tags on top of the skeleton — every person
+      // gets a box, and each face is tagged by name or "Not recognized".
+      drawPersonIdentities(ctx, drawFrame, contentRect);
     } else {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
     }

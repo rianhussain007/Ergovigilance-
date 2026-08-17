@@ -468,9 +468,11 @@ class ContextSnapshotResponse(BaseModel):
     # Tier 3 framing intelligence + person count (optional for legacy payloads)
     framing: Optional[dict] = None
     person_count: Optional[int] = None
-    # YOLO person boxes + face-recognized worker identity (optional for
+    # YOLO person boxes + face-recognized worker identities (optional for
     # legacy payloads and sessions without detection enabled).
     person_boxes: Optional[list] = None
+    # One entry per detected person: {box, worker_id, name, confidence, matched}.
+    person_identities: Optional[list] = None
     identified_worker: Optional[dict] = None
 
 
@@ -515,6 +517,11 @@ class VideoAnalysisFrame(BaseModel):
     # left_leg/right_leg) — same values the live overlay uses, so the
     # frontend can color each segment identically to the live feed.
     region_risks: dict[str, str] = Field(default_factory=dict)
+    # YOLO person bounding boxes (normalized xyxy) + per-person face
+    # identities from the offline pass — mirrors the live overlay so Video
+    # Review shows the same boxes/tags as the monitoring feed.
+    person_boxes: list[dict] = Field(default_factory=list)
+    person_identities: list[dict] = Field(default_factory=list)
 
 
 class VideoAnalysisSummary(BaseModel):

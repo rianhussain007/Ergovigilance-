@@ -15,5 +15,10 @@ export default defineConfig({
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    // The smoke suite drives real lazy-loaded route chunks (React.lazy) —
+    // under CI/loaded dev machines a single navigation can take 4-6s, which
+    // exceeds vitest's 5s per-test default and produces flaky failures.
+    testTimeout: 20000,
+    hookTimeout: 20000,
   },
 });

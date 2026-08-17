@@ -372,52 +372,82 @@ def draw_skeleton(frame, keypoints, risk_level, features=None, feature_scores=No
     return frame
 
 
-def draw_person_boxes(frame, person_boxes, identified_worker=None):
+def draw_person_boxes(frame, person_boxes, identified_worker=None, person_identities=None):
     """Draw YOLO person bounding boxes with worker identity tags.
 
     *person_boxes*: list of normalized ``{x1, y1, x2, y2, confidence}`` dicts
     (0-1 xyxy). *identified_worker*: ``{worker_id, name, confidence}`` for the
-    primary person (from face recognition), or None/{} when unknown.
+    primary person, or None/{} when unknown.
 
-    The primary (largest) box is drawn in the worker accent color; secondary
-    boxes are dimmed. When the primary person is identified by face, the box
-    is tagged with the worker's name + confidence; otherwise the tag reads
-    "Unidentified".
+    *person_identities* (preferred when available): one entry per person box
+    ``{box, worker_id, name, confidence, matched}`` so EVERY person is tagged
+    individually — matched faces show the worker name, unknown faces show
+    "Not recognized". When only ``person_boxes`` is given, the primary box
+    gets the ``identified_worker`` tag and others are drawn untagged.
+
+    The primary (largest) box is drawn thicker; recognized people are green,
+    unrecognized are amber, secondary boxes are dimmed.
     """
     if not person_boxes:
         return frame
 
     h, w = frame.shape[:2]
-    id_conf = float((identified_worker or {}).get("confidence", 0.0))
-    id_name = (identified_worker or {}).get("name") or (identified_worker or {}).get("worker_id")
-    identified = bool((identified_worker or {}).get("matched")) and bool(id_name)
 
-    # Primary box = largest area (the person the pipeline is monitoring).
-    primary = max(person_boxes, key=lambda b: (b["x2"] - b["x1"]) * (b["y2"] - b["y1"]))
+    def _tag_text(entry: dict) -> str | None:
+        """Return the identity tag text for an entry, or None for untagged."""
+        if entry.get("matched") and entry.get("worker_id"):
+            name = entry.get("name") or entry.get("worker_id")
+            conf = float(entry.get("confidence", 0.0) or 0.0)
+            return f"{name}  ({conf:.0%})" if conf > 0 else name
+        if entry.get("seen"):
+            return "Not recognized"
+        return None
 
-    for box in person_boxes:
+    # Normalize to per-person entries: prefer person_identities, else derive
+    # from person_boxes (+ identified_worker on the largest box).
+    if person_identities:
+        entries = list(person_identities)
+        primary_key = max(
+            entries,
+            key=lambda e: (e["box"]["x2"] - e["box"]["x1"]) * (e["box"]["y2"] - e["box"]["y1"]),
+        )
+        # Mark a box as "seen" (face visible but not matched) when it has a
+        # person-level confidence but no matched identity.
+        for e in entries:
+            e.setdefault("seen", bool(e.get("confidence", 0.0) > 0))
+    else:
+        entries = [{"box": b} for b in person_boxes]
+        primary_key = max(
+            entries,
+            key=lambda e: (e["box"]["x2"] - e["box"]["x1"]) * (e["box"]["y2"] - e["box"]["y1"]),
+        )
+        idw = identified_worker or {}
+        if idw.get("matched"):
+            primary_key["matched"] = True
+            primary_key["worker_id"] = idw.get("worker_id")
+            primary_key["name"] = idw.get("name") or idw.get("worker_id")
+            primary_key["confidence"] = idw.get("confidence", 0.0)
+
+    for entry in entries:
+        box = entry["box"]
         x1 = int(box["x1"] * w)
         y1 = int(box["y1"] * h)
         x2 = int(box["x2"] * w)
         y2 = int(box["y2"] * h)
-        is_primary = box is primary
+        is_primary = entry is primary_key
+        tag = _tag_text(entry)
 
-        if is_primary and identified:
-            color = (64, 224, 120)  # worker green
-        elif is_primary:
-            color = (80, 170, 255)  # primary amber-blue
+        if entry.get("matched"):
+            color = (64, 224, 120)  # recognized worker green
+        elif tag:
+            color = (80, 170, 255)  # seen but not recognized amber-blue
         else:
-            color = (120, 140, 170)  # dimmed secondary
+            color = (120, 140, 170)  # dimmed secondary / untagged
 
         thickness = 3 if is_primary else 1
         cv2.rectangle(frame, (x1, y1), (x2, y2), color, thickness, cv2.LINE_AA)
 
-        # Identity tag above the box.
-        if is_primary:
-            if identified:
-                tag = f"{id_name}  ({id_conf:.0%})" if id_conf > 0 else id_name
-            else:
-                tag = "Unidentified"
+        if tag:
             font = cv2.FONT_HERSHEY_SIMPLEX
             scale = 0.5
             thick = 2

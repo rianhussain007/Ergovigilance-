@@ -223,9 +223,14 @@ def identify_persons_in_frame(frame, person_boxes: list[dict]) -> list[dict]:
     """Identify the faces of persons detected in a frame.
 
     For each person box, crop the region, run YuNet inside it, and match the
-    largest face. Returns a list of ``{"box": {...}, "worker_id", "name",
-    "confidence", "matched"}`` entries — one per person box, with
-    ``worker_id=None`` when the face is unknown or not visible.
+    largest face. Returns one entry per person box:
+
+        {"box": {"x1", "y1", "x2", "y2", "confidence"},
+         "worker_id": str | None, "name": str | None,
+         "confidence": float, "matched": bool}
+
+    ``worker_id`` is None when the face is unknown, not visible, or below the
+    match threshold. ``name`` is resolved from the workers table when matched.
 
     *frame* is a BGR image (mirrored already if the caller mirrors the feed).
     *person_boxes* are normalized xyxy boxes from ``detect_persons``.
@@ -234,6 +239,7 @@ def identify_persons_in_frame(frame, person_boxes: list[dict]) -> list[dict]:
     if detector is None or recognizer is None or not person_boxes:
         return []
     h, w = frame.shape[:2]
+    names = enrolled_worker_names()
     results = []
     for box in person_boxes:
         x1 = int(box["x1"] * w)
@@ -245,21 +251,25 @@ def identify_persons_in_frame(frame, person_boxes: list[dict]) -> list[dict]:
         pad_y = int((y2 - y1) * 0.10)
         cx1, cy1 = max(0, x1 - pad_x), max(0, y1 - pad_y)
         cx2, cy2 = min(w, x2 + pad_x), min(h, y2 + pad_y)
-        if cx2 - cx1 < 16 or cy2 - cy1 < 16:
-            results.append({**box, "worker_id": None, "name": None,
-                            "confidence": 0.0, "matched": False})
-            continue
-        crop = frame[cy1:cy2, cx1:cx2]
-        fd = cv2.FaceDetectorYN.create(_yunet_path(), "",
-                                       (crop.shape[1], crop.shape[0]), 0.6, 0.3, 5000)
-        _, faces = fd.detect(crop)
-        identity = {"worker_id": None, "name": None, "confidence": 0.0, "matched": False}
-        if faces is not None and len(faces) > 0:
-            face = max(faces, key=lambda f: f[2] * f[3])
-            aligned = recognizer.alignCrop(crop, face)
-            emb = recognizer.feature(aligned)
-            identity = identify_face(_normalize(emb))
-        results.append({**box, **identity})
+        identity = {"worker_id": None, "name": None, "confidence": 0.0, "matched": False, "seen": False}
+        if cx2 - cx1 >= 16 and cy2 - cy1 >= 16:
+            crop = frame[cy1:cy2, cx1:cx2]
+            fd = cv2.FaceDetectorYN.create(_yunet_path(), "",
+                                           (crop.shape[1], crop.shape[0]), 0.6, 0.3, 5000)
+            _, faces = fd.detect(crop)
+            if faces is not None and len(faces) > 0:
+                face = max(faces, key=lambda f: f[2] * f[3])
+                aligned = recognizer.alignCrop(crop, face)
+                emb = recognizer.feature(aligned)
+                match = identify_face(_normalize(emb))
+                identity.update(match)
+                # A face was visible in the box — even if it didn't match an
+                # enrolled worker, tag the box "Not recognized" rather than
+                # leaving it untagged.
+                identity["seen"] = True
+                if identity.get("matched") and identity.get("worker_id"):
+                    identity["name"] = names.get(identity["worker_id"])
+        results.append({"box": dict(box), **identity})
     return results
 
 

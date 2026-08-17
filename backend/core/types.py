@@ -80,10 +80,13 @@ class LiveState:
     framing: dict = field(default_factory=dict)
     person_count: int = 1
 
-    # Person bounding boxes (normalized xyxy from YOLO) + the worker identity
-    # recognized by face matching, if any. Kept as plain dicts/lists so the
-    # WebSocket payload stays JSON-safe.
+    # Person bounding boxes (normalized xyxy from YOLO) + per-person worker
+    # identities recognized by face matching. Kept as plain dicts/lists so
+    # the WebSocket payload stays JSON-safe.
     person_boxes: list = field(default_factory=list)
+    # One entry per detected person: {box, worker_id, name, confidence,
+    # matched} — ALL persons, so every person can be tagged individually.
+    person_identities: list = field(default_factory=list)
     # Identified worker for the PRIMARY monitored person:
     # {worker_id, name, confidence, matched} or {} when unrecognized.
     identified_worker: dict = field(default_factory=dict)
