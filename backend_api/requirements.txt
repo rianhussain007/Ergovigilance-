@@ -31,3 +31,5 @@ requests>=2.32.0,<3.0.0
 # (requests validates urllib3 against a known-good range at import).
 urllib3>=2.3.0,<3.0.0
 prometheus-client>=0.21.0,<1.0.0
+# QR badge generation (workers page) — tiny pure-Python encoder, zero deps.
+segno>=1.6.0,<2.0.0

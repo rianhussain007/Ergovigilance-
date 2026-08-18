@@ -263,12 +263,51 @@ def get_user_by_id(user_id: int) -> sqlite3.Row | None:
 
 def list_workers() -> list[sqlite3.Row]:
     with get_connection() as conn:
-        return conn.execute("SELECT worker_id, employee_id, name, department, shift FROM workers ORDER BY worker_id").fetchall()
+        return conn.execute(
+            "SELECT worker_id, employee_id, name, department, shift, identity_mode, consent_status, badge_id "
+            "FROM workers ORDER BY worker_id"
+        ).fetchall()
 
 
 def get_worker(worker_id: str) -> sqlite3.Row | None:
     with get_connection() as conn:
-        return conn.execute("SELECT worker_id, employee_id, name, department, shift FROM workers WHERE worker_id = ?", (worker_id,)).fetchone()
+        return conn.execute(
+            "SELECT worker_id, employee_id, name, department, shift, identity_mode, consent_status, badge_id "
+            "FROM workers WHERE worker_id = ?",
+            (worker_id,),
+        ).fetchone()
+
+
+def get_worker_by_badge_id(badge_id: str) -> sqlite3.Row | None:
+    """Look up a worker by their badge/QR identifier (case-insensitive)."""
+    with get_connection() as conn:
+        return conn.execute(
+            "SELECT worker_id, employee_id, name, department, shift, identity_mode, consent_status, badge_id "
+            "FROM workers WHERE lower(badge_id) = lower(?) LIMIT 1",
+            (badge_id,),
+        ).fetchone()
+
+
+def update_worker_identity(worker_id: str, identity_mode: str, consent_status: str) -> bool:
+    """Set a worker's identity mode (face/badge/off) and consent status."""
+    with get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE workers SET identity_mode = ?, consent_status = ? WHERE worker_id = ?",
+            (identity_mode, consent_status, worker_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+
+def set_worker_badge(worker_id: str, badge_id: str | None) -> bool:
+    """Assign (or clear, when None) a worker's badge/QR identifier."""
+    with get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE workers SET badge_id = ? WHERE worker_id = ?",
+            (badge_id, worker_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
 
 
 def get_next_worker_id() -> str:

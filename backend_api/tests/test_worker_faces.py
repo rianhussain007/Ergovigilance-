@@ -27,6 +27,30 @@ def _vec(seed: int) -> np.ndarray:
     return v / np.linalg.norm(v)
 
 
+def _ensure_worker(wid: str) -> None:
+    """Create a real workers row for an enrollment fixture.
+
+    Face matching joins against the workers table (identity mode + consent
+    gate), so a test enrollment must belong to an actual worker row.
+    """
+    from app.core.database import get_connection
+
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO workers (worker_id, employee_id, name, department, shift, identity_mode, consent_status) "
+            "VALUES (?, ?, 'Test Worker', 'Assembly', 'Day', 'face', 'pending')",
+            (wid, wid.upper()),
+        )
+        conn.commit()
+
+
+def _drop_worker(wid: str) -> None:
+    from app.core.database import delete_worker
+
+    worker_faces.delete_worker_face(wid)
+    delete_worker(wid)
+
+
 class TestEmbeddingMatching:
     def test_self_match_is_high(self):
         v = _vec(1)
@@ -40,6 +64,7 @@ class TestEmbeddingMatching:
 class TestEnrollAndIdentify:
     def test_enroll_then_identify_round_trip(self, monkeypatch):
         worker_id = "worker-999-test"
+        _ensure_worker(worker_id)
         emb = _vec(42)
         # Stub the real model call so the test runs without the ONNX models.
         monkeypatch.setattr(worker_faces, "embedding_from_image", lambda _b: emb)
@@ -52,11 +77,12 @@ class TestEnrollAndIdentify:
         assert result["matched"] is True
         assert result["worker_id"] == worker_id
 
-        worker_faces.delete_worker_face(worker_id)
+        _drop_worker(worker_id)
         assert worker_faces.get_face_status(worker_id)["enrolled"] is False
 
     def test_unmatched_face_reports_unknown(self, monkeypatch):
         worker_id = "worker-888-test"
+        _ensure_worker(worker_id)
         monkeypatch.setattr(worker_faces, "embedding_from_image", lambda _b: _vec(7))
         worker_faces.enroll_worker(worker_id, b"fake")
 
@@ -64,7 +90,7 @@ class TestEnrollAndIdentify:
         assert result["matched"] is False
         assert result["worker_id"] is None
 
-        worker_faces.delete_worker_face(worker_id)
+        _drop_worker(worker_id)
 
     def test_no_face_raises_value_error(self, monkeypatch):
         worker_id = "worker-777-test"
@@ -74,6 +100,7 @@ class TestEnrollAndIdentify:
 
     def test_reenroll_updates_embedding(self, monkeypatch):
         worker_id = "worker-666-test"
+        _ensure_worker(worker_id)
         monkeypatch.setattr(worker_faces, "embedding_from_image", lambda _b: _vec(11))
         worker_faces.enroll_worker(worker_id, b"first")
         monkeypatch.setattr(worker_faces, "embedding_from_image", lambda _b: _vec(12))
@@ -82,7 +109,7 @@ class TestEnrollAndIdentify:
         assert worker_faces.identify_face(_vec(12))["worker_id"] == worker_id
         assert worker_faces.identify_face(_vec(11))["worker_id"] is None
 
-        worker_faces.delete_worker_face(worker_id)
+        _drop_worker(worker_id)
 
 
 def _models_present() -> bool:
@@ -105,6 +132,7 @@ class TestRealModelRoundTrip:
             pytest.skip("grace_hopper.jpg sample image not available")
         image_bytes = hop.read_bytes()
         worker_id = "worker-555-test"
+        _ensure_worker(worker_id)
 
         emb = worker_faces.embedding_from_image(image_bytes)
         assert emb is not None, "expected a face to be detected in the sample photo"
@@ -115,7 +143,7 @@ class TestRealModelRoundTrip:
         assert result["matched"] is True
         assert result["worker_id"] == worker_id
 
-        worker_faces.delete_worker_face(worker_id)
+        _drop_worker(worker_id)
 
 
 class TestIdentifyPersonsInFrame:

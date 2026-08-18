@@ -10,14 +10,19 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
 
+from fastapi.responses import Response
+
 from app.core.auth import get_current_user, require_roles
 from app.core.database import (
     delete_worker,
     get_worker,
+    get_worker_by_badge_id,
     insert_worker,
     insert_audit_log,
     list_workers,
+    set_worker_badge,
     update_worker,
+    update_worker_identity,
     worker_has_sessions,
 )
 from app.core.security import AuthenticatedUser
@@ -45,6 +50,9 @@ class WorkerResponse(BaseModel):
     name: str
     department: str
     shift: str
+    identity_mode: str = "face"
+    consent_status: str = "pending"
+    badge_id: str | None = None
 
 
 class WorkerCreateRequest(BaseModel):
@@ -58,6 +66,19 @@ class WorkerUpdateRequest(BaseModel):
     name: str = Field(..., min_length=1)
     department: str = Field(..., min_length=1)
     shift: str = Field(..., min_length=1)
+
+
+class WorkerIdentityUpdateRequest(BaseModel):
+    identity_mode: str = Field(..., pattern="^(face|badge|off)$")
+    consent_status: str = Field(..., pattern="^(granted|pending|denied)$")
+
+
+class BadgeUpdateRequest(BaseModel):
+    badge_id: str = Field(..., min_length=2, max_length=64)
+
+
+class BadgeCheckinRequest(BaseModel):
+    code: str = Field(..., min_length=2, max_length=256, description="Scanned badge/QR code value")
 
 
 @router.get("/workers", response_model=List[WorkerResponse])
@@ -187,6 +208,166 @@ def get_worker_by_employee_id(employee_id: str) -> dict | None:
             "SELECT * FROM workers WHERE lower(employee_id) = lower(?)", (employee_id,)
         ).fetchone()
         return dict(row) if row else None
+
+
+# ── Identity mode, consent & badge/QR ────────────────────────────────────
+
+
+@router.patch("/workers/{worker_id}/identity", response_model=WorkerResponse)
+async def update_worker_identity_endpoint(
+    worker_id: str,
+    body: WorkerIdentityUpdateRequest,
+    user: AuthenticatedUser = Depends(require_roles("supervisor", "safety_mgr", "admin")),
+):
+    """Set a worker's identity mode (face/badge/off) and consent status.
+
+    Setting ``identity_mode`` to ``badge`` or ``off`` (or ``consent_status``
+    to ``denied``) immediately removes the worker from face-recognition
+    matching — their stored embedding is never compared at runtime.
+    """
+    existing = get_worker(worker_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    updated = update_worker_identity(worker_id, body.identity_mode, body.consent_status)
+    if not updated:
+        raise HTTPException(status_code=500, detail="Failed to update identity settings")
+    row = get_worker(worker_id)
+
+    insert_audit_log(
+        id=f"AUD-{uuid.uuid4().hex[:8].upper()}",
+        actor_id=user.id,
+        actor_email=user.email,
+        actor_role=user.role,
+        action_type="worker_identity_updated",
+        target_type="worker",
+        target_id=worker_id,
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        details=json.dumps({
+            "worker_id": worker_id,
+            "old_identity_mode": existing["identity_mode"],
+            "new_identity_mode": body.identity_mode,
+            "old_consent_status": existing["consent_status"],
+            "new_consent_status": body.consent_status,
+        }),
+    )
+    return WorkerResponse(**dict(row))
+
+
+@router.put("/workers/{worker_id}/badge", response_model=WorkerResponse)
+async def set_worker_badge_endpoint(
+    worker_id: str,
+    body: BadgeUpdateRequest,
+    user: AuthenticatedUser = Depends(require_roles("supervisor", "safety_mgr", "admin")),
+):
+    """Assign a badge/QR identifier to a worker."""
+    existing = get_worker(worker_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    conflict = get_worker_by_badge_id(body.badge_id)
+    if conflict and conflict["worker_id"] != worker_id:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Badge '{body.badge_id}' already belongs to worker '{conflict['employee_id']}'",
+        )
+    updated = set_worker_badge(worker_id, body.badge_id)
+    if not updated:
+        raise HTTPException(status_code=500, detail="Failed to assign badge")
+    row = get_worker(worker_id)
+
+    insert_audit_log(
+        id=f"AUD-{uuid.uuid4().hex[:8].upper()}",
+        actor_id=user.id,
+        actor_email=user.email,
+        actor_role=user.role,
+        action_type="worker_badge_set",
+        target_type="worker",
+        target_id=worker_id,
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        details=json.dumps({"worker_id": worker_id, "badge_id": body.badge_id}),
+    )
+    return WorkerResponse(**dict(row))
+
+
+@router.delete("/workers/{worker_id}/badge", response_model=WorkerResponse)
+async def clear_worker_badge_endpoint(
+    worker_id: str,
+    user: AuthenticatedUser = Depends(require_roles("supervisor", "safety_mgr", "admin")),
+):
+    """Remove a worker's badge/QR identifier."""
+    existing = get_worker(worker_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    set_worker_badge(worker_id, None)
+    row = get_worker(worker_id)
+
+    insert_audit_log(
+        id=f"AUD-{uuid.uuid4().hex[:8].upper()}",
+        actor_id=user.id,
+        actor_email=user.email,
+        actor_role=user.role,
+        action_type="worker_badge_removed",
+        target_type="worker",
+        target_id=worker_id,
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        details=json.dumps({"worker_id": worker_id, "had_badge": bool(existing["badge_id"])}),
+    )
+    return WorkerResponse(**dict(row))
+
+
+@router.get("/workers/{worker_id}/badge/qr")
+async def get_worker_badge_qr(
+    worker_id: str,
+    _: AuthenticatedUser = Depends(get_current_user),
+):
+    """Return the worker's badge as a scannable QR code (SVG).
+
+    The payload embeds the employee ID and badge ID in a recognizable format:
+    ``ERGOVIGILANCE:BADGE:<employee_id>:<badge_id>`` — any standard QR
+    scanner shows the worker's identity without network access.
+    """
+    existing = get_worker(worker_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    badge_id = existing["badge_id"] or existing["employee_id"]
+    payload = f"ERGOVIGILANCE:BADGE:{existing['employee_id']}:{badge_id}"
+    try:
+        import segno
+        qr = segno.make(payload, error="m")
+        import io
+        buf = io.BytesIO()
+        qr.save(buf, kind="svg", scale=4, dark="#111827", light="#ffffff")
+        return Response(content=buf.getvalue(), media_type="image/svg+xml")
+    except ImportError:
+        # segno is a tiny pure-Python dependency; without it, return the
+        # payload as plain text so a supervisor can still encode it.
+        return Response(content=payload, media_type="text/plain")
+
+
+@router.post("/workers/identify-badge", response_model=WorkerResponse)
+async def identify_worker_by_badge(
+    body: BadgeCheckinRequest,
+    _: AuthenticatedUser = Depends(get_current_user),
+):
+    """Identify a worker from a scanned badge/QR code.
+
+    Accepts either the raw badge code or the full QR payload
+    (``ERGOVIGILANCE:BADGE:EMP-001:<code>``) so both a generic scanner and a
+    re-scan of this product's own QR work.
+    """
+    code = body.code.strip()
+    # Accept the full payload form too (split off the trailing badge code).
+    if code.startswith("ERGOVIGILANCE:BADGE:"):
+        parts = code.split(":")
+        if len(parts) >= 4:
+            code = parts[3]
+    row = get_worker_by_badge_id(code)
+    if row is None:
+        # Fall back to employee ID (a supervisor may scan the EMP tag itself).
+        from app.api.workers import get_worker_by_employee_id
+        row = get_worker_by_employee_id(code)
+    if row is None:
+        raise HTTPException(status_code=404, detail="No worker matches this badge code")
+    return WorkerResponse(**dict(row))
 
 
 # ── Face enrollment ───────────────────────────────────────────────────────

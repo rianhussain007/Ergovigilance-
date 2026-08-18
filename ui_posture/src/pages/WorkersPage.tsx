@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { Plus, Pencil, Trash2, X, Search, Camera, CheckCircle2, Loader2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, X, Search, Camera, CheckCircle2, Loader2, QrCode, ShieldCheck } from 'lucide-react';
 import { SectionHeader, EmptyState } from '@/src/components/common';
 import { useAuth } from '@/src/auth/AuthContext';
 import { apiFetch } from '@/src/services/apiClient';
@@ -11,6 +11,9 @@ interface Worker {
   name: string;
   department: string;
   shift: string;
+  identity_mode?: string;
+  consent_status?: string;
+  badge_id?: string | null;
 }
 
 interface FaceStatus {
@@ -57,6 +60,17 @@ export default function WorkersPage() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [faceTargetId, setFaceTargetId] = useState<string | null>(null);
 
+  // Identity mode / consent / badge config.
+  const [identityTarget, setIdentityTarget] = useState<Worker | null>(null);
+  const [identityMode, setIdentityMode] = useState('face');
+  const [consentStatus, setConsentStatus] = useState('pending');
+  const [badgeId, setBadgeId] = useState('');
+  const [identitySaving, setIdentitySaving] = useState(false);
+  const [identityError, setIdentityError] = useState<string | null>(null);
+  const [qrWorker, setQrWorker] = useState<Worker | null>(null);
+  const [qrSvg, setQrSvg] = useState<Record<string, string>>({});
+  const [qrError, setQrError] = useState<string | null>(null);
+
   const fetchWorkers = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -88,6 +102,20 @@ export default function WorkersPage() {
   useEffect(() => {
     if (workers.length > 0) workers.forEach((w) => fetchFaceStatus(w.worker_id));
   }, [workers, fetchFaceStatus]);
+
+  // Fetch the QR SVG whenever the QR modal opens for a worker (cached per worker).
+  useEffect(() => {
+    if (!qrWorker) return;
+    if (qrSvg[qrWorker.worker_id]) return;
+    setQrError(null);
+    apiFetch(`/api/workers/${qrWorker.worker_id}/badge/qr`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`QR fetch failed (${res.status})`);
+        return res.text();
+      })
+      .then((svg) => setQrSvg((prev) => ({ ...prev, [qrWorker.worker_id]: svg })))
+      .catch((err: unknown) => setQrError(err instanceof Error ? err.message : 'QR fetch failed'));
+  }, [qrWorker, qrSvg]);
 
   const openFacePicker = (workerId: string) => {
     setFaceTargetId(workerId);
@@ -121,6 +149,54 @@ export default function WorkersPage() {
     } finally {
       setFaceUploading((prev) => ({ ...prev, [workerId]: false }));
       setFaceTargetId(null);
+    }
+  };
+
+  const openIdentity = (w: Worker) => {
+    setIdentityTarget(w);
+    setIdentityMode(w.identity_mode || 'face');
+    setConsentStatus(w.consent_status || 'pending');
+    setBadgeId(w.badge_id || '');
+    setIdentityError(null);
+  };
+
+  const saveIdentity = async () => {
+    if (!identityTarget) return;
+    setIdentitySaving(true);
+    setIdentityError(null);
+    try {
+      const res = await apiFetch(`/api/workers/${identityTarget.worker_id}/identity`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identity_mode: identityMode, consent_status: consentStatus }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || `Identity update failed (${res.status})`);
+      }
+      // Assign/clear the badge in the same save when the field changed.
+      const nextBadge = badgeId.trim() || null;
+      if (nextBadge !== (identityTarget.badge_id || null)) {
+        if (nextBadge) {
+          const bres = await apiFetch(`/api/workers/${identityTarget.worker_id}/badge`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ badge_id: nextBadge }),
+          });
+          if (!bres.ok) {
+            const body = await bres.json().catch(() => ({}));
+            throw new Error(body.detail || `Badge assignment failed (${bres.status})`);
+          }
+        } else {
+          await apiFetch(`/api/workers/${identityTarget.worker_id}/badge`, { method: 'DELETE' });
+        }
+      }
+      setIdentityTarget(null);
+      await fetchWorkers();
+    } catch (e: unknown) {
+      setIdentityError(e instanceof Error ? e.message : 'Identity update failed');
+    } finally {
+      setIdentitySaving(false);
     }
   };
 
@@ -274,6 +350,7 @@ export default function WorkersPage() {
                 <th className="text-left py-sm px-md font-medium">Department</th>
                 <th className="text-left py-sm px-md font-medium">Shift</th>
                 <th className="text-left py-sm px-md font-medium" title="Face recognition enrollment">Face ID</th>
+                <th className="text-left py-sm px-md font-medium" title="How this worker is identified + consent state">Identity</th>
                 {isManager && <th className="text-right py-sm px-md font-medium">Actions</th>}
               </tr>
             </thead>
@@ -313,6 +390,31 @@ export default function WorkersPage() {
                         Enroll
                       </button>
                     )}
+                  </td>
+                  <td className="py-sm px-md">
+                    <button
+                      onClick={() => openIdentity(w)}
+                      disabled={!isManager}
+                      className="inline-flex items-center gap-xs text-body-sm hover:text-primary transition-colors disabled:cursor-default"
+                      title={isManager ? 'Configure identity mode, consent, and badge/QR' : 'Identity settings'}
+                    >
+                      <ShieldCheck className="w-4 h-4 text-on-surface-variant" />
+                      <span className="capitalize text-on-surface">{(w.identity_mode || 'face').toLowerCase()}</span>
+                      <span
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          w.consent_status === 'granted'
+                            ? 'bg-green-500/15 text-green-400'
+                            : w.consent_status === 'denied'
+                              ? 'bg-red-500/15 text-red-400'
+                              : 'bg-amber-500/15 text-amber-400'
+                        }`}
+                      >
+                        {w.consent_status || 'pending'}
+                      </span>
+                      {w.badge_id && (
+                        <QrCode className="w-3.5 h-3.5 text-on-surface-variant" />
+                      )}
+                    </button>
                   </td>
                   {isManager && (
                     <td className="py-sm px-md text-right">
@@ -423,6 +525,138 @@ export default function WorkersPage() {
         className="hidden"
         onChange={handleFaceFile}
       />
+
+      {identityTarget && createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)' }} onClick={() => !identitySaving && setIdentityTarget(null)}>
+          <div style={{ background: 'var(--color-surface-container)', width: '100%', maxWidth: '30rem', margin: '0 24px', borderRadius: '12px', border: '1px solid var(--color-outline-variant)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <h3 className="font-label-caps text-label-caps text-on-surface uppercase tracking-widest">Identity & Consent — {identityTarget.name}</h3>
+              <button onClick={() => !identitySaving && setIdentityTarget(null)} style={{ padding: '4px', borderRadius: '6px' }} className="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-higher transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {identityError && (
+              <div className="mb-md p-sm rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-body-sm">{identityError}</div>
+            )}
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-on-surface-variant mb-xs font-medium">How is this worker identified?</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {(['face', 'badge', 'off'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => setIdentityMode(mode)}
+                      style={{
+                        flex: 1, padding: '10px 8px', borderRadius: '8px', border: '1px solid',
+                        borderColor: identityMode === mode ? 'var(--color-primary)' : 'var(--color-outline-variant)',
+                        background: identityMode === mode ? 'var(--color-primary/10)' : 'var(--color-surface-container-high)',
+                        color: 'var(--color-on-surface)', fontSize: '12px', fontWeight: identityMode === mode ? 600 : 400,
+                      }}
+                    >
+                      {mode === 'face' ? 'Face camera' : mode === 'badge' ? 'Badge / QR' : 'No identification'}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-on-surface-variant mt-xs">
+                  {identityMode === 'face' && 'Camera face recognition — needs consent and an enrolled photo.'}
+                  {identityMode === 'badge' && 'Badge/QR scan only — face recognition is disabled for this worker.'}
+                  {identityMode === 'off' && 'Never identified automatically — sessions stay anonymous.'}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-on-surface-variant mb-xs font-medium">Consent status</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  {(['granted', 'pending', 'denied'] as const).map((status) => (
+                    <button
+                      key={status}
+                      onClick={() => setConsentStatus(status)}
+                      style={{
+                        flex: 1, padding: '10px 8px', borderRadius: '8px', border: '1px solid',
+                        borderColor: consentStatus === status ? 'var(--color-primary)' : 'var(--color-outline-variant)',
+                        background: consentStatus === status ? 'var(--color-primary/10)' : 'var(--color-surface-container-high)',
+                        color: 'var(--color-on-surface)', fontSize: '12px', fontWeight: consentStatus === status ? 600 : 400,
+                      }}
+                    >
+                      {status}
+                    </button>
+                  ))}
+                </div>
+                {consentStatus === 'denied' && (
+                  <p className="text-[11px] text-red-400 mt-xs">Denied consent immediately removes this worker from face recognition — their stored embedding is never matched.</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-on-surface-variant mb-xs font-medium">Badge / QR identifier</label>
+                <input
+                  type="text"
+                  value={badgeId}
+                  onChange={(e) => setBadgeId(e.target.value)}
+                  style={{ width: '100%', padding: '8px 16px', borderRadius: '8px', border: '1px solid var(--color-outline-variant)', background: 'var(--color-surface-container-high)', color: 'var(--color-on-surface)', fontSize: '13px' }}
+                  className="placeholder:text-on-surface-variant focus:outline-none focus:border-primary"
+                  placeholder="e.g. BADGE-1042 (leave empty to remove)"
+                />
+                <p className="text-[11px] text-on-surface-variant mt-xs">
+                  The badge can be printed as a QR code for scan-based check-in — no camera identity needed.
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '24px' }}>
+              <button
+                onClick={() => setQrWorker(identityTarget)}
+                disabled={!badgeId.trim()}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', borderRadius: '8px', fontSize: '13px', fontWeight: 500, border: '1px solid var(--color-outline-variant)' }}
+                className="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-higher transition-colors disabled:opacity-40"
+                title={badgeId.trim() ? 'Show this badge as a QR code' : 'Assign a badge ID first'}
+              >
+                <QrCode className="w-4 h-4" />
+                Show QR
+              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <button onClick={() => !identitySaving && setIdentityTarget(null)} disabled={identitySaving} style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 500 }} className="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-higher transition-colors disabled:opacity-50">
+                  Cancel
+                </button>
+                <button onClick={saveIdentity} disabled={identitySaving} style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 500, background: 'var(--color-primary)', color: 'var(--color-on-primary)', opacity: identitySaving ? 0.5 : 1 }}>
+                  {identitySaving ? 'Saving...' : 'Save Identity'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {qrWorker && createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)' }} onClick={() => setQrWorker(null)}>
+          <div style={{ background: 'var(--color-surface-container)', width: '100%', maxWidth: '22rem', margin: '0 24px', borderRadius: '12px', border: '1px solid var(--color-outline-variant)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', padding: '24px', textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-label-caps text-label-caps text-on-surface uppercase tracking-widest" style={{ marginBottom: '8px' }}>Badge QR — {qrWorker.employee_id}</h3>
+            <p className="text-body-sm text-on-surface-variant" style={{ marginBottom: '16px' }}>
+              Print this code on the worker's badge. Scanning it identifies them — no camera needed.
+            </p>
+            {qrError ? (
+              <div className="text-red-400 text-body-sm mb-md">{qrError}</div>
+            ) : (
+              <div
+                style={{ display: 'inline-flex', padding: '12px', background: '#fff', borderRadius: '8px' }}
+                dangerouslySetInnerHTML={{ __html: qrSvg[qrWorker.worker_id] || '' }}
+              />
+            )}
+            <div style={{ marginTop: '16px' }}>
+              <button
+                onClick={() => setQrWorker(null)}
+                style={{ padding: '8px 20px', borderRadius: '8px', fontSize: '13px', fontWeight: 500, background: 'var(--color-primary)', color: 'var(--color-on-primary)' }}
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {deleteTarget && createPortal(
         <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)' }} onClick={() => !deleting && setDeleteTarget(null)}>

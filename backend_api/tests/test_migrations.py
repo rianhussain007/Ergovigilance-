@@ -67,8 +67,12 @@ def test_migrations_apply_incrementally(conn, monkeypatch):
 
 def test_upgrade_from_previous_version(conn):
     """A DB that claims version N only receives migrations > N."""
-    first_version = MIGRATIONS[0][0]
-    conn.execute(f"PRAGMA user_version = {first_version}")
+    first = MIGRATIONS[0]
+    # A real v1 database has the v1 schema on disk (tables created before
+    # versioning was introduced, or by migration 001 itself).
+    for statement in first[1]:
+        conn.execute(statement)
+    conn.execute(f"PRAGMA user_version = {first[0]}")
     conn.commit()
 
     applied = run_migrations(conn)

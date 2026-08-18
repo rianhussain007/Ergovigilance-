@@ -180,9 +180,22 @@ def get_face_status(worker_id: str) -> dict:
 
 
 def list_enrolled_embeddings() -> list[dict]:
-    """Load all (worker_id, embedding) pairs for matching."""
+    """Load all (worker_id, embedding) pairs eligible for matching.
+
+    A worker is excluded from matching when they opted out of face identity
+    (``identity_mode`` is ``badge`` or ``off``) or denied consent — face
+    recognition must never silently identify someone who chose not to be
+    identified by camera.
+    """
     with get_connection() as conn:
-        rows = conn.execute("SELECT worker_id, embedding FROM worker_faces").fetchall()
+        rows = conn.execute(
+            """
+            SELECT wf.worker_id, wf.embedding
+            FROM worker_faces wf
+            JOIN workers w ON w.worker_id = wf.worker_id
+            WHERE w.identity_mode = 'face' AND w.consent_status != 'denied'
+            """
+        ).fetchall()
     out = []
     for row in rows:
         try:
