@@ -1257,6 +1257,11 @@ class LiveMonitoringService:
             "framing_guidance": (result.framing or {}).get("guidance", []),
             "framing_quality": (result.framing or {}).get("quality_score"),
             "person_count": result.person_count,
+            "keypoints": [
+                [float(kp[0]), float(kp[1]), float(kp[2]) if len(kp) > 2 else 0.0,
+                 float(kp[3]) if len(kp) > 3 else 1.0]
+                for kp in (result.keypoints or [])
+            ],
         }
         self._timeline.append(timeline_entry)
     

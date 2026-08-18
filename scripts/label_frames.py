@@ -395,19 +395,24 @@ def main() -> None:
     last_pose_risk = "LOW"
     last_pose_features: dict = {}
     last_pose_hit = -1
+    # has_timeline_data is True when the overlay index has records, even if
+    # none carry raw keypoints — we can still render a risk-text overlay.
+    has_timeline_data = bool(overlay_index)
+    _has_keypoints = has_timeline_data and any(rec.get("keypoints") for _, rec in overlay_index)
     # Expire the held pose after this many seconds without a refresh — if the
     # worker left the frame, a lingering "ghost" skeleton would mislead the
     # labeler. Timeline gaps = no person detected, so gaps expire naturally.
     POSE_HOLD_SECONDS = 2.0
     last_pose_frame = -10**9  # video frame index when last_pose was refreshed
     _draw_overlay = None
-    if overlay_index and any(rec.get("keypoints") for _, rec in overlay_index):
+    if _has_keypoints:
         try:
             from backend_api.app.services.pose_overlay import draw_skeleton as _draw_overlay
         except ImportError:
             _draw_overlay = None
-        if _draw_overlay is not None:
-            print(f"  overlay: persistent skeleton on ({len(overlay_index)} timeline records)")
+    if has_timeline_data:
+        mode = "skeleton + risk" if _draw_overlay is not None else "risk text (no keypoints in timeline)"
+        print(f"  overlay: {mode} ({len(overlay_index)} timeline records)")
 
     # Fast-forward to the first unconfirmed frame when resuming
     if confirmed:
@@ -457,12 +462,14 @@ def main() -> None:
             if best_i >= 0 and best_err <= 0.5 and best_i != last_pose_hit:
                 rec = overlay_index[best_i][1]
                 kps = rec.get("keypoints")
+                # Always update risk + features from the nearest record —
+                # only the skeleton drawing requires raw keypoints.
+                last_pose_risk = rec.get("risk_level", "LOW")
+                last_pose_features = rec.get("features") or {}
+                last_pose_hit = best_i
+                last_pose_frame = idx
                 if kps:
                     last_pose = kps
-                    last_pose_risk = rec.get("risk_level", "LOW")
-                    last_pose_features = rec.get("features") or {}
-                    last_pose_hit = best_i
-                    last_pose_frame = idx
         # Ghost-pose expiry: no fresh sample for POSE_HOLD_SECONDS -> clear.
         if last_pose is not None and (idx - last_pose_frame) / fps > POSE_HOLD_SECONDS:
             last_pose = None
@@ -479,13 +486,43 @@ def main() -> None:
                     (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
         cv2.putText(overlay, f"{'PAUSED' if paused else 'PLAYING'}  kind={args.kind}  labels={len(frames)}",
                     (10, 58), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
-        if _draw_overlay is not None and last_pose is not None:
-            cv2.putText(overlay, f"overlay RISK: {last_pose_risk} (held from last sample)", (10, 118),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 255, 0), 2)
         if idx in frames:
             tag = " (prelabel)" if idx in prelabels and idx not in confirmed else ""
-            cv2.putText(overlay, f"current: {frames[idx]}{tag}", (10, 88),
+            cv2.putText(overlay, f"current: {frames[idx]}", (10, 88),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 200, 255), 2)
+        # ── Risk + features overlay (works with or without keypoints) ────
+        if last_pose is not None or has_timeline_data:
+            # Color the risk badge based on the level.
+            risk_color = {
+                "LOW": (0, 200, 0), "MODERATE": (0, 180, 255),
+                "MEDIUM": (0, 180, 255), "HIGH": (0, 100, 255),
+                "CRITICAL": (0, 0, 255),
+            }.get(last_pose_risk.upper(), (200, 200, 200))
+            y = 118
+            if last_pose is not None and _draw_overlay is not None:
+                label_text = f"overlay RISK: {last_pose_risk} (held from last sample)"
+            elif has_timeline_data:
+                label_text = f"RISK: {last_pose_risk}"
+            else:
+                label_text = None
+            if label_text:
+                cv2.putText(overlay, label_text, (10, y),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.55, risk_color, 2)
+                y += 22
+            # Show key feature angles when available (most useful for the labeler).
+            if last_pose_features:
+                feature_display = [
+                    ("neck", last_pose_features.get("neck_flexion")),
+                    ("trunk", last_pose_features.get("trunk_flexion")),
+                    ("shoulder", last_pose_features.get("shoulder_symmetry")),
+                    ("knee", last_pose_features.get("knee_angle")),
+                ]
+                vals = [f"{name}={v:.1f}" for name, v in feature_display
+                        if v is not None and v == v]  # skip NaN
+                if vals:
+                    cv2.putText(overlay, "  ".join(vals), (10, y),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.48, (180, 220, 255), 1)
+                    y += 20
 
         cv2.imshow("ErgoVigilance ground-truth labeling", overlay)
         key = cv2.waitKey(30 if not paused else 0) & 0xFF
