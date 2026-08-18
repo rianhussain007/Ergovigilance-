@@ -38,6 +38,13 @@ class ProcessedFrame:
     # Tier 3: number of people MediaPipe detected in the frame (num_poses>1
     # foundation). The pipeline still scores the PRIMARY person.
     person_count: int = 1
+    # Per-person risk for the station view: one entry per detected pose
+    # [{person_index, is_primary, risk_level, top_issue, keypoint_visibility}].
+    # The primary entry mirrors the authoritative context-engine risk; the
+    # secondary entries are scored by the same deterministic
+    # risk_from_features so ALL workers at a station are visible, not just
+    # the biggest one.
+    person_risks: list = field(default_factory=list)
 
 
 @dataclass
@@ -50,6 +57,8 @@ class LiveState:
     current_frame: Optional[np.ndarray] = None
     overlaid_frame: Optional[np.ndarray] = None
     features: dict = field(default_factory=dict)
+    # Per-person risk list (station view) — populated from ProcessedFrame.
+    person_risks: list = field(default_factory=list)
     risk_level: str = "LOW"
     risk_score: float = 0.0
     confidence: float = 0.0

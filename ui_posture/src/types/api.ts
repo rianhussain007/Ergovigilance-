@@ -452,6 +452,14 @@ export interface ContextSnapshot {
     observed_seconds?: number;
   }[];
   identified_worker?: { worker_id?: string; name?: string; employee_id?: string | null; confidence?: number; matched?: boolean; liveness?: string; blinks?: number };
+  // Per-person risk (station view): every detected pose, primary marked.
+  person_risks?: {
+    person_index: number;
+    is_primary?: boolean;
+    risk_level: string;
+    top_issue?: string | null;
+    keypoint_visibility?: number;
+  }[];
 }
 
 export interface AlertData {

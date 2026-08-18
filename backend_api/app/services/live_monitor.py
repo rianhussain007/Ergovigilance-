@@ -204,6 +204,10 @@ def build_ws_payload(state) -> dict:
             dict(r) for r in (getattr(state, "person_identities", []) or [])
         ],
         "identified_worker": dict(getattr(state, "identified_worker", {}) or {}),
+        # Per-person risk (station view): every detected pose, primary marked.
+        "person_risks": [
+            dict(r) for r in (getattr(state, "person_risks", []) or [])
+        ],
     }
 
 
@@ -1288,6 +1292,8 @@ class LiveMonitoringService:
             self.state.person_boxes = list(self._person_boxes)
             self.state.person_identities = [dict(r) for r in self._person_identities]
             self.state.identified_worker = dict(self._identified_worker)
+            # Per-person risk for the station view (every detected pose).
+            self.state.person_risks = [dict(r) for r in (result.person_risks or [])]
 
         # ── Crash-safe checkpoint (throttled) ────────────────────────
         # A power cut mid-shift normally loses the session: the summary JSON

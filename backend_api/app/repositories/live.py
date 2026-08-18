@@ -914,6 +914,9 @@ class LiveRepository(DashboardRepository):
                 dict(r) for r in (getattr(state, "person_identities", []) or [])
             ],
             identified_worker=dict(getattr(state, "identified_worker", {}) or {}),
+            person_risks=[
+                dict(r) for r in (getattr(state, "person_risks", []) or [])
+            ],
         )
 
     async def get_recommendations(self) -> RecommendationsBundleResponse:

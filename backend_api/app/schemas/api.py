@@ -474,6 +474,9 @@ class ContextSnapshotResponse(BaseModel):
     # One entry per detected person: {box, worker_id, name, confidence, matched}.
     person_identities: Optional[list] = None
     identified_worker: Optional[dict] = None
+    # Per-person risk (station view): [{person_index, is_primary, risk_level,
+    # top_issue, keypoint_visibility}] — every detected pose, not just primary.
+    person_risks: Optional[list] = None
 
 
 class HistoryPoint(BaseModel):

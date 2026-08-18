@@ -9,7 +9,7 @@ import { useLiveTimeline } from '@/src/hooks/useLiveTimeline';
 import { useContextSnapshot } from '@/src/hooks/useContextSnapshot';
 import { useToast } from '@/src/hooks/useToast';
 import { useSettings } from '@/src/hooks/useSettings';
-import { AlertTriangle, Camera, Clock3, FileDown, FileText, Radio, ShieldAlert, Brain, ScanLine } from 'lucide-react';
+import { AlertTriangle, Camera, Clock3, FileDown, FileText, Radio, ShieldAlert, Brain, ScanLine, Users } from 'lucide-react';
 import type { Issue, ErgonomicFeature, LiveStatus, Recommendations, SessionInfo, ContextSnapshot } from '@/src/types/api';
 
 export default function LiveMonitoring() {
@@ -215,6 +215,9 @@ export default function LiveMonitoring() {
         <CameraFramingCard snapshot={contextSnapshot} unavailableFeatures={unavailableFeatures} active={isActive} />
         <ContextAwareRiskCard />
       </div>
+
+      {/* ── Station Risk — every person the camera sees, not just the primary ── */}
+      <StationRiskCard snapshot={contextSnapshot} active={isActive} />
 
       {/* ── Issues + Guidance ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-lg">
@@ -563,6 +566,62 @@ function CameraFramingCard({ snapshot, unavailableFeatures, active }: { snapshot
         </div>
       )}
     </div>
+  );
+}
+
+// ── Station Risk — per-person posture risk for every worker in view ──
+// Each detected pose gets its own risk (the primary mirrors the main engine;
+// secondary workers are scored by the same deterministic thresholds). This is
+// the multi-worker answer to "what's happening on line 2 right now."
+function StationRiskCard({ snapshot, active }: { snapshot: ContextSnapshot | null; active: boolean }) {
+  const risks = snapshot?.person_risks || [];
+  const color = (level: string) => {
+    const l = (level || '').toLowerCase();
+    if (l === 'high' || l === 'critical') return 'text-red-400';
+    if (l === 'medium') return 'text-orange-400';
+    return 'text-emerald-300';
+  };
+  return (
+    <section className="bg-surface-container border border-outline-variant rounded-xl p-lg">
+      <div className="flex items-center gap-sm mb-md">
+        <Users className="w-4 h-4 text-primary" />
+        <SectionHeader title="Station Risk" />
+      </div>
+      {!active ? (
+        <IdleNote message="Start monitoring to see every worker's risk at this station." />
+      ) : risks.length === 0 ? (
+        <IdleNote message="No people in view." />
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-md">
+          {risks.map((r) => (
+            <div
+              key={r.person_index}
+              className={`rounded-lg border p-md ${r.is_primary ? 'border-primary/40 bg-primary/5' : 'border-outline-variant/60 bg-surface-container-low'}`}
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-body-sm font-bold text-on-surface">
+                  {r.is_primary ? 'Primary worker' : `Person ${r.person_index + 1}`}
+                </p>
+                <p className={`text-body-sm font-bold ${color(r.risk_level)}`}>{r.risk_level}</p>
+              </div>
+              <p className="text-body-sm text-on-surface-variant mt-1">
+                {r.top_issue ? `Issue: ${String(r.top_issue).replace(/_/g, ' ')}` : 'No posture issue'}
+              </p>
+              {typeof r.keypoint_visibility === 'number' && r.keypoint_visibility > 0 && (
+                <p className="text-[11px] text-on-surface-variant/70 mt-0.5">
+                  Visibility {Math.round(r.keypoint_visibility * 100)}%
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {risks.length > 1 && (
+        <p className="text-[11px] text-on-surface-variant/70 mt-md">
+          Secondary workers are scored by deterministic thresholds; fatigue &amp; alerts track the primary worker.
+        </p>
+      )}
+    </section>
   );
 }
 

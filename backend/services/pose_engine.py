@@ -46,6 +46,46 @@ def _compute_confidence(landmarks) -> float:
     return float(np.mean(vals)) * 100 if vals else 0.0
 
 
+def compute_person_risks(
+    pose_landmarks,
+    w_f: int,
+    h_f: int,
+    primary_index: int,
+    primary_risk_level: str,
+) -> list[dict]:
+    """Per-person threshold risk for every detected pose (station view).
+
+    Each MediaPipe pose gets its own features + deterministic risk
+    (``risk_from_features``) so all workers at a station are visible, not just
+    the biggest. The primary entry (``primary_index``) carries the
+    authoritative engine risk (standard-method/context) so the station list
+    never disagrees with the main pipeline. Secondary workers are NOT fed into
+    the context engine (fatigue/task/alerts stay primary-only) — an honest
+    scope boundary documented at the call site.
+    """
+    person_risks: list[dict] = []
+    for pi, pose in enumerate(pose_landmarks):
+        kp_p = mediapipe_landmarks_to_keypoints(pose, w_f, h_f)
+        feat_p, unav_p, _approx_p = extract_features_from_keypoints(kp_p)
+        is_primary = pi == primary_index
+        try:
+            issues_p = detect_posture_issues(feat_p)
+            top_issue = issues_p[0].get("issue") if issues_p else None
+        except Exception:  # noqa: BLE001 - station risk is best-effort
+            top_issue = None
+        vis_vals = [kp[3] for kp in kp_p if len(kp) > 3]
+        person_risks.append({
+            "person_index": pi,
+            "is_primary": is_primary,
+            "risk_level": primary_risk_level if is_primary else risk_from_features(feat_p, unav_p),
+            "top_issue": top_issue,
+            "keypoint_visibility": round(
+                sum(vis_vals) / len(vis_vals), 3
+            ) if vis_vals else 0.0,
+        })
+    return person_risks
+
+
 def _compute_lower_body_confidence(keypoints) -> float:
     """Confidence score for lower-body landmarks (hips, knees, ankles)."""
     if not keypoints or len(keypoints) < 29:
@@ -185,6 +225,7 @@ class PoseEngine:
             # isolation (per-worker sessions/analytics) is the follow-up; for
             # now the pipeline scores the primary worker and reports how many
             # people the camera can see.
+            primary_index = 0
             landmarks = result.pose_landmarks[0]
             if person_count > 1:
                 best_i, best_area = 0, -1.0
@@ -194,6 +235,7 @@ class PoseEngine:
                     area = (max(xs) - min(xs)) * (max(ys) - min(ys))
                     if area > best_area:
                         best_i, best_area = i, area
+                primary_index = best_i
                 landmarks = result.pose_landmarks[best_i]
             h_f, w_f = frame.shape[:2]
             keypoints = mediapipe_landmarks_to_keypoints(landmarks, w_f, h_f)
@@ -295,6 +337,19 @@ class PoseEngine:
             else:
                 risk_level = risk_from_features(features, unavailable)
             confidence = _compute_confidence(landmarks)
+
+            # ── Per-person risk (station view) ────────────────────────
+            # Every detected pose gets its own features + deterministic risk
+            # so the UI can show ALL workers at a station, not just the
+            # primary. The primary entry is overridden with the authoritative
+            # engine risk (standard-method/context) so the station list never
+            # disagrees with the main pipeline. These are lightweight
+            # threshold scores — secondary workers are NOT fed into the
+            # context engine (fatigue/task/alerts stay primary-only), which is
+            # an honest, documented scope boundary for now.
+            person_risks = compute_person_risks(
+                result.pose_landmarks, w_f, h_f, primary_index, risk_level
+            )
             task_info = self.task_recognizer.detect_task(keypoints, features)
             # Drift canary: record whether the trained task classifier decided
             # (model) or the Gaussian fallback did. A rising fallback rate is
@@ -319,6 +374,7 @@ class PoseEngine:
             self._smoothed_features = None
             if self._kalman is not None:
                 self._kalman.reset()
+            person_risks = []
 
         if person_detected:
             issues = detect_posture_issues(features)
@@ -350,6 +406,7 @@ class PoseEngine:
             standard_assessment=standard_assessment,
             framing=framing,
             person_count=person_count,
+            person_risks=person_risks,
         )
 
     def _apply_smoothing(self, features: dict[str, float]) -> dict[str, float]:
