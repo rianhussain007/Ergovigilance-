@@ -127,8 +127,11 @@ def _resolve_camera_source(camera_index: int, camera_id: str | None) -> int | st
     Priority:
       1. ``camera_id`` matching a configured ``CAMERA_SOURCES`` entry -> its URL
       2. ``camera_id`` that is itself an RTSP/HTTP URL -> used as-is
-      3. numeric ``camera_id`` -> int index
-      4. fallback -> ``camera_index``
+      3. ``camera_id == "demo"`` -> ``DEMO_VIDEO_PATH`` (sales demo: replay a
+         recorded video through the live pipeline, no camera needed)
+      4. ``camera_id`` naming an existing local video file -> used as-is
+      5. numeric ``camera_id`` -> int index
+      6. fallback -> ``camera_index``
     """
     if camera_id:
         cid = camera_id.strip()
@@ -137,6 +140,11 @@ def _resolve_camera_source(camera_index: int, camera_id: str | None) -> int | st
             if cam["id"] == cid:
                 return cam["url"]
         if cid.lower().startswith(("rtsp://", "rtmp://", "http://", "https://")):
+            return cid
+        if cid == "demo":
+            # Empty path -> open fails with a clear error in start_session.
+            return os.environ.get("DEMO_VIDEO_PATH", "") or "demo"
+        if os.path.isfile(cid):
             return cid
         try:
             return int(cid)
@@ -349,6 +357,11 @@ class LiveMonitoringService:
         self.current_camera_index: Optional[int] = None
         self.current_camera_id: Optional[str] = None
         self.current_camera_source: int | str | None = None
+        # Demo mode: the source is a video FILE (DEMO_VIDEO_PATH or a direct
+        # path) — the capture loop loops it instead of treating end-of-file as
+        # a camera failure, and throttles to the file's own frame rate.
+        self._is_demo_source: bool = False
+        self._demo_fps: float = 15.0
         self.current_session_timestamp: Optional[str] = None
         self.video_recorder: Optional[_SessionVideoRecorder] = None
         self.video_recording_metadata: dict = {}
@@ -418,9 +431,12 @@ class LiveMonitoringService:
         # RTSP URL) overrides the numeric index. cv2.VideoCapture accepts both
         # int indices and URL strings, so a single call handles USB + IP cams.
         source = _resolve_camera_source(camera_index, camera_id)
+        self._is_demo_source = isinstance(source, str) and os.path.isfile(source)
         self.cap = cv2.VideoCapture(source)
         if not self.cap.isOpened():
             raise RuntimeError(f"Cannot open camera at source {source}")
+        if self._is_demo_source:
+            self._demo_fps = float(self.cap.get(cv2.CAP_PROP_FPS) or 15.0) or 15.0
 
         for pw, ph in [(1280, 720), (640, 480)]:
             self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, pw)
@@ -808,6 +824,13 @@ class LiveMonitoringService:
             try:
                 ret, frame = self.cap.read()
                 if not ret:
+                    if self._is_demo_source:
+                        # Video file ended — loop back to the start so the
+                        # demo keeps playing instead of tripping the reconnect
+                        # path (which would reopen the file pointlessly).
+                        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                        time.sleep(0.1)
+                        continue
                     self._handle_camera_read_failure()
                     continue
                 # Camera is delivering frames again — reset reconnect state.
@@ -839,7 +862,12 @@ class LiveMonitoringService:
                     # so the two never disagree on orientation.
                     self._capture_counter += 1
                     self.state.current_frame = cv2.flip(frame, 1)
-                time.sleep(0.001)
+                # Demo playback runs at the video's own frame rate so the
+                # replay feels like a live feed instead of fast-forwarding.
+                if self._is_demo_source and self._demo_fps > 0:
+                    time.sleep(1.0 / self._demo_fps)
+                else:
+                    time.sleep(0.001)
             except Exception as exc:
                 logger.error(
                     "Capture loop error: %s", exc, exc_info=True,

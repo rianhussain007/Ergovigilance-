@@ -85,6 +85,16 @@ export default function MonitoringControls() {
           </div>
         </>
       )}
+      {!isMonitoring && !isBusy && (
+        <button
+          onClick={() => startSession(undefined, 'demo')}
+          className="flex items-center gap-2 h-12 px-4 rounded-lg border border-outline-variant bg-surface-container text-sm font-semibold text-on-surface-variant hover:text-on-surface hover:border-primary/40 transition-colors"
+          title="Replay a recorded video through the live pipeline — no camera needed (requires DEMO_VIDEO_PATH on the backend)"
+        >
+          <Play className="w-4 h-4" />
+          Demo
+        </button>
+      )}
       <button
         onClick={handleClick}
         disabled={isBusy}

@@ -9,7 +9,7 @@ export interface UseSessionLifecycleReturn {
   status: SessionStatus;
   sessionId: string | null;
   error: string | null;
-  startSession: (workerId?: string) => Promise<void>;
+  startSession: (workerId?: string, cameraIdOverride?: string) => Promise<void>;
   stopSession: () => Promise<void>;
 }
 
@@ -89,7 +89,7 @@ export function useSessionLifecycle(): UseSessionLifecycleReturn {
 
   const { settings } = useSettings();
   
-  const startSession = useCallback(async (workerId?: string) => {
+  const startSession = useCallback(async (workerId?: string, cameraIdOverride?: string) => {
     if (status === 'starting' || status === 'monitoring') return;
 
     setStatus('starting');
@@ -99,7 +99,7 @@ export function useSessionLifecycle(): UseSessionLifecycleReturn {
       const res = await apiFetch('/api/session/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ worker_id: workerId ?? null, camera_id: settings.cameraId }),
+        body: JSON.stringify({ worker_id: workerId ?? null, camera_id: cameraIdOverride ?? settings.cameraId }),
       });
 
       if (!res.ok) {
