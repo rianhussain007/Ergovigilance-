@@ -22,3 +22,4 @@ export { default as RecommendationsCard } from './RecommendationsCard';
 export { PredictiveInsightsCard } from './PredictiveInsightsCard';
 export { default as ErrorBoundary } from './ErrorBoundary';
 export { default as IndustrialBackdrop } from './IndustrialBackdrop';
+export { BenchmarkCard } from './BenchmarkCard';

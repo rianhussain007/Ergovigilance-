@@ -21,6 +21,7 @@ from app.api.users import router as users_router
 from app.api.video_analysis import router as video_analysis_router
 from app.api.recordings import router as recordings_router
 from app.api.assistant import router as assistant_router
+from app.api.benchmark import router as benchmark_router
 from app.api.risk_trend import router as risk_trend_router
 from app.api.safety_report import router as safety_report_router
 from app.api.session_report import router as session_report_router
@@ -60,6 +61,7 @@ api_router.include_router(users_router, prefix="/api", tags=["Users"])
 api_router.include_router(video_analysis_router, prefix="/api", tags=["Video Analysis"])
 api_router.include_router(recordings_router, prefix="/api", tags=["Recordings"])
 api_router.include_router(assistant_router, prefix="/api", tags=["Assistant"])
+api_router.include_router(benchmark_router, prefix="/api", tags=["Benchmark"])
 api_router.include_router(risk_trend_router, prefix="/api", tags=["Reports"])
 api_router.include_router(safety_report_router, prefix="/api", tags=["Reports"])
 api_router.include_router(session_report_router, prefix="/api", tags=["Reports"])

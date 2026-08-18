@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { BarChart3, TrendingUp, TrendingDown, AlertTriangle, CheckCircle } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from 'recharts';
-import { LoadingCard, ErrorCard, SectionHeader, EmptyState, PredictiveInsightsCard } from '@/src/components/common';
+import { LoadingCard, ErrorCard, SectionHeader, EmptyState, PredictiveInsightsCard, BenchmarkCard } from '@/src/components/common';
 import { getAnalytics } from '@/src/services/dashboardService';
 import { NeckTrunkTrendChart } from '@/src/components/charts/NeckTrunkTrendChart';
 import { chartTooltipStyle, chartTick, chartColors, riskLevelColor } from '@/src/components/charts/chartTheme';
@@ -51,6 +51,9 @@ export default function AnalyticsPage() {
 
       {/* Predictive forecast for the most recent session (advisory) */}
       <PredictiveInsightsCard mode="session" />
+
+      {/* De-identified posture percentile baseline */}
+      <BenchmarkCard />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-md">
         <div className="bg-surface-container border border-outline-variant rounded-xl p-md">
