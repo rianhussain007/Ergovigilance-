@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
+
+logger = logging.getLogger(__name__)
 
 # Canonical definition lives in backend.core.constants.
 # Re-exported here for backward compatibility.
@@ -145,6 +148,36 @@ SESSION_INDEX_COLS = [
 ]
 
 
+def _build_session_payload(
+    summary: Dict,
+    session_timestamp: str,
+    alerts_data: Dict | None = None,
+) -> Dict:
+    """Build the canonical saved-session JSON payload from an analytics summary."""
+    payload = {
+        "session_timestamp": session_timestamp,
+        "session_duration_seconds": summary["session_duration_seconds"],
+        "total_frames": summary["total_frames"],
+        "risk_percentages": summary["risk_percentages"],
+        "most_frequent_issue": summary["most_frequent_issue"],
+        "most_frequent_issue_count": summary["most_frequent_issue_count"],
+        "highest_risk_level": summary["highest_risk_level"],
+        "highest_risk_timestamp": summary["highest_risk_timestamp"],
+        "avg_neck_flexion": summary["avg_neck_flexion"],
+        "avg_trunk_flexion": summary["avg_trunk_flexion"],
+        "avg_shoulder_symmetry": summary["avg_shoulder_symmetry"],
+        "avg_knee_angle": summary["avg_knee_angle"],
+        "avg_forward_head_posture": summary.get("avg_forward_head_posture", 0.0),
+        "avg_head_tilt_angle": summary.get("avg_head_tilt_angle", 0.0),
+        "avg_wrist_deviation_angle": summary.get("avg_wrist_deviation_angle", 0.0),
+        "avg_stance_stability": summary.get("avg_stance_stability", 0.0),
+        "avg_weight_shift_offset": summary.get("avg_weight_shift_offset", 0.0),
+    }
+    if alerts_data:
+        payload["alerts"] = alerts_data.get("history", [])
+    return payload
+
+
 def save_session_summary(
     summary: Dict,
     sessions_dir: str | Path,
@@ -166,28 +199,7 @@ def save_session_summary(
         filename = f"session_{ts}.json"
     filepath = sessions_dir / filename
 
-    payload = {
-        "session_timestamp": ts,
-        "session_duration_seconds": summary["session_duration_seconds"],
-        "total_frames": summary["total_frames"],
-        "risk_percentages": summary["risk_percentages"],
-        "most_frequent_issue": summary["most_frequent_issue"],
-        "most_frequent_issue_count": summary["most_frequent_issue_count"],
-        "highest_risk_level": summary["highest_risk_level"],
-        "highest_risk_timestamp": summary["highest_risk_timestamp"],
-        "avg_neck_flexion": summary["avg_neck_flexion"],
-        "avg_trunk_flexion": summary["avg_trunk_flexion"],
-        "avg_shoulder_symmetry": summary["avg_shoulder_symmetry"],
-        "avg_knee_angle": summary["avg_knee_angle"],
-        "avg_forward_head_posture": summary.get("avg_forward_head_posture", 0.0),
-        "avg_head_tilt_angle": summary.get("avg_head_tilt_angle", 0.0),
-        "avg_wrist_deviation_angle": summary.get("avg_wrist_deviation_angle", 0.0),
-        "avg_stance_stability": summary.get("avg_stance_stability", 0.0),
-        "avg_weight_shift_offset": summary.get("avg_weight_shift_offset", 0.0),
-    }
-
-    if alerts_data:
-        payload["alerts"] = alerts_data.get("history", [])
+    payload = _build_session_payload(summary, ts, alerts_data)
 
     with open(filepath, "w") as f:
         json.dump(payload, f, indent=2)
@@ -195,6 +207,119 @@ def save_session_summary(
     _append_session_index(sessions_dir, summary, ts)
 
     return str(filepath)
+
+
+def save_session_checkpoint(
+    summary: Dict,
+    sessions_dir: str | Path,
+    session_timestamp: str | None,
+    session_id: str | None,
+    alerts_data: Dict | None = None,
+    meta: Dict | None = None,
+) -> str | None:
+    """Crash-safe periodic checkpoint of an in-flight session.
+
+    A power cut / hard crash mid-shift normally loses the session: the JSON
+    summary is only written on ``stop_session``. This writes the same payload
+    to ``<sessions_dir>/.checkpoints/`` (a subdirectory the session scanner
+    ignores) every few minutes, so a crash loses at most the interval, not
+    the whole shift. ``recover_interrupted_sessions()`` finalizes orphaned
+    checkpoints on the next startup, flagged ``interrupted: true``.
+
+    *meta* carries worker/camera attribution (worker_id, camera_id, ...) that
+    a recovered session would otherwise lose — same fields ``_tag_saved_session``
+    writes on a clean stop.
+    """
+    if not summary.get("total_frames"):
+        return None
+    if not session_id:
+        return None
+
+    sessions_dir = Path(sessions_dir)
+    ckpt_dir = sessions_dir / ".checkpoints"
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
+
+    ts = session_timestamp or datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+    filepath = ckpt_dir / f"session_{ts}_{session_id}.json"
+
+    payload = _build_session_payload(summary, ts, alerts_data)
+    payload["session_id"] = session_id
+    payload.update(meta or {})
+    payload["checkpoint"] = True
+    payload["checkpointed_at"] = datetime.now().isoformat()
+
+    # Atomic write: temp file + rename, so a crash mid-write never leaves a
+    # half-written checkpoint that could be recovered as a "valid" session.
+    tmp = filepath.with_suffix(".tmp")
+    with open(tmp, "w") as f:
+        json.dump(payload, f, indent=2)
+    os.replace(tmp, filepath)
+    return str(filepath)
+
+
+def _summary_from_payload(payload: Dict) -> Dict:
+    """Reconstruct the minimal summary shape ``_append_session_index`` needs."""
+    return {
+        "risk_percentages": payload.get("risk_percentages", {"LOW": 0, "MEDIUM": 0, "HIGH": 0}),
+        "session_duration_seconds": payload.get("session_duration_seconds", 0.0),
+        "most_frequent_issue": payload.get("most_frequent_issue"),
+        "highest_risk_level": payload.get("highest_risk_level", "LOW"),
+    }
+
+
+def recover_interrupted_sessions(sessions_dir: str | Path) -> list[str]:
+    """Finalize orphaned crash checkpoints into real session files.
+
+    Called once at startup. Any ``.checkpoints/session_*.json`` left behind by
+    a hard crash (no clean stop) is promoted to a real ``session_*.json`` in
+    the sessions dir — flagged ``interrupted: true`` so supervisors can tell a
+    crash-truncated shift from a completed one — indexed, and the checkpoint
+    removed. Already-finalized checkpoints (final file exists) are dropped.
+    Returns the paths of recovered sessions.
+    """
+    sessions_dir = Path(sessions_dir)
+    ckpt_dir = sessions_dir / ".checkpoints"
+    if not ckpt_dir.is_dir():
+        return []
+
+    recovered: list[str] = []
+    for filepath in sorted(ckpt_dir.glob("session_*.json")):
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                payload = json.load(f)
+            if not payload.get("total_frames"):
+                filepath.unlink(missing_ok=True)
+                continue
+            final_path = sessions_dir / filepath.name
+            if final_path.exists():
+                # A clean stop already finalized this session — drop the stale
+                # checkpoint rather than creating a duplicate.
+                filepath.unlink(missing_ok=True)
+                continue
+
+            payload.pop("checkpoint", None)
+            payload["interrupted"] = True
+            payload["interrupted_at"] = payload.pop(
+                "checkpointed_at", datetime.now().isoformat()
+            )
+            with open(final_path, "w", encoding="utf-8") as f:
+                json.dump(payload, f, indent=2)
+            _append_session_index(
+                sessions_dir,
+                _summary_from_payload(payload),
+                payload.get("session_timestamp", ""),
+            )
+            filepath.unlink(missing_ok=True)
+            recovered.append(str(final_path))
+        except Exception as exc:  # noqa: BLE001 - one bad checkpoint never blocks the rest
+            logger.warning("Checkpoint recovery failed for %s: %s", filepath, exc)
+    # Tidy the (now empty) checkpoint dir.
+    try:
+        if not any(ckpt_dir.iterdir()):
+            ckpt_dir.rmdir()
+    except Exception:
+        pass
+    return recovered
 
 
 def _append_session_index(

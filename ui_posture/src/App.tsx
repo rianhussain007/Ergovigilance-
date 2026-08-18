@@ -13,6 +13,7 @@ import { useAuth } from './auth/AuthContext';
 // eager; every authed page below is lazy.
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const RequestPilot = lazy(() => import('./pages/RequestPilot'));
+const ValidationPage = lazy(() => import('./pages/ValidationPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
@@ -61,6 +62,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<HomeRoute />} />
             <Route path="/request-pilot" element={<RequestPilot />} />
+            <Route path="/validation" element={<ValidationPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route element={<Layout />}>

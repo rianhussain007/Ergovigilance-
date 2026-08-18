@@ -671,6 +671,9 @@ export default function LandingPage() {
             Heuristic risk thresholds · Not a medical device · For awareness &amp; prioritization
           </p>
           <div className="flex items-center gap-md">
+            <Link to="/validation" className="text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">
+              How we validate
+            </Link>
             <Link to="/request-pilot" className="text-body-sm font-semibold text-primary hover:underline">
               {PILOT_CTA}
             </Link>

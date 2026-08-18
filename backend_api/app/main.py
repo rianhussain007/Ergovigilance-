@@ -74,6 +74,26 @@ def _ensure_ollama_running():
 
 
 RETENTION_INTERVAL_HOURS = float(os.getenv("RETENTION_INTERVAL_HOURS", "6"))
+# How often the background loop writes the risk digest (default: nightly).
+# Set to 0 to disable the scheduled digest (on-demand endpoint still works).
+DIGEST_INTERVAL_HOURS = float(os.getenv("DIGEST_INTERVAL_HOURS", "24"))
+
+
+async def _digest_loop():
+    """Periodically write the risk digest (runs in the event loop)."""
+    if DIGEST_INTERVAL_HOURS <= 0:
+        return
+    while True:
+        try:
+            from app.services.report_digest import generate_digest
+            result = await asyncio.to_thread(generate_digest, 24.0, True)
+            if result["saved"]:
+                logger.info("Risk digest written: %s", result["path"])
+            else:
+                logger.info("Risk digest: no sessions in the last 24h — skipped")
+        except Exception as exc:  # never take the service down over a digest
+            logger.exception("Risk digest pass failed: %s", exc)
+        await asyncio.sleep(DIGEST_INTERVAL_HOURS * 3600)
 
 
 async def _retention_loop():
@@ -111,6 +131,7 @@ async def lifespan(app: FastAPI):
         logger.warning("Postgres init skipped: %s", exc)
 
     retention_task = asyncio.create_task(_retention_loop())
+    digest_task = asyncio.create_task(_digest_loop())
     logger.info(
         "Data retention active (session_days=%.0f recording_days=%.0f cap=%.0f GB, interval=%.1fh)",
         float(os.getenv("SESSION_RETENTION_DAYS", "30")),
@@ -118,6 +139,23 @@ async def lifespan(app: FastAPI):
         float(os.getenv("RECORDINGS_MAX_GB", "20")),
         RETENTION_INTERVAL_HOURS,
     )
+
+    # Crash-safe session recovery: finalize any orphaned .checkpoints from a
+    # hard power cut into real session files (flagged interrupted: true) so
+    # the shift's data survives. Run BEFORE the prewarm threads so recovery
+    # and the cache warmer never race on the same directory.
+    try:
+        from backend.services.session_analytics import recover_interrupted_sessions
+        recovered = recover_interrupted_sessions(SESSIONS_DIR)
+        if recovered:
+            logger.info(
+                "Recovered %d interrupted session(s) from crash checkpoints",
+                len(recovered),
+            )
+            from app.services.session_cache import invalidate_session_cache
+            invalidate_session_cache()
+    except Exception as exc:
+        logger.warning("Session checkpoint recovery failed (non-fatal): %s", exc)
 
     # Non-blocking startup: Ollama check has a network timeout and the corpus
     # load can take seconds — neither should delay first request readiness.

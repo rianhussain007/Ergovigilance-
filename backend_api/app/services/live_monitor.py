@@ -30,7 +30,11 @@ if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
 from backend.services.pose_engine import PoseEngine, ProcessedFrame, RISK_LEVELS
-from backend.services.session_analytics import SessionAnalytics, save_session_summary
+from backend.services.session_analytics import (
+    SessionAnalytics,
+    save_session_checkpoint,
+    save_session_summary,
+)
 from backend.context.engine import ContextIntelligenceEngine
 from backend.events.event_bus import EventBus, get_event_bus
 from backend.events.events import (
@@ -381,6 +385,16 @@ class LiveMonitoringService:
         # MediaPipe landmarks on a photo makes it look like a monitored,
         # physically-present worker. Re-computed each processed frame.
         self._skeleton_suppressed: bool = False
+        # Crash-safe session checkpoints: periodically persist the in-flight
+        # summary so a power cut loses at most SESSION_CHECKPOINT_SECONDS
+        # instead of the whole shift (recovered on next startup).
+        self._checkpoint_last: float = 0.0
+        try:
+            self._checkpoint_interval: float = max(
+                0.0, float(os.environ.get("SESSION_CHECKPOINT_SECONDS", "120"))
+            )
+        except (TypeError, ValueError):
+            self._checkpoint_interval = 120.0
         # Camera reconnect bookkeeping (capture thread only).
         self._read_failures: int = 0
         self._reconnect_delay: float = _CAPTURE_RECONNECT_BASE_S
@@ -457,6 +471,7 @@ class LiveMonitoringService:
         self._frame_counter = 0
         self._capture_counter = 0
         self._last_process_time = 0.0
+        self._checkpoint_last = 0.0
         self._frame_queue.clear()
 
         self.state = LiveState(
@@ -1273,6 +1288,38 @@ class LiveMonitoringService:
             self.state.person_boxes = list(self._person_boxes)
             self.state.person_identities = [dict(r) for r in self._person_identities]
             self.state.identified_worker = dict(self._identified_worker)
+
+        # ── Crash-safe checkpoint (throttled) ────────────────────────
+        # A power cut mid-shift normally loses the session: the summary JSON
+        # is only written on stop_session. Persist every
+        # SESSION_CHECKPOINT_SECONDS so a crash loses at most the interval.
+        # Small JSON write (few ms), throttled — never blocks the pipeline
+        # meaningfully; a failure only degrades crash recovery, never the
+        # live loop.
+        try:
+            now_ck = time.perf_counter()
+            if (
+                self._checkpoint_interval > 0
+                and now_ck - self._checkpoint_last >= self._checkpoint_interval
+            ):
+                self._checkpoint_last = now_ck
+                if hasattr(self.analytics, "get_summary") and self.state.session_id:
+                    summary = self.analytics.get_summary()
+                    save_session_checkpoint(
+                        summary,
+                        self.sessions_dir,
+                        self.current_session_timestamp,
+                        self.state.session_id,
+                        alerts_data=self.alert_engine.export(),
+                        meta={
+                            "worker_id": self.current_worker_id,
+                            "created_by_user_id": self.current_created_by_user_id,
+                            "camera_id": self.current_camera_id,
+                            "task_name": getattr(self.state, "task_name", None) or None,
+                        },
+                    )
+        except Exception as exc:
+            logger.warning("Session checkpoint failed (skipped): %s", exc)
         # No sleep here — the _process_interval throttle above already pacing.
     
     def get_frame(self, overlaid: bool = True) -> Optional[np.ndarray]:

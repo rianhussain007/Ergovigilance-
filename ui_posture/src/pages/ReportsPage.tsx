@@ -78,6 +78,10 @@ export default function ReportsPage() {
   const [loadingSafety, setLoadingSafety] = useState(false);
   const [workerTrendsData, setWorkerTrendsData] = useState<WorkerTrendsResponse | null>(null);
   const [loadingWorkerTrends, setLoadingWorkerTrends] = useState(false);
+  // Nightly risk digest
+  const [digestSummary, setDigestSummary] = useState<{ session_count: number; alert_count: number; highest_risk_level: string; risk_percentages: Record<string, number> } | null>(null);
+  const [digestList, setDigestList] = useState<{ filename: string; generated_at: string; summary: { session_count: number } }[]>([]);
+  const [loadingDigest, setLoadingDigest] = useState(false);
   const { addToast } = useToast();
 
   const fetchReports = useCallback(async () => {
@@ -96,6 +100,37 @@ export default function ReportsPage() {
   useEffect(() => {
     fetchReports();
   }, [fetchReports]);
+
+  const fetchDigests = useCallback(async () => {
+    try {
+      const res = await apiFetch('/api/reports/digest');
+      if (!res.ok) return;
+      const data = await res.json();
+      setDigestList(data?.digests ?? []);
+    } catch {
+      // Non-fatal — the digest card simply shows nothing saved yet.
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDigests();
+  }, [fetchDigests]);
+
+  const handleGenerateDigest = async () => {
+    setLoadingDigest(true);
+    try {
+      const res = await apiFetch('/api/reports/digest/generate', { method: 'POST' });
+      if (!res.ok) throw new Error(`Digest request failed (${res.status})`);
+      const data = await res.json();
+      setDigestSummary(data?.summary ?? null);
+      addToast('success', 'Digest generated', data?.saved ? 'Saved to outputs/reports/' : 'Nothing in the last 24 hours yet.');
+      fetchDigests();
+    } catch (err) {
+      addToast('error', 'Failed', err instanceof Error ? err.message : 'Could not generate the digest.');
+    } finally {
+      setLoadingDigest(false);
+    }
+  };
 
   useEffect(() => {
     if (searchParams.get('view') === 'risk-trend') {
@@ -233,6 +268,61 @@ export default function ReportsPage() {
         <h1 className="text-display-lg font-bold text-on-surface">Reports</h1>
         <p className="text-body-sm text-on-surface-variant mt-xs">Generate, search, and download ergonomic reports</p>
       </div>
+
+      {/* Nightly Risk Digest */}
+      <section className="bg-surface-container border border-outline-variant rounded-xl p-lg">
+        <div className="flex items-center justify-between flex-wrap gap-md mb-md">
+          <div className="flex items-center gap-sm">
+            <FileText className="w-5 h-5 text-primary" />
+            <div>
+              <h2 className="text-body-md font-bold text-on-surface">Nightly Risk Digest</h2>
+              <p className="text-body-sm text-on-surface-variant mt-0.5">Zero-touch summary of the last 24 h — written automatically each night to outputs/reports/</p>
+            </div>
+          </div>
+          <button
+            onClick={handleGenerateDigest}
+            disabled={loadingDigest}
+            className="flex items-center gap-sm rounded-lg border border-primary/40 bg-primary/10 px-md py-sm text-body-sm font-bold text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+          >
+            <FileText className="w-4 h-4" />
+            {loadingDigest ? 'Generating…' : 'Generate Now'}
+          </button>
+        </div>
+        {digestSummary && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-md text-body-sm mb-md">
+            <div>
+              <span className="text-on-surface-variant">Sessions (24 h)</span>
+              <p className="font-bold text-on-surface mt-0.5">{digestSummary.session_count}</p>
+            </div>
+            <div>
+              <span className="text-on-surface-variant">Alerts</span>
+              <p className="font-bold text-on-surface mt-0.5">{digestSummary.alert_count}</p>
+            </div>
+            <div>
+              <span className="text-on-surface-variant">Highest risk</span>
+              <p className={`font-bold mt-0.5 ${riskColor(digestSummary.highest_risk_level)}`}>{digestSummary.highest_risk_level}</p>
+            </div>
+            <div className="flex items-end gap-sm">
+              {(['LOW', 'MEDIUM', 'HIGH'] as const).map((l) => (
+                <div key={l} className="text-center">
+                  <p className={`text-body-sm font-bold ${riskColor(l)}`}>{((digestSummary.risk_percentages[l] ?? 0)).toFixed(0)}%</p>
+                  <p className="text-[10px] text-on-surface-variant">{l}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {digestList.length > 0 && (
+          <ul className="space-y-1">
+            {digestList.slice(0, 5).map((d) => (
+              <li key={d.filename} className="flex items-center justify-between text-body-sm border-t border-outline-variant/50 pt-1">
+                <span className="font-mono text-on-surface-variant">{d.filename}</span>
+                <span className="text-on-surface-variant">{d.summary?.session_count ?? 0} sessions · {d.generated_at ? formatISTDate(d.generated_at) : ''}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section className="grid grid-cols-1 md:grid-cols-3 gap-md">
         <button
