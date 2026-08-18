@@ -31,6 +31,7 @@ const AuditTrail = lazy(() => import('./pages/AuditTrail'));
 const WorkersPage = lazy(() => import('./pages/WorkersPage'));
 const UsersPage = lazy(() => import('./pages/UsersPage'));
 const PilotRequestsPage = lazy(() => import('./pages/PilotRequestsPage'));
+const SetupWizardPage = lazy(() => import('./pages/SetupWizardPage'));
 
 function HomeRoute() {
   const { user } = useAuth();
@@ -82,6 +83,7 @@ export default function App() {
               <Route path="/workers" element={<WorkersPage />} />
               <Route path="/users" element={<UsersPage />} />
               <Route path="/pilot-requests" element={<PilotRequestsPage />} />
+              <Route path="/setup" element={<SetupWizardPage />} />
             </Route>
           </Routes>
         </AppSuspense>

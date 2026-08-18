@@ -37,6 +37,7 @@ from app.api.privacy import router as privacy_router
 from app.api.observations import router as observations_router
 from app.api.report_digest import router as report_digest_router
 from app.api.evidence import router as evidence_router
+from app.api.setup import router as setup_router
 
 api_router = APIRouter()
 
@@ -75,3 +76,4 @@ api_router.include_router(privacy_router, prefix="/api", tags=["Privacy"])
 api_router.include_router(observations_router, prefix="/api", tags=["Session Lifecycle"])
 api_router.include_router(report_digest_router, prefix="/api", tags=["Reports"])
 api_router.include_router(evidence_router, prefix="/api", tags=["Sessions"])
+api_router.include_router(setup_router, prefix="/api", tags=["Setup"])

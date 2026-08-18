@@ -165,6 +165,13 @@ export default function SettingsPage() {
               )}
             </select>
           )}
+          <a
+            href="/setup"
+            className="mt-sm inline-flex items-center gap-sm rounded-lg border border-primary/40 bg-primary/10 px-md py-sm text-body-sm font-bold text-primary hover:bg-primary/20 transition-colors"
+          >
+            <Camera className="w-4 h-4" />
+            Open Camera Setup Wizard
+          </a>
         </SettingSection>
 
         <SettingSection icon={Activity} title="Performance">
