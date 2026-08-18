@@ -207,6 +207,27 @@ def test_static_face_without_blinks_is_suspicious(monkeypatch):
     assert v["blinks"] == 0
 
 
+def test_frozen_landmarks_with_camera_noise_is_suspicious(monkeypatch):
+    """A photo held by a slightly-shaky hand: pixel motion defeats the old
+    ``motion_frac < 0.05`` rule, but the FACE landmarks never move enough for
+    a homography fit and it never blinks — the frozen rule catches it."""
+    tracker = liveness.FaceLivenessTracker()
+    monkeypatch.setattr(liveness, "SUSPICIOUS_MIN_SECONDS", 0.0)
+    base = _base_grid()
+    _monkeypatch_samples(monkeypatch, ear_values=[0.30] * 12,
+                         point_sets=[base.astype(np.float32)] * 12)
+    # Pixel-level noise (shaky hand / camera noise) that used to defeat the
+    # old motion_frac rule.
+    rng = np.random.default_rng(3)
+    frames = [np.full((240, 320, 3), int(128 + rng.integers(0, 20)), np.uint8)
+              for _ in range(12)]
+    v = _run(tracker, 12, frames=frames)
+    assert v["motion_fraction"] > 0.5    # old rule would NOT have flagged it
+    assert v["planar_fraction"] == 0.0   # no homography ever fit (frozen)
+    assert v["blinks"] == 0
+    assert v["liveness"] == "suspicious"  # frozen rule catches it
+
+
 def test_multiple_faces_tracked_independently(monkeypatch):
     """Two boxes get separate verdicts (IoU association)."""
     tracker = liveness.FaceLivenessTracker()

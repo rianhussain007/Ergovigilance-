@@ -498,7 +498,18 @@ def _burn_overlay(video_path: str, frames: list[VideoAnalysisFrame], frame_step:
                 analyzed = by_index.get(frame_index)
                 if analyzed is not None:
                     last_analyzed = analyzed
-                if last_analyzed is not None and last_analyzed.keypoints:
+                # A face the anti-spoof liveness gate flagged as a photo/screen
+                # must NOT get a posture skeleton burned over it — same rule
+                # as the live feed (no MediaPipe landmarks on a spoof).
+                identities = getattr(last_analyzed, "person_identities", None) or []
+                primary_suspicious = False
+                if identities:
+                    primary = max(
+                        identities,
+                        key=lambda e: (e["box"]["x2"] - e["box"]["x1"]) * (e["box"]["y2"] - e["box"]["y1"]),
+                    )
+                    primary_suspicious = primary.get("liveness") == "suspicious"
+                if last_analyzed is not None and last_analyzed.keypoints and not primary_suspicious:
                     try:
                         frame = draw_skeleton(
                             frame,
@@ -507,16 +518,22 @@ def _burn_overlay(video_path: str, frames: list[VideoAnalysisFrame], frame_step:
                             features=last_analyzed.features,
                             region_levels=last_analyzed.region_risks,
                         )
-                        # Person boxes + per-person identity tags (same rules
-                        # as the live feed). Unknown faces are tagged
-                        # "Not recognized" by draw_person_boxes.
-                        if getattr(last_analyzed, "person_boxes", None) or getattr(last_analyzed, "person_identities", None):
-                            draw_person_boxes(
-                                frame,
-                                last_analyzed.person_boxes or [],
-                                identified_worker=None,
-                                person_identities=last_analyzed.person_identities or [],
-                            )
+                    except Exception:  # noqa: BLE001 - never fail the whole job on one frame
+                        pass
+                # Person boxes + per-person identity tags ALWAYS draw (also on
+                # a spoofed face — the amber PHOTO? tag is the warning).
+                # Unknown faces are tagged "Not recognized" by draw_person_boxes.
+                if last_analyzed is not None and (
+                    getattr(last_analyzed, "person_boxes", None)
+                    or getattr(last_analyzed, "person_identities", None)
+                ):
+                    try:
+                        draw_person_boxes(
+                            frame,
+                            last_analyzed.person_boxes or [],
+                            identified_worker=None,
+                            person_identities=last_analyzed.person_identities or [],
+                        )
                     except Exception:  # noqa: BLE001 - never fail the whole job on one frame
                         pass
                 writer.write(frame)

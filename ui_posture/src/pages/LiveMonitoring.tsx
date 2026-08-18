@@ -530,19 +530,29 @@ function CameraFramingCard({ snapshot, unavailableFeatures, active }: { snapshot
                 const emp = p.employee_id || p.worker_id;
                 const matched = !!p.matched && !!p.worker_id;
                 const spoofed = matched && p.liveness === 'suspicious';
-                // Tag by Employee ID; flag spoofed (photo) faces explicitly.
+                const verifying = matched && !spoofed && p.liveness !== 'live';
+                // Tag by Employee ID. A matched face only counts as PRESENT
+                // once the liveness gate proves it live — otherwise it's
+                // flagged PHOTO? (spoof) or VERIFYING (still accumulating
+                // blink/motion evidence).
                 const tag = matched
-                  ? `${emp}${p.confidence && p.confidence > 0 ? ` · ${(p.confidence * 100).toFixed(0)}%` : ''}${spoofed ? ' · PHOTO?' : ''}`
+                  ? `${emp}${p.confidence && p.confidence > 0 ? ` · ${(p.confidence * 100).toFixed(0)}%` : ''}${spoofed ? ' · PHOTO?' : verifying ? ' · VERIFYING' : ''}`
                   : p.seen || (p.confidence && p.confidence > 0)
                     ? 'Not recognized'
                     : null;
                 if (!tag) return null;
+                const color = spoofed ? 'text-orange-400' : verifying ? 'text-amber-300' : matched ? 'text-emerald-300' : 'text-amber-300';
                 return (
-                  <li key={i} className={`text-body-sm ${spoofed ? 'text-orange-400' : matched ? 'text-emerald-300' : 'text-amber-300'} font-medium`}>
-                    {spoofed ? '⚠ ' : matched ? '✓ ' : ''}{tag}
+                  <li key={i} className={`text-body-sm ${color} font-medium`}>
+                    {spoofed ? '⚠ ' : matched && !verifying ? '✓ ' : ''}{tag}
                   </li>
                 );
               })}
+              {personIdentities.some((p) => !!p.matched && p.liveness === 'suspicious') && (
+                <li className="mt-1 text-body-sm font-bold text-orange-400">
+                  ⚠ Spoof detected — face is a photo/screen, NOT physically present
+                </li>
+              )}
             </ul>
           ) : active && personCount ? (
             <p className="text-body-sm text-on-surface-variant mt-1">Worker identity: not enrolled / unseen</p>

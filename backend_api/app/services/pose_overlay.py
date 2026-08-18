@@ -402,10 +402,15 @@ def draw_person_boxes(frame, person_boxes, identified_worker=None, person_identi
             conf = float(entry.get("confidence", 0.0) or 0.0)
             base = f"{emp}  ({conf:.0%})" if conf > 0 else emp
             if liveness == "suspicious":
-                # Face matched an enrolled worker but shows NO blinks and NO
-                # motion — consistent with a photo / frozen frame, not a live
-                # person. Never present it as physically present.
+                # Face matched an enrolled worker but the anti-spoof liveness
+                # gate flags it as a photo/screen — never present it as
+                # physically present.
                 return f"{base}  PHOTO?"
+            if liveness == "unverified":
+                # Matched but NOT yet proven live (first seconds / tracker
+                # still accumulating samples) — say so instead of silently
+                # rendering it as a confirmed present worker.
+                return f"{base}  VERIFYING"
             return base
         if entry.get("seen"):
             return "Not recognized"
@@ -447,8 +452,11 @@ def draw_person_boxes(frame, person_boxes, identified_worker=None, person_identi
 
         if entry.get("matched") and entry.get("liveness") == "suspicious":
             color = (0, 120, 255)  # matched but PHOTO (amber-orange) — spoofed
+        elif entry.get("matched") and entry.get("liveness") == "live":
+            color = (64, 224, 120)  # verified-live worker green
         elif entry.get("matched"):
-            color = (64, 224, 120)  # recognized live worker green
+            color = (0, 200, 255)  # matched but UNVERIFIED (amber-yellow) —
+            # never green until the liveness gate has proven the face is live
         elif tag:
             color = (80, 170, 255)  # seen but not recognized amber-blue
         else:

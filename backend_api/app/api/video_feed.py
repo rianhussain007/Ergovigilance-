@@ -91,7 +91,10 @@ def _generate_mjpeg(overlay: bool = True):
                 # inference (~8 fps), which made the overlay visibly lag.
                 payload = service.get_overlay_payload(capture_counter)
                 keypoints = payload.get("keypoints") or []
-                if keypoints:
+                # skeleton_visible is False when the primary identified face is
+                # a confirmed photo/screen — no MediaPipe landmarks on a
+                # spoofed face (it must not look like a monitored worker).
+                if keypoints and payload.get("skeleton_visible", True):
                     draw_skeleton(
                         frame,
                         keypoints,
@@ -120,7 +123,7 @@ def _generate_mjpeg(overlay: bool = True):
                         exc,
                     )
 
-        ret, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
+        ret, jpeg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 55])
         if not ret:
             continue
 

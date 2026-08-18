@@ -78,14 +78,18 @@ BLINK_EAR_THRESHOLD = float(os.environ.get("BLINK_EAR_THRESHOLD", "0.19"))
 # Minimum IoU for two boxes to be the same tracked face.
 _TRACK_IOU = 0.5
 # A face seen this long with no blinks and no motion is judged suspicious.
-SUSPICIOUS_MIN_SECONDS = float(os.environ.get("SUSPICIOUS_MIN_SECONDS", "6.0"))
+# 3 s (not 6) so a held-up photo gets flagged within a few seconds of
+# appearing — the old 6 s window meant a photo rendered GREEN "present" for
+# the entire window and most short demos never saw the verdict fire.
+SUSPICIOUS_MIN_SECONDS = float(os.environ.get("SUSPICIOUS_MIN_SECONDS", "3.0"))
 # Planar (2D) motion must persist this long (with no live signal appearing)
-# before the face flips to suspicious. Deliberately as long as the frozen
-# rule: a real person walking produces homography-explained (planar) motion
-# too, but virtually every real person blinks or moves their mouth within a
-# few seconds — so 6 s of pure planar evidence with zero live signals is a
-# high-confidence "this is a flat surface" verdict, not a false positive.
-PLANAR_SUSPICIOUS_SECONDS = float(os.environ.get("PLANAR_SUSPICIOUS_SECONDS", "6.0"))
+# before the face flips to suspicious. A real person walking produces
+# homography-explained (planar) motion too, but virtually every real person
+# blinks or moves their mouth within a few seconds — so 3 s of pure planar
+# evidence with zero live signals is a high-confidence "this is a flat
+# surface" verdict. The verdict self-corrects the instant a blink appears
+# (blinks >= LIVE_MIN_BLINKS flips it straight back to ``live``).
+PLANAR_SUSPICIOUS_SECONDS = float(os.environ.get("PLANAR_SUSPICIOUS_SECONDS", "3.0"))
 # Blinks at or above this confirm liveness outright.
 LIVE_MIN_BLINKS = int(os.environ.get("LIVE_MIN_BLINKS", "1"))
 # Mean-abs-diff (8-bit grayscale) above this counts as "motion" in the crop.
@@ -283,8 +287,13 @@ class _FaceTrack:
             # Sustained motion fully explained by a single homography -> a
             # flat 2D surface (a waved photo / phone screen) at the camera.
             status = "suspicious"
-        elif observed >= SUSPICIOUS_MIN_SECONDS and motion_frac < 0.05:
-            # Face frozen in place, no blinks -> held-still photo / frozen frame.
+        elif observed >= SUSPICIOUS_MIN_SECONDS and (motion_frac < 0.05 or self.decided_samples == 0):
+            # Face frozen in place, no blinks -> held-still photo / frozen
+            # frame. ``decided_samples == 0`` covers a photo the landmarks
+            # never moved enough to homography-fit (tripod-held or leaned
+            # against a stand): pixel/camera noise may produce motion, but the
+            # FACE is frozen and it never blinked — a live person's head
+            # sways and blinks within a few seconds.
             status = "suspicious"
         else:
             status = "unverified"

@@ -106,14 +106,15 @@ def _process_fps_target() -> float:
 # MediaPipe at 1280x720 takes ~380 ms/frame on this CPU (~2.6 fps); at ~640
 # wide it drops to ~300 ms and at ~480 wide ~180 ms (~5.6 fps) — the skeleton
 # then refreshes ~2x faster so it tracks the person instead of visibly
-# lagging. Keypoints are normalized to 0-1 and the overlay is drawn on the
+# lagging. Default is 480 wide for maximum overlay fps (the whole point of
+# this knob); keypoints are normalized to 0-1 and the overlay is drawn on the
 # full-resolution display frame, so inference resolution does not affect
 # output quality. Override with POSE_INFERENCE_WIDTH.
 def _inference_max_width() -> int:
     try:
-        return max(320, int(os.environ.get("POSE_INFERENCE_WIDTH", "640")))
+        return max(320, int(os.environ.get("POSE_INFERENCE_WIDTH", "480")))
     except (TypeError, ValueError):
-        return 640
+        return 480
 
 
 def _resolve_camera_source(camera_index: int, camera_id: str | None) -> int | str:
@@ -375,6 +376,11 @@ class LiveMonitoringService:
         self._liveness_tracker = FaceLivenessTracker()
         self._liveness_last: float = 0.0
         self._liveness_interval: float = 0.4
+        # When the primary identified face is flagged as a spoof (photo /
+        # screen), the posture skeleton must NOT be drawn over it — showing
+        # MediaPipe landmarks on a photo makes it look like a monitored,
+        # physically-present worker. Re-computed each processed frame.
+        self._skeleton_suppressed: bool = False
         # Camera reconnect bookkeeping (capture thread only).
         self._read_failures: int = 0
         self._reconnect_delay: float = _CAPTURE_RECONNECT_BASE_S
@@ -967,6 +973,9 @@ class LiveMonitoringService:
         if now - self._last_process_time < self._process_interval:
             return
         self._last_process_time = now
+        # Fresh verdict each frame — a blink can flip a photo back to "live"
+        # within one sample, so suppression must never persist stale.
+        self._skeleton_suppressed = False
 
         inference_start = time.perf_counter()
         # Process the RAW frame: MediaPipe labels landmarks by the body as
@@ -1008,9 +1017,17 @@ class LiveMonitoringService:
             now_detect = time.perf_counter()
             if now_detect - self._person_detect_last >= PERSON_DETECT_INTERVAL_S:
                 self._person_detect_last = now_detect
-                boxes = detect_persons(frame)
+                # Detect + identify on the DOWNSCALED mirrored frame: YOLO /
+                # YuNet / SFace are ~4x cheaper at inference width, and the
+                # boxes are normalized 0-1 so accuracy is preserved while the
+                # pipeline thread stays free (directly raises overlay fps).
+                if inference_frame is frame:
+                    det_frame = frame  # already mirrored, small enough
+                else:
+                    det_frame = cv2.flip(inference_frame, 1)
+                boxes = detect_persons(det_frame)
                 self._person_boxes = boxes
-                identified = identify_persons_in_frame(frame, boxes)
+                identified = identify_persons_in_frame(det_frame, boxes)
                 # Keep EVERY person's identity (box + worker_id + name). Each
                 # entry already carries its own box, so the overlay can tag
                 # each person individually — recognized or "Not recognized".
@@ -1029,7 +1046,14 @@ class LiveMonitoringService:
             if now_live - self._liveness_last >= self._liveness_interval:
                 self._liveness_last = now_live
                 if self._person_boxes:
-                    verdicts = self._liveness_tracker.update(frame, self._person_boxes)
+                    # Sample liveness on the downscaled mirrored frame too —
+                    # FaceLandmarker runs on the (already 96x96) crop, so the
+                    # full-res frame buys nothing here and costs crop time.
+                    if inference_frame is frame:
+                        live_frame = frame
+                    else:
+                        live_frame = cv2.flip(inference_frame, 1)
+                    verdicts = self._liveness_tracker.update(live_frame, self._person_boxes)
                     if verdicts and self._person_identities:
                         for idx, verdict in verdicts.items():
                             if idx < len(self._person_identities):
@@ -1038,6 +1062,11 @@ class LiveMonitoringService:
                         # (photo) — re-derive the primary card so it reflects
                         # the fresh verdict immediately, not on the next 2s pass.
                         self._derive_identified_worker()
+                        # A spoofed primary face must NOT get a posture
+                        # skeleton — no MediaPipe landmarks on a photo.
+                        self._skeleton_suppressed = bool(
+                            self._identified_worker.get("liveness") == "suspicious"
+                        )
         except Exception as exc:
             logger.warning("Liveness sampling failed (skipped): %s", exc)
     
@@ -1345,6 +1374,9 @@ class LiveMonitoringService:
             "person_boxes": person_boxes,
             "person_identities": person_identities,
             "identified_worker": identified_worker,
+            # False when the primary face is a confirmed photo/screen — the
+            # feed must not paint MediaPipe landmarks on a spoof.
+            "skeleton_visible": not self._skeleton_suppressed,
         }
 
     def get_ws_payload(self) -> dict:

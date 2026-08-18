@@ -343,17 +343,19 @@ function drawPersonIdentities(
     const isPrimary = entry === primary;
     const matched = !!entry.matched && !!entry.worker_id;
     const spoofed = matched && entry.liveness === 'suspicious';
+    const verifying = matched && !spoofed && entry.liveness !== 'live';
     // Tag with the EMPLOYEE ID (HR-facing number), not the name; append
-    // PHOTO? when the anti-spoof liveness check flags the face as a photo.
+    // PHOTO? when the anti-spoof liveness check flags the face as a photo,
+    // VERIFYING while the liveness gate is still accumulating evidence.
     const emp = entry.employee_id || entry.worker_id || '';
     const tag =
       matched
-        ? emp + (entry.confidence && entry.confidence > 0 ? `  (${(entry.confidence * 100).toFixed(0)}%)` : '') + (spoofed ? '  PHOTO?' : '')
+        ? emp + (entry.confidence && entry.confidence > 0 ? `  (${(entry.confidence * 100).toFixed(0)}%)` : '') + (spoofed ? '  PHOTO?' : verifying ? '  VERIFYING' : '')
         : entry.seen
           ? 'Not recognized'
           : null;
 
-    const color = spoofed ? '#ff7830' : matched ? '#40e078' : tag ? '#55aaff' : '#788aa8';
+    const color = spoofed ? '#ff7830' : verifying ? '#ffc800' : matched ? '#40e078' : tag ? '#55aaff' : '#788aa8';
     const x1 = toX(entry.box.x1);
     const y1 = toY(entry.box.y1);
     const x2 = toX(entry.box.x2);
