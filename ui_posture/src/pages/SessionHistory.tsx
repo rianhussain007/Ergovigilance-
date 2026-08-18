@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router';
-import { Search, AlertTriangle, CheckCircle, XCircle, Clock, ExternalLink, RotateCcw } from 'lucide-react';
+import { Search, AlertTriangle, CheckCircle, XCircle, Clock, ExternalLink, RotateCcw, FileDown } from 'lucide-react';
+import { getStoredToken } from '@/src/auth/AuthContext';
 import type { StatusType, SessionDetail, SessionAlertEntry, SessionRecord } from '@/src/types/api';
 import { getSessionDetail, getSessions } from '@/src/services/dashboardService';
 import { StatusBadge, LoadingCard, ErrorCard, EmptyState, SectionHeader } from '@/src/components/common';
@@ -87,6 +88,29 @@ function RiskBar({ label, pct, color }: { label: string; pct: number; color: str
       <span className="font-label-mono text-label-mono text-on-surface w-12 text-right">{pct.toFixed(1)}%</span>
     </div>
   );
+}
+
+// Download the incident evidence package (zip: session + timeline + alerts +
+// video) for OSHA / insurance / workers'-comp review.
+async function downloadEvidence(sessionId: string) {
+  try {
+    const token = getStoredToken();
+    const res = await fetch(`/api/sessions/${encodeURIComponent(sessionId)}/evidence`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error(`Evidence package failed (${res.status})`);
+    const blob = await res.blob();
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `evidence_${sessionId}.zip`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+  } catch (err) {
+    console.error('Evidence download failed:', err);
+    alert(err instanceof Error ? err.message : 'Could not download the evidence package.');
+  }
 }
 
 export default function SessionHistory() {
@@ -416,6 +440,14 @@ export default function SessionHistory() {
                   Open in Replay
                 </button>
               )}
+              {/* Incident evidence package: one-click zip for OSHA / insurance */}
+              <button
+                className="mt-md w-full flex items-center justify-center gap-sm rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm text-body-sm font-semibold text-on-surface hover:border-primary/40 hover:bg-surface-container transition-colors"
+                onClick={() => downloadEvidence(detail.id)}
+              >
+                <FileDown className="w-4 h-4 text-primary" />
+                Incident Evidence Package (zip)
+              </button>
             </div>
 
             {/* Risk Breakdown */}
