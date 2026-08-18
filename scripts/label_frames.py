@@ -249,14 +249,22 @@ def build_overlay_index(timeline_path: Path) -> list[tuple[float, dict]]:
     return pairs
 
 
-def save(out_path: Path, meta: dict, frames: dict) -> None:
+def save(out_path: Path, meta: dict, frames: dict, confirmed: set | None = None) -> None:
+    """Write labels to disk.
+
+    Only frames the human actually keyed (``confirmed``) are written — a
+    provisional prelabel that nobody reviewed must never be recorded as human
+    ground truth. Without ``confirmed`` (e.g. tests) all frames are written.
+    """
+    if confirmed is not None:
+        frames = {k: frames[k] for k in confirmed if k in frames}
     meta["frames"] = [{"frame": int(f), "label": label} for f, label in sorted(frames.items())]
     out_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
     counts: dict[str, int] = {}
     for label in frames.values():
         counts[label] = counts.get(label, 0) + 1
     summary = ", ".join(f"{k}={v}" for k, v in sorted(counts.items()))
-    print(f"Saved {len(frames)} labels to {out_path} ({summary})")
+    print(f"Saved {len(frames)} human-confirmed labels to {out_path} ({summary})")
 
 
 def main() -> None:
@@ -543,7 +551,7 @@ def main() -> None:
                 confirmed.add(idx)
                 new_since_save += 1
                 if new_since_save >= AUTO_SAVE_EVERY:
-                    save(out_path, meta, frames)
+                    save(out_path, meta, frames, confirmed)
                     new_since_save = 0
                 # Advance to the next unconfirmed candidate (prelabels get reviewed too)
                 nxt = idx + args.step
@@ -559,12 +567,14 @@ def main() -> None:
     cap.release()
     cv2.destroyAllWindows()
 
-    if frames:
-        save(out_path, meta, frames)
-        print(f"\nDone. {len(frames)} frames labeled for session {meta['session_id']} "
+    if confirmed:
+        save(out_path, meta, frames, confirmed)
+        print(f"\nDone. {len(confirmed)} frames labeled for session {meta['session_id']} "
               f"by {meta['labeler']} on {meta['date']}.")
     else:
-        print("\nNo labels recorded — nothing saved.")
+        print("\nNo frames confirmed by pressing a label key — nothing saved. "
+              "(Provisional prelabels are never written as ground truth; "
+              "press a key on each frame to confirm it.)")
 
 
 if __name__ == "__main__":

@@ -235,6 +235,10 @@ def main() -> None:
         result["risk_classification"] = build_report(
             risk_true, risk_pred, sorted(set(risk_true) | set(risk_pred))
         )
+        # Top-level alias so the /validation page (reads gt.accuracy) works
+        # without knowing the internal section name.
+        result["accuracy"] = result["risk_classification"]["accuracy"]
+        result["n_samples"] = len(risk_true)
         print("\n--- RISK CLASSIFICATION ---")
         print(f"Accuracy: {result['risk_classification']['accuracy']:.4f} "
               f"(n={len(risk_true)})")
