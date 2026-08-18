@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router';
 import { AnalyticCard } from '@/src/components/cards';
 import { RiskHistoryChart, CameraPanel } from '@/src/components/charts';
 import { SectionHeader, LoadingCard, ErrorCard, ExportsCenter, LiveAlerts, ContextAwareRiskCard, RecommendationsCard, PredictiveInsightsCard } from '@/src/components/common';
@@ -141,6 +142,15 @@ export default function LiveMonitoring() {
   const approximateFeatures = contextSnapshot?.approximate_features ?? [];
   // Single source of truth: is a live session actually running right now?
   const isActive = session?.cameraStatus === 'active';
+  // Post-stop prompt: when a session ends, tell the operator their report is
+  // ready instead of leaving them to hunt through two navigations (QA #5).
+  const [justStopped, setJustStopped] = useState(false);
+  const prevActiveRef = useRef(isActive);
+  useEffect(() => {
+    if (prevActiveRef.current && !isActive) setJustStopped(true);
+    prevActiveRef.current = isActive;
+  }, [isActive]);
+  const navigate = useNavigate();
   const hasTimeline = liveTimeline.length > 0;
 
   // Filter displayed issues by the user's alert threshold (low | moderate | high).
@@ -152,6 +162,36 @@ export default function LiveMonitoring() {
 
   return (
     <div className="p-lg space-y-lg pb-xl">
+      {/* ── Plain-language posture status (operator layer) ── */}
+      <PostureStatusBanner riskLevel={liveStatus.riskLevel} active={isActive} currentTask={liveStatus.currentTask} />
+
+      {/* ── Post-stop: session saved — report is ready ── */}
+      {justStopped && (
+        <div className="rounded-xl border border-green-500/30 bg-green-500/5 px-lg py-md flex flex-wrap items-center justify-between gap-md">
+          <div className="flex items-center gap-md">
+            <FileText className="w-5 h-5 text-emerald-300" />
+            <div>
+              <p className="text-body-md font-bold text-emerald-300">Session saved — your report is ready.</p>
+              <p className="text-body-sm text-on-surface-variant">Open Session History to review it, replay the video, or export the evidence package.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-sm">
+            <button
+              className="rounded-lg bg-primary px-md py-sm text-body-sm font-bold text-on-primary hover:opacity-90 transition-opacity"
+              onClick={() => navigate('/sessions')}
+            >
+              View Session Report
+            </button>
+            <button
+              className="rounded-lg border border-outline-variant px-md py-sm text-body-sm text-on-surface-variant hover:text-on-surface transition-colors"
+              onClick={() => setJustStopped(false)}
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Live status: camera feed + session/task/status panel ── */}
       <section className="rounded-lg border border-cyan-400/15 bg-[#080d13] p-md shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
         <div className="mb-md flex flex-wrap items-center justify-between gap-md">
@@ -438,10 +478,11 @@ function RulaScoreCard({ snapshot, active }: { snapshot: ContextSnapshot | null;
     <div className="bg-surface-container border border-outline-variant rounded-xl p-lg">
       <div className="flex items-center gap-sm mb-md">
         <Brain className="w-4 h-4 text-purple-400" />
-        <SectionHeader title="RULA / REBA Score" />
+        <SectionHeader title="Posture Assessment" />
       </div>
+      <p className="text-[11px] text-on-surface-variant/70 -mt-sm mb-md">RULA/REBA-informed score (technical detail for supervisors)</p>
       {!active ? (
-        <IdleNote message="Start monitoring to see the RULA/REBA score." />
+        <IdleNote message="Start monitoring to see the posture assessment." />
       ) : method && score != null ? (
         <>
           <div className="flex items-center gap-md">
@@ -565,6 +606,53 @@ function CameraFramingCard({ snapshot, unavailableFeatures, active }: { snapshot
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Plain-language posture status (the tired-worker layer) ──
+// Big, jargon-free, color-coded: a worker at 3 m should know in one glance
+// whether their posture is OK, needs attention, or must be corrected NOW.
+// Technical detail (RULA/REBA bands, feature values) stays in the cards below.
+function PostureStatusBanner({ riskLevel, active, currentTask }: { riskLevel: string; active: boolean; currentTask?: string | null }) {
+  if (!active) {
+    return (
+      <div className="rounded-xl border border-outline-variant bg-surface-container-low px-lg py-md">
+        <p className="text-body-md font-semibold text-on-surface-variant">Start monitoring to see your posture status.</p>
+      </div>
+    );
+  }
+  const level = (riskLevel || '').toUpperCase();
+  const critical = level === 'HIGH' || level === 'CRITICAL';
+  const attention = level === 'MEDIUM';
+  const statusText = critical ? 'STOP — unsafe posture' : attention ? 'Watch your back' : 'Posture: OK';
+  const statusDetail = critical
+    ? 'Correct your posture now — hold position and adjust.'
+    : attention
+      ? 'Posture needs attention — straighten up and take it easy.'
+      : 'Working in a safe range — keep it up.';
+  return (
+    <div
+      className={`rounded-xl border px-lg py-md flex flex-wrap items-center justify-between gap-md ${
+        critical ? 'border-red-500/40 bg-red-500/10' : attention ? 'border-amber-500/40 bg-amber-500/10' : 'border-green-500/30 bg-green-500/5'
+      }`}
+    >
+      <div>
+        <p
+          className={`text-display-md font-extrabold ${
+            critical ? 'text-red-400' : attention ? 'text-amber-400' : 'text-emerald-300'
+          }`}
+        >
+          {statusText}
+        </p>
+        <p className="text-body-md text-on-surface-variant mt-0.5">{statusDetail}</p>
+      </div>
+      {currentTask ? (
+        <div className="text-right">
+          <p className="font-label-caps text-xs uppercase tracking-widest text-on-surface-variant">Current task</p>
+          <p className="text-body-md font-semibold text-on-surface">{currentTask}</p>
+        </div>
+      ) : null}
     </div>
   );
 }
