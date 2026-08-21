@@ -306,6 +306,9 @@ def draw_skeleton(frame, keypoints, risk_level, features=None, feature_scores=No
         # Skip connections where either endpoint is invalid
         if not _kp_valid(start_idx) or not _kp_valid(end_idx):
             continue
+        # Skip face-only connections (indices 0-10) to keep the face visible
+        if start_idx in _FACE_INDICES and end_idx in _FACE_INDICES:
+            continue
 
         start_kp = keypoints[start_idx]
         end_kp = keypoints[end_idx]
@@ -317,8 +320,8 @@ def draw_skeleton(frame, keypoints, risk_level, features=None, feature_scores=No
         vis_end = end_kp[3] if len(end_kp) > 3 else 1.0
         c = _dimmed(conn_color.get((start_idx, end_idx), overall_color), min(vis_start, vis_end))
 
-        cv2.line(glow, (x1, y1), (x2, y2), c, 8, cv2.LINE_AA)
-        cv2.line(overlay, (x1, y1), (x2, y2), c, 3, cv2.LINE_AA)
+        cv2.line(glow, (x1, y1), (x2, y2), c, 4, cv2.LINE_AA)
+        cv2.line(overlay, (x1, y1), (x2, y2), c, 1, cv2.LINE_AA)
 
     # ── 2. Draw keypoints (colored by worst region touching the joint) ──
     for i, kp in enumerate(keypoints):
@@ -328,13 +331,13 @@ def draw_skeleton(frame, keypoints, risk_level, features=None, feature_scores=No
         visibility = kp[3] if len(kp) > 3 else 1.0
         c = _dimmed(joint_color.get(i, overall_color), visibility)
 
-        cv2.circle(glow, (x, y), 9, c, -1, cv2.LINE_AA)
-        cv2.circle(overlay, (x, y), 5, c, -1, cv2.LINE_AA)
-        cv2.circle(overlay, (x, y), 6, _dimmed((235, 255, 245), visibility), 1, cv2.LINE_AA)
+        cv2.circle(glow, (x, y), 4, c, -1, cv2.LINE_AA)
+        cv2.circle(overlay, (x, y), 2, c, -1, cv2.LINE_AA)
+        cv2.circle(overlay, (x, y), 3, _dimmed((235, 255, 245), visibility), 1, cv2.LINE_AA)
 
     # Blend overlay with original frame
-    cv2.addWeighted(glow, 0.28, frame, 0.72, 0, frame)
-    cv2.addWeighted(overlay, 0.82, frame, 0.18, 0, frame)
+    cv2.addWeighted(glow, 0.15, frame, 0.85, 0, frame)
+    cv2.addWeighted(overlay, 0.65, frame, 0.35, 0, frame)
 
     # ── 3. Per-joint angle labels (colored by their joint's region) ──
     for feat_name, short, kp_idx, (dx, dy) in LABEL_CONFIG:
@@ -362,12 +365,6 @@ def draw_skeleton(frame, keypoints, risk_level, features=None, feature_scores=No
         cv2.rectangle(frame, (lx - pad, ly - th - pad),
                       (lx + tw + pad, ly + base + pad), label_color, 1)
         cv2.putText(frame, text, (lx, ly), font, scale, label_color, thick, cv2.LINE_AA)
-
-    # Add risk level indicator
-    cv2.rectangle(frame, (10, h - 46), (180, h - 12), (8, 12, 18), -1)
-    cv2.rectangle(frame, (10, h - 46), (180, h - 12), overall_color, 1)
-    cv2.putText(frame, f"RISK: {risk_level}", (20, h - 23),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.58, overall_color, 2, cv2.LINE_AA)
 
     return frame
 

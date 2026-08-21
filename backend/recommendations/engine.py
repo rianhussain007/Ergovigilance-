@@ -196,7 +196,10 @@ class RecommendationEngine:
             if self._frame_counter > 100:
                 should_fire = True
                 confidence = min(self._frame_counter / 500.0, 1.0)
-                format_data["duration"] = self._frame_counter * 0.033 / 60.0
+                # Use actual elapsed time from history engine, not frame_count * 33ms
+                stats = self._history_engine.get_statistics()
+                elapsed_min = max(stats.session_duration_seconds / 60.0, self._frame_counter * 0.033 / 60.0)
+                format_data["duration"] = elapsed_min
 
         elif trigger == "persistent_issues":
             active = self._alert_engine.get_active_alerts()

@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from app.core.auth import get_current_user, require_live_session_access
 from app.core.database import get_worker, insert_audit_log
 from app.core.security import AuthenticatedUser
-from app.services.live_monitor import get_live_service
+from app.services.live_monitor import get_live_service_or_none
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -39,7 +39,9 @@ def log_observation(
     The note is persisted to the session's timeline and written to the
     recordings directory so it survives restarts.
     """
-    service = get_live_service()
+    service = get_live_service_or_none()
+    if service is None:
+        raise HTTPException(status_code=503, detail="Live monitoring service is unavailable.")
     if not service.is_running():
         raise HTTPException(status_code=400, detail="No active session to log against.")
 
@@ -125,7 +127,9 @@ def override_risk(
     Only supervisors, safety managers, and admins may override.
     The override is recorded in the audit trail and the timeline.
     """
-    service = get_live_service()
+    service = get_live_service_or_none()
+    if service is None:
+        raise HTTPException(status_code=503, detail="Live monitoring service is unavailable.")
     if not service.is_running():
         raise HTTPException(status_code=400, detail="No active session to override.")
 

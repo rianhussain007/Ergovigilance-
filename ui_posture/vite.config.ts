@@ -29,6 +29,21 @@ export default defineConfig(() => {
                 '/video/': {
                     target: 'http://127.0.0.1:8000',
                     changeOrigin: true,
+                    // Disable buffering for MJPEG streams — without this,
+                    // the proxy holds the entire response in memory and the
+                    // browser receives one frozen frame instead of a live stream.
+                    configure: (proxy) => {
+                        proxy.on('proxyRes', (proxyRes) => {
+                            const contentType = proxyRes.headers['content-type'] || '';
+                            if (contentType.includes('multipart')) {
+                                // Force chunked transfer so frames stream in real-time
+                                proxyRes.headers['cache-control'] = 'no-cache, no-store';
+                                delete proxyRes.headers['content-length'];
+                                delete proxyRes.headers['transfer-encoding'];
+                                proxyRes.headers['transfer-encoding'] = 'chunked';
+                            }
+                        });
+                    },
                 },
                 '/ws': {
                     target: 'http://127.0.0.1:8000',

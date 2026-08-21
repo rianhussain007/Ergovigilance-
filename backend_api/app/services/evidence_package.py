@@ -62,10 +62,19 @@ def _find_session_file(session_id: str) -> Path | None:
     sessions_dir = Path(_SESSIONS_DIR)
     if not sessions_dir.is_dir():
         return None
-    # Session files are named session_{ts}_{session_id}.json (clean stops) or
-    # session_{ts}_{session_id}.json from crash recovery (same naming).
+    # Fast path: session ID embedded in filename (new naming convention).
     for filepath in sessions_dir.glob(f"session_*{session_id}.json"):
         return filepath
+    # Slow path: old naming convention has no session ID in the filename.
+    # Scan JSON files and match on the session_id field inside the content.
+    for filepath in sessions_dir.glob("session_*.json"):
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if data.get("session_id") == session_id:
+                return filepath
+        except (json.JSONDecodeError, OSError):
+            continue
     return None
 
 

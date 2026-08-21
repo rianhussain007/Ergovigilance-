@@ -1,11 +1,11 @@
 """Live session timeline endpoint — returns recent TimelineEntry objects."""
 
 import logging
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.auth import get_current_user, require_live_session_access
 from app.core.security import AuthenticatedUser
-from app.services.live_monitor import get_live_service
+from app.services.live_monitor import get_live_service_or_none
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -24,7 +24,9 @@ async def get_live_timeline(
         task_duration_seconds, recommendations, alerts,
         unavailable_features, lower_body_confidence }
     """
-    service = get_live_service()
+    service = get_live_service_or_none()
+    if service is None:
+        raise HTTPException(status_code=503, detail="Live monitoring service is unavailable.")
     require_live_session_access(user, service)
     entries = service.get_recent_timeline(n)
     return {"timeline": entries}

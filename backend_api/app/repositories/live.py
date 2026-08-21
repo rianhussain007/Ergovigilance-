@@ -301,7 +301,10 @@ class LiveRepository(DashboardRepository):
         for data in cached:
             created_by_user_id = data.get("created_by_user_id")
             if current_user is not None and not can_view_all_sessions(current_user):
-                if created_by_user_id != current_user.id:
+                # Sessions with no creator (legacy/pre-tracking) are visible to
+                # all roles — only filter out sessions explicitly owned by
+                # another user.
+                if created_by_user_id is not None and created_by_user_id != current_user.id:
                     continue
 
             ts = data.get("session_timestamp", "") or ""
@@ -406,7 +409,9 @@ class LiveRepository(DashboardRepository):
 
         created_by_user_id = data.get("created_by_user_id")
         if current_user is not None and not can_view_all_sessions(current_user):
-            if created_by_user_id != current_user.id:
+            # Sessions with no creator (legacy/pre-tracking) are visible to
+            # all roles — only block access to sessions owned by another user.
+            if created_by_user_id is not None and created_by_user_id != current_user.id:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot access this session")
 
         alerts_raw = data.get("alerts", [])

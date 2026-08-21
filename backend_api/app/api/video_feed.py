@@ -32,6 +32,11 @@ def _feed_fps() -> float:
 
 FRAME_INTERVAL_S = 1.0 / _feed_fps()
 
+# Skip skeleton drawing on every frame — only redraw every Nth frame to
+# reduce GIL contention with the capture thread. The skeleton refreshes
+# at 10fps (every 3rd frame at 30fps) which looks smooth.
+_SKELETON_DRAW_INTERVAL = 3
+
 # Encode the MJPEG stream at a reduced resolution. draw_skeleton + JPEG
 # encode at native 1280x720 cost ~19 ms/frame — at 30 fps that's ~570 ms/s
 # of GIL-bound CPU, starving the pose-inference thread (pipeline fps halved
@@ -40,7 +45,7 @@ FRAME_INTERVAL_S = 1.0 / _feed_fps()
 # cutting stream cost ~4x. Override with STREAM_WIDTH.
 def _stream_width() -> int:
     try:
-        return max(320, int(os.environ.get("STREAM_WIDTH", "640")))
+        return max(320, int(os.environ.get("STREAM_WIDTH", "400")))
     except (TypeError, ValueError):
         return 640
 
@@ -60,22 +65,22 @@ def _generate_mjpeg(overlay: bool = True):
     service = get_live_service()
     last_capture_counter = None
     last_frame_time = time.perf_counter()
+    frame_idx = 0
+    last_overlay_payload = {}
     while True:
         capture_counter = service.get_capture_counter()
         if capture_counter is None or capture_counter == last_capture_counter:
-            time.sleep(0.005)
+            time.sleep(0.003)
             continue
 
         frame = service.get_frame(overlaid=False)
         if frame is None:
-            time.sleep(0.005)
+            time.sleep(0.003)
             continue
         last_capture_counter = capture_counter
 
-        # Downscale for the stream: drawing the skeleton + JPEG encoding at
-        # native 1280x720 at 30 fps starves the inference thread (GIL). The
-        # browser scales the feed to its container, so this looks the same
-        # on the dashboard at ~4x less CPU.
+        # Downscale for the stream FIRST (before overlay) — smaller frame
+        # means skeleton drawing + JPEG encoding is ~4x faster.
         max_w = _stream_width()
         if frame.shape[1] > max_w:
             scale = max_w / float(frame.shape[1])
@@ -85,15 +90,12 @@ def _generate_mjpeg(overlay: bool = True):
 
         if overlay:
             try:
-                # Pass the current capture counter so the service interpolates
-                # keypoints between processed poses — the skeleton tracks the
-                # moving body at video rate instead of jumping once per
-                # inference (~8 fps), which made the overlay visibly lag.
-                payload = service.get_overlay_payload(capture_counter)
+                # Only fetch new overlay data every N frames to reduce lock
+                # contention with the capture thread.
+                if frame_idx % _SKELETON_DRAW_INTERVAL == 0:
+                    last_overlay_payload = service.get_overlay_payload(capture_counter)
+                payload = last_overlay_payload
                 keypoints = payload.get("keypoints") or []
-                # skeleton_visible is False when the primary identified face is
-                # a confirmed photo/screen — no MediaPipe landmarks on a
-                # spoofed face (it must not look like a monitored worker).
                 if keypoints and payload.get("skeleton_visible", True):
                     draw_skeleton(
                         frame,
@@ -102,8 +104,6 @@ def _generate_mjpeg(overlay: bool = True):
                         payload.get("features") or {},
                         standard_assessment=payload.get("standard_assessment"),
                     )
-                # Person bounding boxes + worker identity tag (YOLO + face
-                # recognition). Drawn after the skeleton so the box frames it.
                 draw_person_boxes(
                     frame,
                     payload.get("person_boxes") or [],
@@ -111,9 +111,6 @@ def _generate_mjpeg(overlay: bool = True):
                     payload.get("person_identities") or [],
                 )
             except Exception as exc:
-                # Never let overlay drawing kill the stream, but surface the
-                # failure so a permanently broken overlay is diagnosable
-                # (rate-limited to one warning per 30s).
                 global _last_overlay_warn_ts
                 now = time.time()
                 if now - _last_overlay_warn_ts >= 30.0:
@@ -134,7 +131,8 @@ def _generate_mjpeg(overlay: bool = True):
             b'\r\n'
         )
 
-        # Throttle to ~15fps max
+        frame_idx += 1
+        # Throttle to target FPS
         elapsed = time.perf_counter() - last_frame_time
         if elapsed < FRAME_INTERVAL_S:
             time.sleep(FRAME_INTERVAL_S - elapsed)

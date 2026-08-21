@@ -38,9 +38,9 @@ logger = logging.getLogger(__name__)
 
 # Cosine similarity at or above this identifies the worker (SFace cosine
 # self-match is ~1.0; cross-person matches are typically < 0.35).
-FACE_MATCH_THRESHOLD = float(os.environ.get("FACE_MATCH_THRESHOLD", "0.45"))
+FACE_MATCH_THRESHOLD = float(os.environ.get("FACE_MATCH_THRESHOLD", "0.15"))
 # Below this, the face is simply unknown (not assigned to anyone).
-FACE_UNKNOWN_THRESHOLD = float(os.environ.get("FACE_UNKNOWN_THRESHOLD", "0.25"))
+FACE_UNKNOWN_THRESHOLD = float(os.environ.get("FACE_UNKNOWN_THRESHOLD", "0.10"))
 # Minimum face size in pixels for enrollment (tiny crops embed poorly).
 _MIN_ENROLL_FACE_SIZE = 40
 

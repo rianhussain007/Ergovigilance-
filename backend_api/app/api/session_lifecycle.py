@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from app.core.auth import ELEVATED_ROLES, get_current_user, require_live_session_access
 from app.core.database import get_worker, insert_audit_log
 from app.core.security import AuthenticatedUser
-from app.services.live_monitor import get_live_service
+from app.services.live_monitor import get_live_service, get_live_service_or_none
 from app.schemas.api import SessionActionResponse
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,9 @@ def start_session(
     user: AuthenticatedUser = Depends(get_current_user),
 ):
     """Open camera and start the CV pipeline."""
-    service = get_live_service()
+    service = get_live_service_or_none()
+    if service is None:
+        raise HTTPException(status_code=503, detail="Live monitoring service is unavailable.")
     if service.is_running():
         owner_id = getattr(service, "current_created_by_user_id", None)
         if owner_id is not None and owner_id != user.id and user.role not in ELEVATED_ROLES:
@@ -84,7 +86,9 @@ def start_session(
 @router.post("/session/stop", response_model=SessionActionResponse)
 def stop_session(user: AuthenticatedUser = Depends(get_current_user)):
     """Stop the pipeline, save session data, release camera."""
-    service = get_live_service()
+    service = get_live_service_or_none()
+    if service is None:
+        raise HTTPException(status_code=503, detail="Live monitoring service is unavailable.")
     if not service.is_running():
         return SessionActionResponse(
             id="",
@@ -129,7 +133,9 @@ def stop_session(user: AuthenticatedUser = Depends(get_current_user)):
 @router.get("/session/status")
 async def session_status(user: AuthenticatedUser = Depends(get_current_user)):
     """Check if a live session is currently active."""
-    service = get_live_service()
+    service = get_live_service_or_none()
+    if service is None:
+        raise HTTPException(status_code=503, detail="Live monitoring service is unavailable.")
     require_live_session_access(user, service)
     state = service.get_state_snapshot()
     return {

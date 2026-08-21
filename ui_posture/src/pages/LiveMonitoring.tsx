@@ -99,6 +99,17 @@ export default function LiveMonitoring() {
     }
   }, [liveTimeline.length > 0 ? liveTimeline[liveTimeline.length - 1].timestamp : 0]);
 
+  // All hooks must be called before any conditional returns.
+  const [justStopped, setJustStopped] = useState(false);
+  const prevActiveRef = useRef(false);
+  const isActiveRef = useRef(false);
+  const navigate = useNavigate();
+  // Track session-active transitions so we can show the "post-stop" banner.
+  useEffect(() => {
+    if (prevActiveRef.current && !isActiveRef.current) setJustStopped(true);
+    prevActiveRef.current = isActiveRef.current;
+  });
+
   if (error) return <div className="flex items-center justify-center h-full p-lg"><ErrorCard message={error} onRetry={refetch} /></div>;
 
   if (loading || !dashboard) {
@@ -142,15 +153,7 @@ export default function LiveMonitoring() {
   const approximateFeatures = contextSnapshot?.approximate_features ?? [];
   // Single source of truth: is a live session actually running right now?
   const isActive = session?.cameraStatus === 'active';
-  // Post-stop prompt: when a session ends, tell the operator their report is
-  // ready instead of leaving them to hunt through two navigations (QA #5).
-  const [justStopped, setJustStopped] = useState(false);
-  const prevActiveRef = useRef(isActive);
-  useEffect(() => {
-    if (prevActiveRef.current && !isActive) setJustStopped(true);
-    prevActiveRef.current = isActive;
-  }, [isActive]);
-  const navigate = useNavigate();
+  isActiveRef.current = isActive;
   const hasTimeline = liveTimeline.length > 0;
 
   // Filter displayed issues by the user's alert threshold (low | moderate | high).

@@ -10,10 +10,10 @@ brightness of the current raw frame), not a guess.
 import logging
 
 import cv2
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.auth import require_roles
-from app.services.live_monitor import get_live_service
+from app.services.live_monitor import get_live_service_or_none
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -23,9 +23,8 @@ _BRIGHTNESS_MIN = 60.0
 _BRIGHTNESS_MAX = 200.0
 
 
-def _mean_brightness() -> float | None:
+def _mean_brightness(service) -> float | None:
     """Mean brightness (0-255) of the current raw camera frame, or None."""
-    service = get_live_service()
     frame = service.get_frame(overlaid=False)
     if frame is None:
         return None
@@ -43,12 +42,14 @@ async def setup_status(
     user=Depends(require_roles("supervisor", "safety_mgr", "admin")),
 ):
     """Live camera-setup checklist signals (framing, light, person, face)."""
-    service = get_live_service()
+    service = get_live_service_or_none()
+    if service is None:
+        raise HTTPException(status_code=503, detail="Live monitoring service is unavailable.")
     running = service.is_running()
     state = service.get_state_snapshot()
 
     framing = dict(state.framing or {})
-    brightness = _mean_brightness()
+    brightness = _mean_brightness(service)
 
     identities = list(getattr(state, "person_identities", []) or [])
     faces_seen = any(

@@ -116,7 +116,7 @@ def _process_fps_target() -> float:
 # output quality. Override with POSE_INFERENCE_WIDTH.
 def _inference_max_width() -> int:
     try:
-        return max(320, int(os.environ.get("POSE_INFERENCE_WIDTH", "480")))
+        return max(256, int(os.environ.get("POSE_INFERENCE_WIDTH", "320")))
     except (TypeError, ValueError):
         return 480
 
@@ -397,6 +397,10 @@ class LiveMonitoringService:
         self._liveness_tracker = FaceLivenessTracker()
         self._liveness_last: float = 0.0
         self._liveness_interval: float = 0.4
+        # Background thread handles for non-blocking person detection + liveness
+        self._person_detect_thread = None
+        self._person_detect_result = None
+        self._liveness_thread = None
         # When the primary identified face is flagged as a spoof (photo /
         # screen), the posture skeleton must NOT be drawn over it — showing
         # MediaPipe landmarks on a photo makes it look like a monitored,
@@ -850,18 +854,14 @@ class LiveMonitoringService:
                 # main GIL contention with the pose pipeline.
                 self._record_video_frame(frame)
                 # Ring buffer: drop-oldest when full (maxlen handles that).
+                # Flip OUTSIDE the lock — cv2.flip on a full-res frame takes
+                # time; holding the lock during it blocks the process thread
+                # and video feed generator, causing visible lag.
+                flipped = cv2.flip(frame, 1)
                 with self._lock:
                     self._frame_queue.append(frame)
-                    # Keep the freshest MIRRORED frame in state so the MJPEG
-                    # generator can serve continuous video at the camera's
-                    # native rate even while pose inference lags behind — the
-                    # old feed only served new *processed* frames, so a slow
-                    # inference step froze the stream into stills. The
-                    # recorder above already wrote the RAW frame; current_frame
-                    # is display-only. The process loop mirrors the same way,
-                    # so the two never disagree on orientation.
                     self._capture_counter += 1
-                    self.state.current_frame = cv2.flip(frame, 1)
+                    self.state.current_frame = flipped
                 # Demo playback runs at the video's own frame rate so the
                 # replay feels like a live feed instead of fast-forwarding.
                 if self._is_demo_source and self._demo_fps > 0:
@@ -1055,67 +1055,77 @@ class LiveMonitoringService:
         inference_end = time.perf_counter()
         inference_latency_ms = (inference_end - inference_start) * 1000
 
-        # ── Person detection + face identification (throttled) ────────
-        # YOLO person boxes + SFace worker identity refresh every
-        # PERSON_DETECT_INTERVAL_S seconds, not per frame — the boxes tag the
-        # primary worker while pose inference keeps its own pacing. Any
-        # failure here must never interrupt the pose pipeline.
+        # ── Person detection + face identification (non-blocking) ────
+        # YOLO + SFace + YuNet run in a background thread so they NEVER
+        # block the pose pipeline. The process loop fires a thread every
+        # PERSON_DETECT_INTERVAL_S and collects results on the next cycle.
         try:
             now_detect = time.perf_counter()
-            if now_detect - self._person_detect_last >= PERSON_DETECT_INTERVAL_S:
+            # Collect results from previous background detection run
+            if self._person_detect_thread is not None and not self._person_detect_thread.is_alive():
+                self._person_detect_thread = None
+                if self._person_detect_result is not None:
+                    boxes, identified = self._person_detect_result
+                    self._person_boxes = boxes
+                    self._person_identities = identified or []
+                    self._derive_identified_worker()
+                    self._person_detect_result = None
+            # Launch new detection if interval elapsed and no thread running
+            if (now_detect - self._person_detect_last >= PERSON_DETECT_INTERVAL_S
+                    and self._person_detect_thread is None):
                 self._person_detect_last = now_detect
-                # Detect + identify on the DOWNSCALED mirrored frame: YOLO /
-                # YuNet / SFace are ~4x cheaper at inference width, and the
-                # boxes are normalized 0-1 so accuracy is preserved while the
-                # pipeline thread stays free (directly raises overlay fps).
                 if inference_frame is frame:
-                    det_frame = frame  # already mirrored, small enough
+                    det_frame = frame.copy()
                 else:
                     det_frame = cv2.flip(inference_frame, 1)
-                boxes = detect_persons(det_frame)
-                self._person_boxes = boxes
-                identified = identify_persons_in_frame(det_frame, boxes)
-                # Keep EVERY person's identity (box + worker_id + name). Each
-                # entry already carries its own box, so the overlay can tag
-                # each person individually — recognized or "Not recognized".
-                self._person_identities = identified or []
-                self._derive_identified_worker()
+                self._person_detect_result = None
+                def _bg_detect():
+                    try:
+                        boxes = detect_persons(det_frame)
+                        identified = identify_persons_in_frame(det_frame, boxes)
+                        self._person_detect_result = (boxes, identified)
+                    except Exception as exc:
+                        logger.warning("Person detection failed (skipped): %s", exc)
+                        self._person_detect_result = ([], [])
+                self._person_detect_thread = threading.Thread(target=_bg_detect, daemon=True)
+                self._person_detect_thread.start()
         except Exception as exc:
-            logger.warning("Person detection/identification failed (skipped): %s", exc)
+            logger.warning("Person detection scheduling failed (skipped): %s", exc)
 
-        # ── Liveness (anti-photo-spoof) sampling ────────────────────
-        # Runs at ~2.5 Hz (own throttle) so blinks — 150-400ms events — are
-        # actually observed. The tracker associates boxes by IoU and returns a
-        # per-person verdict that gets merged into the identities below. Any
-        # failure only degrades the liveness signal, never the pipeline.
+        # ── Liveness (anti-photo-spoof) sampling (non-blocking) ──────
+        # Runs at ~1 Hz so blinks (150-400ms events) are observed. Moved
+        # to background thread so it never blocks the pose pipeline.
         try:
             now_live = time.perf_counter()
-            if now_live - self._liveness_last >= self._liveness_interval:
+            if (now_live - self._liveness_last >= self._liveness_interval
+                    and self._liveness_thread is None and self._person_boxes):
                 self._liveness_last = now_live
-                if self._person_boxes:
-                    # Sample liveness on the downscaled mirrored frame too —
-                    # FaceLandmarker runs on the (already 96x96) crop, so the
-                    # full-res frame buys nothing here and costs crop time.
-                    if inference_frame is frame:
-                        live_frame = frame
-                    else:
-                        live_frame = cv2.flip(inference_frame, 1)
-                    verdicts = self._liveness_tracker.update(live_frame, self._person_boxes)
-                    if verdicts and self._person_identities:
-                        for idx, verdict in verdicts.items():
-                            if idx < len(self._person_identities):
-                                self._person_identities[idx].update(verdict)
-                        # Liveness can flip a matched identity to "suspicious"
-                        # (photo) — re-derive the primary card so it reflects
-                        # the fresh verdict immediately, not on the next 2s pass.
-                        self._derive_identified_worker()
-                        # A spoofed primary face must NOT get a posture
-                        # skeleton — no MediaPipe landmarks on a photo.
-                        self._skeleton_suppressed = bool(
-                            self._identified_worker.get("liveness") == "suspicious"
-                        )
+                if inference_frame is frame:
+                    live_frame = frame.copy()
+                else:
+                    live_frame = cv2.flip(inference_frame, 1)
+                boxes_copy = list(self._person_boxes)
+                identities_ref = self._person_identities
+                def _bg_liveness():
+                    try:
+                        verdicts = self._liveness_tracker.update(live_frame, boxes_copy)
+                        if verdicts and identities_ref:
+                            for idx, verdict in verdicts.items():
+                                if idx < len(identities_ref):
+                                    identities_ref[idx].update(verdict)
+                            self._derive_identified_worker()
+                            self._skeleton_suppressed = bool(
+                                self._identified_worker.get("liveness") == "suspicious"
+                            )
+                    except Exception as exc:
+                        logger.warning("Liveness sampling failed (skipped): %s", exc)
+                self._liveness_thread = threading.Thread(target=_bg_liveness, daemon=True)
+                self._liveness_thread.start()
+            # Collect finished liveness thread
+            if self._liveness_thread is not None and not self._liveness_thread.is_alive():
+                self._liveness_thread = None
         except Exception as exc:
-            logger.warning("Liveness sampling failed (skipped): %s", exc)
+            logger.warning("Liveness scheduling failed (skipped): %s", exc)
     
         self._fps_count += 1
         elapsed = time.perf_counter() - self._fps_start
@@ -1372,10 +1382,6 @@ class LiveMonitoringService:
         """
         with self._lock:
             if overlaid:
-                # NB: use an explicit None check, NOT `or` — `overlaid_frame`
-                # is a numpy array and `array or x` calls bool(array), which
-                # raises ValueError for multi-element arrays (this crashed the
-                # MJPEG stream the moment a frame was available).
                 if self.state.overlaid_frame is not None:
                     frame = self.state.overlaid_frame
                 else:

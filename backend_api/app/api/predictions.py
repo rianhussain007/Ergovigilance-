@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.auth import get_current_user, can_view_all_sessions
 from app.core.security import AuthenticatedUser
@@ -29,10 +29,12 @@ async def predict_next_window(
     Uses the recent live timeline (last ~150 processed frames). Requires an
     active session; otherwise returns a clear idle state.
     """
-    from app.services.live_monitor import get_live_service
+    from app.services.live_monitor import get_live_service_or_none
     from backend.services.predictive import get_risk_forecaster
 
-    service = get_live_service()
+    service = get_live_service_or_none()
+    if service is None:
+        raise HTTPException(status_code=503, detail="Live monitoring service is unavailable.")
     if not service.is_running():
         return {
             "forecast": None,
@@ -56,7 +58,7 @@ async def predict_session_forecast(
     timeline (Postgres or files). Otherwise the live session's recent frames
     are used.
     """
-    from app.services.live_monitor import get_live_service
+    from app.services.live_monitor import get_live_service_or_none
     from backend.services.predictive import get_risk_forecaster
 
     if session_id:
@@ -70,7 +72,9 @@ async def predict_session_forecast(
         forecast = get_risk_forecaster().predict_early_session(frames)
         return {"forecast": forecast, "session_id": session_id}
 
-    service = get_live_service()
+    service = get_live_service_or_none()
+    if service is None:
+        raise HTTPException(status_code=503, detail="Live monitoring service is unavailable.")
     if not service.is_running():
         return {
             "forecast": None,

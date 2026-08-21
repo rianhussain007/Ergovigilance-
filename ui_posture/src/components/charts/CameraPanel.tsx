@@ -144,9 +144,11 @@ export function CameraPanel({ status, workerName, task, reconnecting, onCaptureR
   }, []);
   const streamToken = getStoredToken();
   const overlayParam = showOverlay ? 'overlay=true' : 'overlay=false';
+  // Cache-bust: streamKey changes on session start + retries so the browser
+  // never serves a stale cached MJPEG response.
   const streamSrc = streamToken
-    ? `/video/feed?${overlayParam}&token=${encodeURIComponent(streamToken)}`
-    : `/video/feed?${overlayParam}`;
+    ? `/video/feed?${overlayParam}&token=${encodeURIComponent(streamToken)}&_t=${streamKey}`
+    : `/video/feed?${overlayParam}&_t=${streamKey}`;
 
   const toggleOverlay = useCallback(() => {
     setShowOverlay((prev) => !prev);

@@ -40,7 +40,7 @@ def _parse_ts(value: Any) -> datetime | None:
     if isinstance(value, datetime):
         return value
     s = str(value)
-    for fmt in ("%Y%m%d_%H%M%S%f", "%Y%m%d_%H%M%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
+    for fmt in ("%Y%m%d_%H%M%S_%f", "%Y%m%d_%H%M%S%f", "%Y%m%d_%H%M%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S"):
         try:
             return datetime.strptime(s, fmt)
         except ValueError:
