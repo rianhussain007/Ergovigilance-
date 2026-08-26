@@ -40,5 +40,4 @@ config/retention.json
 
 # Landing-page assets (the global *.png/*.jpg ignore would otherwise drop them)
 !ui_posture/public/images/dashboard-operator.png
-!ui_posture/public/images/skeleton-overlay.png
 !ui_posture/public/favicon.png
