@@ -46,6 +46,25 @@ _session_source: str = "file"  # "file" or "postgres"
 SESSION_CACHE_TTL: float = 1800.0  # seconds (30 min)
 
 
+# ── Demo Mode intercept ─────────────────────────────────────────────
+# When DEMO_MODE=true, get_all_sessions() returns synthetic data instead
+# of scanning the filesystem. The demo data is generated once and cached
+# for the lifetime of the process.
+_demo_sessions: list[dict[str, Any]] | None = None
+
+
+def _get_demo_sessions() -> list[dict[str, Any]]:
+    global _demo_sessions
+    if _demo_sessions is None:
+        from app.services.demo_seeding import DEMO_MODE, generate_demo_data
+        if DEMO_MODE:
+            data = generate_demo_data()
+            _demo_sessions = data["sessions"]
+        else:
+            _demo_sessions = []
+    return _demo_sessions
+
+
 def _scan_session_files() -> list[dict[str, Any]]:
     """Scan and parse all session JSON files from disk."""
     sessions: list[dict[str, Any]] = []
@@ -67,11 +86,18 @@ def _scan_session_files() -> list[dict[str, Any]]:
 def get_all_sessions() -> list[dict[str, Any]]:
     """Return cached parsed session list.
 
-    Prefers the Postgres telemetry store when configured (fast indexed query);
-    falls back to scanning JSON files. Re-reads only if the cache is stale
-    (TTL exceeded) or the source changed.
+    In DEMO_MODE, returns synthetic sessions (never scans the filesystem).
+    Otherwise, prefers the Postgres telemetry store when configured (fast
+    indexed query); falls back to scanning JSON files. Re-reads only if
+    the cache is stale (TTL exceeded) or the source changed.
     """
     global _session_cache, _session_cache_time, _session_source
+
+    # Demo mode: return synthetic sessions, bypass all real data sources
+    from app.services.demo_seeding import DEMO_MODE
+    if DEMO_MODE:
+        return _get_demo_sessions()
+
     now = time.time()
     if _session_cache is not None and (now - _session_cache_time) < SESSION_CACHE_TTL:
         return _session_cache

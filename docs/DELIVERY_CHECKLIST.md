@@ -57,6 +57,7 @@ This is the single source of truth for what remains between "working dev system"
 | 10 | Multi-camera / RTSP config test with ≥2 factory cameras | 🟩 YOU | at site | Multi-Camera page exists; needs real sources to verify |
 | 11 | Multi-subject recordings (3 subjects × scenarios per guide) | 🟩 YOU | pilot weeks | Generalizability data — not required for the screening pilot itself |
 | 12 | Ops drill: `Restart-Service ErgoVigilance`, log inspection (`deploy\logs\`), retention behavior | 🟩 YOU | before shift 1 | Rollback plan (§7 of pilot checklist) must be drilled, not just documented |
+| 13 | Demo mode (`DEMO_MODE=true`) — seeds 30 synthetic sessions + alerts, fills dashboard, shows amber banner | 🟦 AGENT | ✅ DONE 2026-08-26 | `DEMO_MODE=true` env flag; synthetic sessions/alerts/dashboard via `demo_seeding.py`; `/api/demo-mode` endpoint; amber banner in Layout; tsc + vitest + build clean |
 
 ### P2 — Post-pilot / not needed for delivery
 

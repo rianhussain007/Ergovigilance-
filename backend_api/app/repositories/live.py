@@ -6,8 +6,10 @@ Maintains the same DashboardResponse schema so React interfaces stay unchanged.
 
 import logging
 import os
+import random
 import sys
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Optional
 
@@ -240,10 +242,103 @@ class LiveRepository(DashboardRepository):
             },
         )
 
+    def _build_demo_dashboard(self) -> DashboardResponse:
+        """Build a synthetic dashboard for DEMO_MODE (no live camera needed)."""
+        import math
+        now = datetime.now(timezone.utc)
+        start = now - timedelta(minutes=23, seconds=41)
+        duration = int((now - start).total_seconds())
+
+        # Simulate a realistic MEDIUM-risk session
+        risk_score = 42.0
+        features = [
+            {"id": "neck_flexion", "name": "Neck Flexion", "value": 22.0, "unit": "°", "min": 0, "max": 50, "status": "moderate"},
+            {"id": "trunk_flexion", "name": "Trunk Flexion", "value": 18.5, "unit": "°", "min": 0, "max": 60, "status": "moderate"},
+            {"id": "left_shoulder_elev", "name": "Left Shoulder Elevation", "value": 15.0, "unit": "°", "min": 0, "max": 90, "status": "good"},
+            {"id": "right_shoulder_elev", "name": "Right Shoulder Elevation", "value": 12.0, "unit": "°", "min": 0, "max": 90, "status": "good"},
+            {"id": "shoulder_symmetry", "name": "Shoulder Symmetry", "value": 6.2, "unit": "%", "min": 0, "max": 30, "status": "good"},
+            {"id": "alignment_deviation", "name": "Alignment Deviation", "value": 4.8, "unit": "%", "min": 0, "max": 20, "status": "good"},
+            {"id": "knee_angle", "name": "Knee Angle", "value": 142.0, "unit": "°", "min": 80, "max": 180, "status": "good"},
+            {"id": "forward_head_posture", "name": "Forward Head Posture", "value": 14.0, "unit": "%", "min": 0, "max": 30, "status": "moderate"},
+            {"id": "head_tilt_angle", "name": "Head Tilt", "value": 8.5, "unit": "°", "min": 0, "max": 30, "status": "good"},
+            {"id": "wrist_deviation_angle", "name": "Wrist Deviation", "value": 7.2, "unit": "°", "min": 0, "max": 25, "status": "good"},
+            {"id": "stance_stability", "name": "Stance Stability", "value": 0.85, "unit": "", "min": 0, "max": 1, "status": "good"},
+            {"id": "weight_shift_offset", "name": "Weight Shift", "value": 5.1, "unit": "%", "min": 0, "max": 20, "status": "good"},
+        ]
+        issues = [
+            {"id": "ISSUE-001", "severity": "moderate", "name": "Neck Flexion", "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "detail": "Neck flexion at 22° — moderate risk. Value: 22.0, Threshold: 20.0"},
+            {"id": "ISSUE-002", "severity": "moderate", "name": "Forward Head Posture", "timestamp": now.strftime("%Y-%m-%dT%H:%M:%SZ"), "detail": "Forward head posture at 14% — moderate risk. Value: 14.0, Threshold: 10.0"},
+        ]
+        risk_history = []
+        for i in range(20):
+            t = now - timedelta(seconds=(20 - i) * 10)
+            val = random.uniform(30, 55)
+            risk_history.append({"time": t.strftime("%H:%M:%S"), "value": round(val, 1)})
+
+        return DashboardResponse(
+            session={
+                "id": "DEMO-SESH-001",
+                "workerName": "Demo Operator",
+                "workerId": "W-DEMO",
+                "startTime": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "currentTime": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "duration": duration,
+                "framesAnalyzed": 1421,
+                "cameraStatus": "active",
+                "cameraReconnecting": False,
+            },
+            liveStatus={
+                "riskLevel": "moderate",
+                "riskScore": risk_score,
+                "confidence": 0.92,
+                "currentTask": "Assembly Work",
+                "taskConfidence": 87.0,
+                "taskDurationSeconds": 340.0,
+                "workerStatus": "active",
+            },
+            ergonomicFeatures=features,
+            issues=issues,
+            recommendations={
+                "worker": "Adjust monitor height to eye level. Take a 2-minute stretch break every 30 minutes.",
+                "supervisor": "Worker showing moderate neck/forward-head risk. Consider workstation ergonomic assessment.",
+            },
+            sessionAnalytics={
+                "sessionDuration": f"{duration // 60}m {duration % 60}s",
+                "framesAnalyzed": 1421,
+                "highestRisk": "MEDIUM",
+                "mostFrequentIssue": "Neck Flexion",
+                "averageNeck": 22.0,
+                "averageTrunk": 18.5,
+                "averageKnee": 142.0,
+            },
+            unavailableFeatures=[],
+            riskHistory=risk_history,
+            trendAnalysis={
+                "trend": "stable",
+                "averageRisk": 42.0,
+                "sessionsAnalyzed": 30,
+                "improving": 5,
+                "stable": 22,
+                "deteriorating": 3,
+            },
+        )
+
     async def get_dashboard(self) -> DashboardResponse:
+        from app.services.demo_seeding import DEMO_MODE
+        if DEMO_MODE:
+            try:
+                return self._build_dashboard()
+            except Exception:
+                return self._build_demo_dashboard()
         return self._build_dashboard()
 
     async def get_latest_session(self) -> DashboardResponse:
+        from app.services.demo_seeding import DEMO_MODE
+        if DEMO_MODE:
+            try:
+                return self._build_dashboard()
+            except Exception:
+                return self._build_demo_dashboard()
         return self._build_dashboard()
 
     async def get_sessions(self, current_user=None) -> List[SessionRecord]:
@@ -761,6 +856,24 @@ class LiveRepository(DashboardRepository):
         return []
 
     async def get_alerts_full(self) -> AlertsResponse:
+        from app.services.demo_seeding import DEMO_MODE, generate_demo_data
+        if DEMO_MODE:
+            demo = generate_demo_data()
+            active = [AlertResponse(**a) for a in demo["alerts"] if a["state"] == "ACTIVE"]
+            history = [AlertResponse(**a) for a in demo["alerts"] if a["state"] != "ACTIVE"]
+            critical_count = sum(1 for a in active if a.severity == "CRITICAL")
+            ack_count = sum(1 for a in history if a.state == "ACKNOWLEDGED")
+            return AlertsResponse(
+                active=active,
+                history=history,
+                summary=AlertSummary(
+                    total_fired=len(demo["alerts"]),
+                    active_count=len(active),
+                    critical_count=critical_count,
+                    acknowledged_count=ack_count,
+                    consecutive_high=0,
+                ),
+            )
         service = get_live_service()
         alert_data = service.alert_engine.export()
 
@@ -791,6 +904,9 @@ class LiveRepository(DashboardRepository):
 
         Avoids serializing the entire history list.
         """
+        from app.services.demo_seeding import DEMO_MODE
+        if DEMO_MODE:
+            return await self.get_alerts_full()
         service = get_live_service()
         engine = service.alert_engine
 

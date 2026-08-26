@@ -81,7 +81,15 @@ export default function Layout() {
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
   const location = useLocation();
+
+  useEffect(() => {
+    fetch('/api/demo-mode')
+      .then(r => r.json())
+      .then(d => { if (d.demo_mode) setDemoMode(true); })
+      .catch(() => {});
+  }, []);
 
   useAlertToasts(() => setNotifOpen(true));
 
@@ -111,6 +119,12 @@ export default function Layout() {
         <Header
           session={dashboard?.session || null}
         />
+        {demoMode && (
+          <div className="mx-lg mt-sm px-4 py-2 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-700 text-sm font-medium flex items-center gap-2">
+            <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            Demo Mode — showing synthetic data for presentation
+          </div>
+        )}
         <div className="px-lg pt-md pb-0 space-y-md">
           <div className="flex items-center gap-md flex-wrap">
             {/* Primary action + session setup cluster */}

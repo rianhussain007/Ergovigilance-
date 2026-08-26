@@ -305,3 +305,10 @@ async def root():
         "docs": "/docs",
         "openapi": "/openapi.json",
     }
+
+
+@app.get("/api/demo-mode", tags=["System"])
+async def demo_mode_status():
+    """Report whether the server is running in DEMO_MODE."""
+    from app.services.demo_seeding import DEMO_MODE
+    return {"demo_mode": DEMO_MODE}
