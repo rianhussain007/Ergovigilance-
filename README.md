@@ -2,7 +2,20 @@
 
 > Real-time posture risk detection, live monitoring, alerts, and reporting for factory floors — powered by computer vision and biomechanical analysis.
 
-![Architecture](ui_posture/public/images/dashboard-operator.png)
+<p align="center">
+  <img src="ui_posture/public/images/skeleton-overlay.png" alt="Live posture analysis with skeleton overlay" width="800" />
+  <br/>
+  <em>Real-time skeleton tracking with per-body-region risk coloring and biomechanical analysis</em>
+</p>
+
+<p align="center">
+  <img src="ui_posture/public/images/dashboard-operator.png" alt="Operator Dashboard" width="380" />
+  &nbsp;&nbsp;
+  <img src="ui_posture/public/images/live_camera.png" alt="Live Camera View" width="380" />
+</p>
+<p align="center">
+  <em>Left: Operator dashboard with live risk gauges and feature monitoring · Right: Live camera feed with skeleton overlay</em>
+</p>
 
 ## What It Does
 
