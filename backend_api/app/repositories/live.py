@@ -1,6 +1,6 @@
 """Live repository — reads from LiveState instead of mock data.
 
-Replaces MockRepository when the CV pipeline is active.
+The single repository backed by the live CV pipeline.
 Maintains the same DashboardResponse schema so React interfaces stay unchanged.
 """
 
@@ -15,7 +15,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from app.repositories.base import DashboardRepository
+from app.repositories.base import DashboardRepository, RepositoryUnavailableError
 from app.schemas.api import (
     DashboardResponse,
     SessionRecord,
@@ -652,12 +652,13 @@ class LiveRepository(DashboardRepository):
 
         try:
             all_workers = list_workers()
-        except Exception:
-            logger.warning("get_manager: database unavailable, using mock data")
-            import app.utils.mock_data as mock_data
-            # Mark the summary as degraded so the UI can flag mock numbers
-            # instead of presenting them as real floor data.
-            return ManagerSummary(**mock_data.MANAGER, degraded=True)
+        except Exception as exc:
+            # Fail closed: a database outage must NEVER present fabricated
+            # numbers as real floor data. The API layer maps this to a 503.
+            logger.error("get_manager: database unavailable — failing closed")
+            raise RepositoryUnavailableError(
+                "manager summary unavailable: database unreachable"
+            ) from exc
 
         # ── Load all persisted alerts ────────────────────────────────
         today_alerts_count = 0

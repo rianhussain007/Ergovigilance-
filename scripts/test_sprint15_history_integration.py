@@ -100,20 +100,12 @@ def test_endpoint_registration():
 def test_repository_implementations():
     print("\n--- Repository Implementations ---")
 
-    from app.repositories.mock import MockRepository
     from app.repositories.live import LiveRepository
     from app.repositories.base import DashboardRepository
 
-    check("MockRepository has get_history", hasattr(MockRepository, "get_history"))
+    # NOTE: the mock repository layer was removed — live mode is the only mode.
     check("LiveRepository has get_history", hasattr(LiveRepository, "get_history"))
     check("DashboardRepository has get_history", hasattr(DashboardRepository, "get_history"))
-
-    import asyncio
-    mock = MockRepository()
-    result = asyncio.run(mock.get_history())
-    check("MockRepository returns HistoryResponse", isinstance(result, HistoryResponse))
-    check("MockRepository returns empty points", len(result.points) == 0)
-    check("MockRepository returns zero stats", result.statistics.frames_stored == 0)
 
 
 # ── Section 4: React TypeScript Interface ─────────────────────────────

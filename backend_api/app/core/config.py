@@ -34,22 +34,21 @@ class Settings:
     APP_NAME: str = "ErgoVigilance API"
     APP_VERSION: str = "0.1.0"
     DEBUG: bool = os.getenv("DEBUG", "true").lower() == "true"
-    HOST: str = os.getenv("HOST", "0.0.0.0")
+    # Secure-by-default host binding: debug builds bind to loopback only so a
+    # dev server is never reachable from the LAN. Explicit HOST env always wins
+    # (deployments set HOST=0.0.0.0 behind a firewall/reverse proxy).
+    HOST: str = os.getenv("HOST") or (
+        "127.0.0.1" if os.getenv("DEBUG", "true").lower() == "true" else "0.0.0.0"
+    )
     PORT: int = int(os.getenv("PORT", "8000"))
     CORS_ORIGINS: list[str] = os.getenv(
         "CORS_ORIGINS", "http://localhost:3000,http://localhost:5173,http://localhost"
     ).split(",")
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
-    USE_MOCK_REPOSITORY: bool = (
-        os.getenv("USE_MOCK_REPOSITORY", "false").lower() == "true"
-    )
     # When true, client IPs are read from the X-Forwarded-For header (only set
     # this when the API sits behind a trusted reverse proxy that overwrites it).
     TRUST_PROXY_HEADERS: bool = (
         os.getenv("TRUST_PROXY_HEADERS", "false").lower() == "true"
-    )
-    MOCK_DATA_DIR: str = os.getenv(
-        "MOCK_DATA_DIR", "app/utils/mock_data"
     )
     AUTH_DB_PATH: str = os.getenv("AUTH_DB_PATH", "")
     # PostgreSQL/ TimescaleDB telemetry store (Tier 1). Empty = sessions stay

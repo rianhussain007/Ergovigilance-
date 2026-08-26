@@ -32,6 +32,38 @@ export function CameraPanel({ status, workerName, task, reconnecting, onCaptureR
   const { addToast } = useToast();
   const isActive = status === 'active';
 
+  // Short-lived token scoped ONLY to the MJPEG stream (POST /video/stream-token).
+  // Query strings end up in browser history and server access logs — they must
+  // carry this ~10-minute video-only token, never the long-lived API JWT.
+  const [videoToken, setVideoToken] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isActive) {
+      setVideoToken(null);
+      return;
+    }
+    let cancelled = false;
+    const mint = async () => {
+      try {
+        const res = await fetch('/video/stream-token', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${getStoredToken() ?? ''}` },
+        });
+        if (!res.ok) throw new Error(`stream-token ${res.status}`);
+        const data = await res.json();
+        if (!cancelled && data?.token) setVideoToken(data.token);
+      } catch {
+        if (!cancelled) setVideoToken(null);
+      }
+    };
+    void mint();
+    // Re-mint well before the backend's 10-minute expiry.
+    const interval = setInterval(mint, 8 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [isActive, retryKey]);
+
   // FPS counter (shown while session is active)
   useEffect(() => {
     if (!isActive) return;
@@ -142,13 +174,18 @@ export function CameraPanel({ status, workerName, task, reconnecting, onCaptureR
     frameCountRef.current = 0;
     setStreamKey((k) => k + 1);
   }, []);
-  const streamToken = getStoredToken();
   const overlayParam = showOverlay ? 'overlay=true' : 'overlay=false';
+  // Prefer the scoped stream token; fall back to the API JWT while minting or
+  // if the mint call failed, so the feed still works.
+  const legacyJwt = getStoredToken();
+  const authParam = videoToken
+    ? `stream_token=${encodeURIComponent(videoToken)}`
+    : legacyJwt
+      ? `token=${encodeURIComponent(legacyJwt)}`
+      : '';
   // Cache-bust: streamKey changes on session start + retries so the browser
   // never serves a stale cached MJPEG response.
-  const streamSrc = streamToken
-    ? `/video/feed?${overlayParam}&token=${encodeURIComponent(streamToken)}&_t=${streamKey}`
-    : `/video/feed?${overlayParam}&_t=${streamKey}`;
+  const streamSrc = `/video/feed?${overlayParam}${authParam ? `&${authParam}` : ''}&_t=${streamKey}`;
 
   const toggleOverlay = useCallback(() => {
     setShowOverlay((prev) => !prev);

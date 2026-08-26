@@ -8,6 +8,8 @@ the matcher itself enforces this, not just the UI.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -38,6 +40,41 @@ def _cleanup(wid: str) -> None:
 
 
 class TestConsentEnforcement:
+    def test_denied_consent_erases_biometrics_via_api(self, client: TestClient):
+        """Consent withdrawal must PHYSICALLY erase stored face samples via the
+        API (not just exclude them from matching) — privacy-first erasure."""
+        wid = _make_worker("erase1")
+        headers = _auth_headers(client)
+        try:
+            import numpy as np
+            from datetime import datetime, timezone
+
+            from app.core.database import get_connection
+
+            # Insert a synthetic sample directly (embedding_from_image is
+            # model-backed); the API erasure path under test is what matters.
+            emb = np.zeros(128, dtype="float32")
+            emb[0] = 1.0
+            with get_connection() as conn:
+                conn.execute(
+                    "INSERT INTO worker_face_samples (worker_id, embedding, enrolled_at, sample_index) VALUES (?, ?, ?, 0)",
+                    (wid, json.dumps(emb.tolist()), datetime.now(timezone.utc).isoformat()),
+                )
+                conn.commit()
+            assert any(r["worker_id"] == wid for r in worker_faces.list_enrolled_embeddings())
+
+            res = client.patch(
+                f"/api/workers/{wid}/identity",
+                json={"identity_mode": "face", "consent_status": "denied"},
+                headers=headers,
+            )
+            assert res.status_code == 200, res.text
+            # Erasure, not just exclusion: the samples table is empty now.
+            assert worker_faces.get_face_status(wid)["enrolled"] is False
+            assert all(r["worker_id"] != wid for r in worker_faces.list_enrolled_embeddings())
+        finally:
+            _cleanup(wid)
+
     def test_denied_consent_excludes_from_face_matching(self, monkeypatch):
         wid = _make_worker("deny1")
         try:

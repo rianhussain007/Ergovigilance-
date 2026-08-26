@@ -19,6 +19,13 @@ from app.schemas.api import (
 )
 
 
+class RepositoryUnavailableError(RuntimeError):
+    """A repository cannot serve REAL data (e.g. the database is unreachable).
+
+    API layers translate this into HTTP 503 — never into canned or demo data.
+    """
+
+
 class DashboardRepository(ABC):
     @abstractmethod
     async def get_dashboard(self) -> DashboardResponse:

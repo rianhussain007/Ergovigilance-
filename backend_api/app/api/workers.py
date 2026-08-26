@@ -181,11 +181,14 @@ async def delete_worker_endpoint(
     deleted = delete_worker(worker_id)
     if not deleted:
         raise HTTPException(status_code=500, detail="Failed to delete worker")
+    # Cascade: erase all stored biometric samples with the worker record.
+    face_erased = delete_worker_face(worker_id)
 
     # Log to audit trail
     details = json.dumps({
         "name": existing_worker["name"],
-        "employee_id": existing_worker["employee_id"]
+        "employee_id": existing_worker["employee_id"],
+        "biometric_samples_erased": face_erased,
     })
     insert_audit_log(
         id=f"AUD-{uuid.uuid4().hex[:8].upper()}",
@@ -231,6 +234,12 @@ async def update_worker_identity_endpoint(
     updated = update_worker_identity(worker_id, body.identity_mode, body.consent_status)
     if not updated:
         raise HTTPException(status_code=500, detail="Failed to update identity settings")
+    # Consent withdrawal is irreversible for biometrics: physically erase the
+    # stored embeddings, not just exclude them from matching. Re-enrollment
+    # after a re-grant requires fresh photos anyway.
+    biometric_erased = False
+    if body.consent_status == "denied" and existing["consent_status"] != "denied":
+        biometric_erased = delete_worker_face(worker_id)
     row = get_worker(worker_id)
 
     insert_audit_log(
@@ -248,6 +257,7 @@ async def update_worker_identity_endpoint(
             "new_identity_mode": body.identity_mode,
             "old_consent_status": existing["consent_status"],
             "new_consent_status": body.consent_status,
+            "biometric_samples_erased": biometric_erased,
         }),
     )
     return WorkerResponse(**dict(row))

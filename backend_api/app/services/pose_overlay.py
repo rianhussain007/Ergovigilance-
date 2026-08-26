@@ -409,6 +409,18 @@ def draw_person_boxes(frame, person_boxes, identified_worker=None, person_identi
                 # rendering it as a confirmed present worker.
                 return f"{base}  VERIFYING"
             return base
+        if (
+            not entry.get("matched")
+            and entry.get("worker_id")
+            and entry.get("band") == "unverified"
+        ):
+            # Below the verified-match threshold but above the unknown floor:
+            # show the candidate identity with an explicit (?) — the product
+            # must never present a guess as a fact.
+            emp = entry.get("employee_id") or entry.get("worker_id")
+            conf = float(entry.get("confidence", 0.0) or 0.0)
+            base = f"{emp} (?)  ({conf:.0%})" if conf > 0 else f"{emp} (?)"
+            return f"{base}  LOW CONFIDENCE"
         if entry.get("seen"):
             return "Not recognized"
         return None

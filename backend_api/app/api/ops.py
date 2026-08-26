@@ -77,9 +77,9 @@ async def readyz() -> JSONResponse:
     checks["live_service"] = _live_service_initialized()
     checks["model_available"] = os.path.exists(settings.POSE_MODEL_PATH)
 
-    # In mock mode the repository layer needs no live service; in live mode the
-    # service must be initialized or requests fail closed with 503.
-    ready = checks["database"] and (settings.USE_MOCK_REPOSITORY or checks["live_service"])
+    # Live mode only: the service must be initialized or requests fail closed
+    # with 503 — there is no demo-data fallback anymore.
+    ready = checks["database"] and checks["live_service"]
     return JSONResponse(
         status_code=200 if ready else 503,
         content={

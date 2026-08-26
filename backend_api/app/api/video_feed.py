@@ -3,15 +3,21 @@
 import logging
 import os
 import time
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
 
 # Timestamp of the last overlay-failure warning (rate-limited logging).
 _last_overlay_warn_ts: float = 0.0
 
-from app.core.auth import require_live_session_access
+from app.core.auth import get_current_user, require_live_session_access
 from app.core.database import get_user_by_id
-from app.core.security import AuthenticatedUser, decode_access_token
+from app.core.security import (
+    AuthenticatedUser,
+    STREAM_TOKEN_TTL_SECONDS,
+    create_stream_token,
+    decode_access_token,
+    verify_stream_token,
+)
 from app.services.live_monitor import get_live_service
 
 logger = logging.getLogger(__name__)
@@ -217,6 +223,55 @@ def _generate_raw_mjpeg(source: int | str):
         release_feed(source)
 
 
+def _authenticate_stream_request(request: Request) -> AuthenticatedUser:
+    """Validate credentials for an MJPEG stream request. Raises 401 when absent/invalid.
+
+    Accepts, in order of preference:
+    - a short-lived *stream-scoped* token via ``?stream_token=`` (or legacy
+      ``?token=``) — preferred because query strings land in browser history
+      and access logs, so they must never carry the long-lived API JWT;
+    - a standard ``Authorization: Bearer <JWT>`` header.
+    """
+    candidate = request.query_params.get("stream_token") or request.query_params.get("token")
+    if candidate:
+        spayload = verify_stream_token(candidate)
+        if spayload is not None:
+            row = get_user_by_id(int(spayload["sub"]))
+            if row is not None:
+                return AuthenticatedUser(id=row["id"], email=row["email"], role=row["role"])
+
+    auth_header = request.headers.get("authorization", "")
+    if auth_header.lower().startswith("bearer "):
+        try:
+            payload = decode_access_token(auth_header.split(" ", 1)[1])
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid video stream token") from exc
+        row = get_user_by_id(int(payload["sub"]))
+        if row is not None:
+            return AuthenticatedUser(id=row["id"], email=row["email"], role=row["role"])
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Video stream requires authentication. POST /video/stream-token first.",
+    )
+
+
+@router.post("/video/stream-token")
+async def post_video_stream_token(user: AuthenticatedUser = Depends(get_current_user)):
+    """Mint a short-lived token scoped ONLY to the MJPEG video stream.
+
+    The frontend puts this in the <img> URL instead of its 8-hour API JWT so
+    a leaked query string can never be replayed against other endpoints.
+    Tokens expire after ``STREAM_TOKEN_TTL_SECONDS`` (default 10 min) and are
+    re-minted automatically by the dashboard.
+    """
+    return {
+        "token": create_stream_token(user.id, user.role),
+        "expires_in": STREAM_TOKEN_TTL_SECONDS,
+        "token_type": "stream",
+    }
+
+
 @router.get("/video/feed")
 async def video_feed(
     request: Request,
@@ -224,6 +279,11 @@ async def video_feed(
     overlay: bool = True,
 ):
     """MJPEG video stream from the live camera pipeline with optional pose overlay.
+
+    Requires authentication: pass ``?stream_token=`` (from POST
+    /video/stream-token) or an Authorization bearer JWT. Unauthenticated
+    requests are rejected with 401 — camera video must never be watchable by
+    anonymous callers.
 
     Parameters
     ----------
@@ -235,7 +295,18 @@ async def video_feed(
     overlay : bool, optional
         Set to false to receive raw video without skeleton overlay.
     """
-    service = get_live_service()
+    # Authentication FIRST — before any state disclosure (including whether a
+    # session is even running) and before the raw-camera path below.
+    user = _authenticate_stream_request(request)
+
+    try:
+        service = get_live_service()
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Live monitoring service unavailable",
+        ) from exc
+    require_live_session_access(user, service)
     if not service.is_running():
         raise HTTPException(status_code=503, detail="No active session. POST /api/session/start first.")
 
@@ -247,20 +318,6 @@ async def video_feed(
             media_type="multipart/x-mixed-replace; boundary=frame",
             headers={"Cache-Control": "no-cache"},
         )
-
-    auth_header = request.headers.get("authorization", "")
-    token = request.query_params.get("token")
-    if auth_header.lower().startswith("bearer "):
-        token = auth_header.split(" ", 1)[1]
-    if token:
-        try:
-            payload = decode_access_token(token)
-            row = get_user_by_id(int(payload["sub"]))
-            if row is not None:
-                user = AuthenticatedUser(id=row["id"], email=row["email"], role=row["role"])
-                require_live_session_access(user, service)
-        except Exception:
-            pass
 
     return StreamingResponse(
         _generate_mjpeg(overlay=overlay),

@@ -147,8 +147,8 @@ def run_tests():
     else:
         checks = [
             ("get_repository function defined", "def get_repository" in content),
-            ("Checks USE_MOCK_REPOSITORY", "USE_MOCK_REPOSITORY" in content),
-            ("Returns MockRepository in mock mode", "return MockRepository()" in content),
+            # NOTE: mock mode was removed — deps.py must NOT reference it.
+            ("No mock repository references", "MockRepository" not in content),
             ("Returns LiveRepository in live mode", "return LiveRepository()" in content),
             ("Fails closed (503) when live service unavailable", "503" in content and "get_live_service" in content),
         ]

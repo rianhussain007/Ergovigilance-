@@ -4,7 +4,7 @@ Tests:
   1. API schema matches ContextSnapshot dataclass
   2. Endpoint registration
   3. LiveRepository implementation
-  4. MockRepository implementation
+  4. Repository implementations (mock layer removed)
   5. React TypeScript interface matches API schema
   6. No unrelated changes
 """
@@ -96,18 +96,12 @@ def test_endpoint_registration():
 def test_repository_implementations():
     print("\n--- Repository Implementations ---")
 
-    from app.repositories.mock import MockRepository
     from app.repositories.live import LiveRepository
     from app.repositories.base import DashboardRepository
 
-    check("MockRepository has get_context_snapshot", hasattr(MockRepository, "get_context_snapshot"))
+    # NOTE: the mock repository layer was removed — live mode is the only mode.
     check("LiveRepository has get_context_snapshot", hasattr(LiveRepository, "get_context_snapshot"))
     check("DashboardRepository has get_context_snapshot", hasattr(DashboardRepository, "get_context_snapshot"))
-
-    import asyncio
-    mock = MockRepository()
-    result = asyncio.run(mock.get_context_snapshot())
-    check("MockRepository returns None", result is None)
 
 
 def test_react_typescript_interface():

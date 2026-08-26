@@ -110,20 +110,12 @@ def test_endpoint_registration():
 def test_repository_implementations():
     print("\n--- Repository Implementations ---")
 
-    from app.repositories.mock import MockRepository
     from app.repositories.live import LiveRepository
     from app.repositories.base import DashboardRepository
 
-    check("MockRepository has get_recommendations", hasattr(MockRepository, "get_recommendations"))
+    # NOTE: the mock repository layer was removed — live mode is the only mode.
     check("LiveRepository has get_recommendations", hasattr(LiveRepository, "get_recommendations"))
     check("DashboardRepository has get_recommendations", hasattr(DashboardRepository, "get_recommendations"))
-
-    import asyncio
-    mock = MockRepository()
-    result = asyncio.run(mock.get_recommendations())
-    check("MockRepository returns RecommendationsBundleResponse", isinstance(result, RecommendationsBundleResponse))
-    check("MockRepository returns null bundle", result.bundle is None)
-    check("MockRepository returns zero total_generated", result.total_generated == 0)
 
 
 # ── Section 4: React TypeScript Interface ─────────────────────────────

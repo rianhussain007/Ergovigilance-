@@ -1,6 +1,6 @@
 """Fail-closed verification for repository-backed API endpoints.
 
-The test environment runs with USE_MOCK_REPOSITORY=false and an invalid
+The test environment runs with an invalid
 POSE_MODEL_PATH, so the live monitoring service is never initialized. Every
 endpoint that depends on the repository must return HTTP 503 (never silently
 serve mock data) — this is the product's core fail-closed guarantee.

@@ -71,10 +71,15 @@ class TestEnrollAndIdentify:
 
         status = worker_faces.enroll_worker(worker_id, b"fake-image-bytes")
         assert status["enrolled"] is True
-        assert worker_faces.get_face_status(worker_id)["enrolled"] is True
+        assert status["sample_count"] == 1
+        face_status = worker_faces.get_face_status(worker_id)
+        assert face_status["enrolled"] is True
+        assert face_status["sample_count"] == 1
 
         result = worker_faces.identify_face(emb)
         assert result["matched"] is True
+        assert result["verified"] is True
+        assert result["band"] == "verified"
         assert result["worker_id"] == worker_id
 
         _drop_worker(worker_id)
@@ -83,11 +88,18 @@ class TestEnrollAndIdentify:
     def test_unmatched_face_reports_unknown(self, monkeypatch):
         worker_id = "worker-888-test"
         _ensure_worker(worker_id)
-        monkeypatch.setattr(worker_faces, "embedding_from_image", lambda _b: _vec(7))
+        # Enroll e1 = [1, 0, ...]; query with an ORTHOGONAL vector so the
+        # similarity is exactly 0.0 — far below the unknown floor.
+        enrolled = np.zeros(128, dtype=np.float32)
+        enrolled[0] = 1.0
+        orthogonal = np.zeros(128, dtype=np.float32)
+        orthogonal[1] = 1.0
+        monkeypatch.setattr(worker_faces, "embedding_from_image", lambda _b: enrolled)
         worker_faces.enroll_worker(worker_id, b"fake")
 
-        result = worker_faces.identify_face(_vec(8))
+        result = worker_faces.identify_face(orthogonal)
         assert result["matched"] is False
+        assert result["band"] == "unknown"
         assert result["worker_id"] is None
 
         _drop_worker(worker_id)
@@ -98,16 +110,82 @@ class TestEnrollAndIdentify:
         with pytest.raises(ValueError):
             worker_faces.enroll_worker(worker_id, b"no-face")
 
-    def test_reenroll_updates_embedding(self, monkeypatch):
+    def test_multi_sample_matching_rescues_angles(self, monkeypatch):
+        """Best-over-samples scoring: either enrolled angle identifies the worker."""
         worker_id = "worker-666-test"
         _ensure_worker(worker_id)
-        monkeypatch.setattr(worker_faces, "embedding_from_image", lambda _b: _vec(11))
-        worker_faces.enroll_worker(worker_id, b"first")
-        monkeypatch.setattr(worker_faces, "embedding_from_image", lambda _b: _vec(12))
-        worker_faces.enroll_worker(worker_id, b"second")
+        a, b = _vec(11), _vec(12)  # two distinct 'angles' of the same person
+        monkeypatch.setattr(worker_faces, "embedding_from_image", lambda _b: a)
+        worker_faces.enroll_worker(worker_id, b"front")
+        monkeypatch.setattr(worker_faces, "embedding_from_image", lambda _b: b)
+        worker_faces.enroll_worker(worker_id, b"side")
 
-        assert worker_faces.identify_face(_vec(12))["worker_id"] == worker_id
-        assert worker_faces.identify_face(_vec(11))["worker_id"] is None
+        assert worker_faces.get_face_status(worker_id)["sample_count"] == 2
+        for probe in (a, b):
+            result = worker_faces.identify_face(probe)
+            assert result["worker_id"] == worker_id
+            assert result["verified"] is True
+
+        _drop_worker(worker_id)
+
+    def test_sample_cap_prunes_oldest(self, monkeypatch):
+        worker_id = "worker-556-test"
+        _ensure_worker(worker_id)
+        for seed in range(worker_faces.FACE_MAX_SAMPLES + 2):
+            monkeypatch.setattr(
+                worker_faces, "embedding_from_image", lambda _b, s=seed: _vec(s)
+            )
+            worker_faces.enroll_worker(worker_id, f"shot-{seed}".encode())
+
+        status = worker_faces.get_face_status(worker_id)
+        assert status["sample_count"] == worker_faces.FACE_MAX_SAMPLES
+        # The two OLDEST samples were pruned; their probes must not match.
+        pruned_probe = worker_faces.identify_face(_vec(0))
+        assert pruned_probe["worker_id"] is None
+        # The newest sample still matches.
+        kept = worker_faces.identify_face(_vec(worker_faces.FACE_MAX_SAMPLES + 1))
+        assert kept["worker_id"] == worker_id
+
+        _drop_worker(worker_id)
+
+
+class TestConfidenceBands:
+    def test_mid_similarity_is_unverified_never_attributed(self):
+        """Similarity between the unverified floor and match threshold yields a
+        candidate identity that is NEVER treated as matched — the product must
+        not guess names it is not sure of."""
+        worker_id = "worker-445-test"
+        _ensure_worker(worker_id)
+        enrolled = np.zeros(128, dtype=np.float32)
+        enrolled[0] = 1.0
+        other = np.zeros(128, dtype=np.float32)
+        other[1] = 1.0
+
+        # Insert a synthetic sample directly at a controlled embedding.
+        import json as _json
+        from app.core.database import get_connection
+        from datetime import datetime, timezone as _tz
+
+        now = datetime.now(_tz.utc).isoformat()
+        with get_connection() as conn:
+            conn.execute(
+                "INSERT INTO worker_face_samples (worker_id, embedding, enrolled_at, sample_index) VALUES (?, ?, ?, 0)",
+                (worker_id, _json.dumps(enrolled.tolist()), now),
+            )
+            conn.commit()
+
+        # Query vector at cosine ~0.37 to the enrolled sample: inside the
+        # unverified band [FACE_UNVERIFIED_THRESHOLD, FACE_MATCH_THRESHOLD).
+        t = 0.37
+        query = np.sqrt(max(0.0, 1.0 - t * t)) * other + t * enrolled
+        query = query.astype(np.float32)
+        result = worker_faces.identify_face(query)
+
+        assert result["band"] == "unverified"
+        assert result["matched"] is False
+        assert result["verified"] is False
+        # Candidate identity IS surfaced (for the "Name (?)" overlay tag).
+        assert result["worker_id"] == worker_id
 
         _drop_worker(worker_id)
 

@@ -36,11 +36,25 @@ from app.core.database import get_connection
 
 logger = logging.getLogger(__name__)
 
-# Cosine similarity at or above this identifies the worker (SFace cosine
-# self-match is ~1.0; cross-person matches are typically < 0.35).
-FACE_MATCH_THRESHOLD = float(os.environ.get("FACE_MATCH_THRESHOLD", "0.15"))
-# Below this, the face is simply unknown (not assigned to anyone).
-FACE_UNKNOWN_THRESHOLD = float(os.environ.get("FACE_UNKNOWN_THRESHOLD", "0.10"))
+# Cosine-similarity bands (SFace self-match ~1.0; cross-person < 0.35).
+# >= MATCH_THRESHOLD : verified identification — the worker's identity may be
+#                      attributed to sessions/alerts.
+# UNVERIFIED..MATCH  : likely match shown as "EMP4 (?)" on the overlay —
+#                      NEVER auto-attributed to alerts or health scores.
+# < UNVERIFIED       : unknown face, assigned to nobody.
+#
+# Historical note: this was briefly dropped to 0.15 to force matches through.
+# That made false accepts near-certain — a safety product that guesses names
+# is worse than one that says "unknown". Fix recognition by enrolling MORE
+# samples (multi-angle), never by lowering this threshold.
+FACE_MATCH_THRESHOLD = float(os.environ.get("FACE_MATCH_THRESHOLD", "0.42"))
+FACE_UNVERIFIED_THRESHOLD = float(
+    os.environ.get("FACE_UNVERIFIED_THRESHOLD", os.environ.get("FACE_UNKNOWN_THRESHOLD", "0.32"))
+)
+# Embedding samples kept per worker (oldest pruned). More samples of the same
+# face across angles/lighting directly raise true-match rates at fixed
+# thresholds — that is how recognition accuracy is supposed to be bought.
+FACE_MAX_SAMPLES = max(1, int(os.environ.get("FACE_MAX_SAMPLES", "5")))
 # Minimum face size in pixels for enrollment (tiny crops embed poorly).
 _MIN_ENROLL_FACE_SIZE = 40
 
@@ -129,7 +143,8 @@ def _yunet_path() -> str:
 
 
 def enroll_worker(worker_id: str, image_bytes: bytes) -> dict:
-    """Enroll a worker's face photo. Returns a status dict.
+    """Enroll one face sample for a worker. Call repeatedly (different angles,
+    distances, lighting) to store up to ``FACE_MAX_SAMPLES`` embeddings.
 
     Raises ValueError when the image contains no usable face (the API layer
     converts that to a 422).
@@ -139,43 +154,71 @@ def enroll_worker(worker_id: str, image_bytes: bytes) -> dict:
         raise ValueError("No usable face detected in the uploaded photo")
     now = datetime.now(timezone.utc).isoformat()
     with get_connection() as conn:
+        count_row = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM worker_face_samples WHERE worker_id = ?",
+            (worker_id,),
+        ).fetchone()
+        sample_index = int(count_row["cnt"]) if count_row else 0
         conn.execute(
             """
-            INSERT INTO worker_faces (worker_id, embedding, enrolled_at, updated_at)
+            INSERT INTO worker_face_samples (worker_id, embedding, enrolled_at, sample_index)
             VALUES (?, ?, ?, ?)
-            ON CONFLICT(worker_id) DO UPDATE SET
-                embedding = excluded.embedding,
-                updated_at = excluded.updated_at
             """,
-            (worker_id, json.dumps(emb.tolist()), now, now),
+            (worker_id, json.dumps(emb.tolist()), now, sample_index),
+        )
+        # Prune oldest samples beyond the cap so enrollment can be refreshed
+        # indefinitely without bloating the table.
+        conn.execute(
+            """
+            DELETE FROM worker_face_samples
+            WHERE worker_id = ? AND id NOT IN (
+                SELECT id FROM worker_face_samples WHERE worker_id = ?
+                ORDER BY id DESC LIMIT ?
+            )
+            """,
+            (worker_id, worker_id, FACE_MAX_SAMPLES),
         )
         conn.commit()
-    logger.info("Enrolled face for worker %s", worker_id)
-    return {"worker_id": worker_id, "enrolled": True, "enrolled_at": now}
+    remaining = get_face_status(worker_id)
+    logger.info("Enrolled face sample %d for worker %s", sample_index + 1, worker_id)
+    return {
+        "worker_id": worker_id,
+        "enrolled": True,
+        "enrolled_at": now,
+        "sample_count": remaining.get("sample_count", 1),
+        "max_samples": FACE_MAX_SAMPLES,
+    }
 
 
 def delete_worker_face(worker_id: str) -> bool:
-    """Remove a worker's face enrollment. Returns True if a row was deleted."""
+    """Erase ALL biometric samples for a worker. Returns True if any were deleted."""
     with get_connection() as conn:
-        cur = conn.execute("DELETE FROM worker_faces WHERE worker_id = ?", (worker_id,))
+        cur = conn.execute(
+            "DELETE FROM worker_face_samples WHERE worker_id = ?", (worker_id,)
+        )
         conn.commit()
         return cur.rowcount > 0
 
 
 def get_face_status(worker_id: str) -> dict:
-    """Return enrollment status for a worker (enrolled / not)."""
+    """Return enrollment status for a worker (enrolled / sample count / timestamps)."""
     with get_connection() as conn:
-        row = conn.execute(
-            "SELECT enrolled_at, updated_at FROM worker_faces WHERE worker_id = ?",
+        rows = conn.execute(
+            """
+            SELECT enrolled_at, sample_index FROM worker_face_samples
+            WHERE worker_id = ? ORDER BY id
+            """,
             (worker_id,),
-        ).fetchone()
-    if row is None:
-        return {"worker_id": worker_id, "enrolled": False}
+        ).fetchall()
+    if not rows:
+        return {"worker_id": worker_id, "enrolled": False, "sample_count": 0}
     return {
         "worker_id": worker_id,
         "enrolled": True,
-        "enrolled_at": row["enrolled_at"],
-        "updated_at": row["updated_at"],
+        "sample_count": len(rows),
+        "max_samples": FACE_MAX_SAMPLES,
+        "enrolled_at": rows[0]["enrolled_at"],
+        "updated_at": rows[-1]["enrolled_at"],
     }
 
 
@@ -190,9 +233,9 @@ def list_enrolled_embeddings() -> list[dict]:
     with get_connection() as conn:
         rows = conn.execute(
             """
-            SELECT wf.worker_id, wf.embedding
-            FROM worker_faces wf
-            JOIN workers w ON w.worker_id = wf.worker_id
+            SELECT s.worker_id, s.embedding
+            FROM worker_face_samples s
+            JOIN workers w ON w.worker_id = s.worker_id
             WHERE w.identity_mode = 'face' AND w.consent_status != 'denied'
             """
         ).fetchall()
@@ -207,29 +250,36 @@ def list_enrolled_embeddings() -> list[dict]:
 
 
 def identify_face(embedding: np.ndarray) -> dict:
-    """Match a face embedding against enrolled workers.
+    """Match a face embedding against every stored sample of every enrolled worker.
 
-    Returns ``{"worker_id": str|None, "confidence": float, "matched": bool}``.
-    ``matched`` is True only when confidence >= FACE_MATCH_THRESHOLD.
+    Scoring takes the BEST similarity across all samples of each worker, so
+    one well-captured enrollment angle rescues recognition from harder ones.
+
+    Returns ``{"worker_id": str|None, "confidence": float,
+    "matched": bool, "verified": bool, "band": "verified"|"unverified"|"unknown"}``.
+
+    ``matched``/``verified`` are True only at or above FACE_MATCH_THRESHOLD;
+    between the unverified floor and the match threshold the candidate is
+    reported with ``band="unverified"`` — callers must render it as
+    "Name (?)" and must NOT attribute alerts/sessions to it.
     """
     query = _normalize(embedding)
-    best = None
-    best_score = -1.0
+    best_per_worker: dict[str, float] = {}
     for rec in list_enrolled_embeddings():
         score = float(np.dot(query, rec["embedding"]))
-        if score > best_score:
-            best_score = score
-            best = rec["worker_id"]
-    if best is None:
-        return {"worker_id": None, "confidence": 0.0, "matched": False}
-    matched = best_score >= FACE_MATCH_THRESHOLD
-    if best_score < FACE_UNKNOWN_THRESHOLD:
-        return {"worker_id": None, "confidence": round(best_score, 3), "matched": False}
-    return {
-        "worker_id": best if matched else None,
-        "confidence": round(best_score, 3),
-        "matched": matched,
-    }
+        prev = best_per_worker.get(rec["worker_id"], -1.0)
+        if score > prev:
+            best_per_worker[rec["worker_id"]] = score
+    if not best_per_worker:
+        return {"worker_id": None, "confidence": 0.0, "matched": False, "verified": False, "band": "unknown"}
+    best = max(best_per_worker.items(), key=lambda kv: kv[1])
+    best_worker, best_score = best[0], round(float(best[1]), 3)
+    if best_score >= FACE_MATCH_THRESHOLD:
+        return {"worker_id": best_worker, "confidence": best_score, "matched": True, "verified": True, "band": "verified"}
+    if best_score >= FACE_UNVERIFIED_THRESHOLD:
+        # Candidate identity: show "Name (?)" — never attribute data to it.
+        return {"worker_id": best_worker, "confidence": best_score, "matched": False, "verified": False, "band": "unverified"}
+    return {"worker_id": None, "confidence": best_score, "matched": False, "verified": False, "band": "unknown"}
 
 
 def identify_persons_in_frame(frame, person_boxes: list[dict]) -> list[dict]:
@@ -240,7 +290,7 @@ def identify_persons_in_frame(frame, person_boxes: list[dict]) -> list[dict]:
 
         {"box": {"x1", "y1", "x2", "y2", "confidence"},
          "worker_id": str | None, "name": str | None,
-         "confidence": float, "matched": bool}
+         "confidence": float, "matched": bool, "band": str}
 
     ``worker_id`` is None when the face is unknown, not visible, or below the
     match threshold. ``name`` is resolved from the workers table when matched.
@@ -281,7 +331,7 @@ def identify_persons_in_frame(frame, person_boxes: list[dict]) -> list[dict]:
                 # enrolled worker, tag the box "Not recognized" rather than
                 # leaving it untagged.
                 identity["seen"] = True
-                if identity.get("matched") and identity.get("worker_id"):
+                if (identity.get("matched") or identity.get("band") == "unverified") and identity.get("worker_id"):
                     identity["name"] = names.get(identity["worker_id"])
                     identity["employee_id"] = employee_ids.get(identity["worker_id"])
         results.append({"box": dict(box), **identity})

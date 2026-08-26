@@ -30,7 +30,6 @@ _TMP = Path(tempfile.mkdtemp(prefix="ergovigilance-tests-"))
 # are imported anywhere, so conftest runs before all test modules).
 os.environ["AUTH_DB_PATH"] = str(_TMP / "test_auth.db")
 os.environ["POSE_MODEL_PATH"] = str(_TMP / "missing_pose_model.task")
-os.environ["USE_MOCK_REPOSITORY"] = "false"
 os.environ["SESSIONS_DIR"] = str(_TMP / "sessions")
 os.environ["RECORDINGS_DIR"] = str(_TMP / "recordings")
 os.environ["SESSION_RETENTION_DAYS"] = "0"
