@@ -265,15 +265,15 @@ export default function ReportsPage() {
   return (
     <div className="p-lg space-y-lg pb-32">
       <div>
-        <h1 className="text-display-lg font-bold text-on-surface">Reports</h1>
-        <p className="text-body-sm text-on-surface-variant mt-xs">Generate, search, and download ergonomic reports</p>
+        <h1 className="text-display-lg font-bold text-slate-900 dark:text-on-surface">Reports</h1>
+        <p className="text-body-sm text-slate-500 dark:text-on-surface-variant mt-xs">Generate, search, and download ergonomic reports</p>
       </div>
 
       {/* Nightly Risk Digest */}
-      <section className="bg-surface-container border border-outline-variant rounded-xl p-lg">
+      <section className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none">
         <div className="flex items-center justify-between flex-wrap gap-md mb-md">
           <div className="flex items-center gap-sm">
-            <FileText className="w-5 h-5 text-primary" />
+            <FileText className="w-5 h-5 text-blue-600 dark:text-primary" />
             <div>
               <h2 className="text-body-md font-bold text-on-surface">Nightly Risk Digest</h2>
               <p className="text-body-sm text-on-surface-variant mt-0.5">Zero-touch summary of the last 24 h — written automatically each night to outputs/reports/</p>
@@ -328,7 +328,7 @@ export default function ReportsPage() {
         <button
           onClick={handleGenerateRiskTrend}
           disabled={loadingTrend}
-          className="flex items-center gap-md bg-orange-500/10 border border-orange-500/30 rounded-xl p-lg hover:border-orange-500/50 transition-colors text-left disabled:opacity-50"
+          className="flex items-center gap-md bg-orange-500/10 border border-orange-500/30 rounded-2xl p-lg shadow-sm dark:shadow-none hover:border-orange-500/50 transition-colors text-left disabled:opacity-50"
         >
           <div className="w-12 h-12 rounded-lg bg-orange-500/20 flex items-center justify-center shrink-0">
             <TrendingUp className="w-6 h-6 text-orange-400" />
@@ -341,7 +341,7 @@ export default function ReportsPage() {
         <button
           onClick={handleGenerateSafetyReport}
           disabled={loadingSafety}
-          className="flex items-center gap-md bg-blue-500/10 border border-blue-500/30 rounded-xl p-lg hover:border-blue-500/50 transition-colors text-left disabled:opacity-50"
+          className="flex items-center gap-md bg-blue-500/10 border border-blue-500/30 rounded-2xl p-lg shadow-sm dark:shadow-none hover:border-blue-500/50 transition-colors text-left disabled:opacity-50"
         >
           <div className="w-12 h-12 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
             <Shield className="w-6 h-6 text-blue-400" />
@@ -354,7 +354,7 @@ export default function ReportsPage() {
         <button
           onClick={handleGenerateWorkerTrends}
           disabled={loadingWorkerTrends}
-          className="flex items-center gap-md bg-green-500/10 border border-green-500/30 rounded-xl p-lg hover:border-green-500/50 transition-colors text-left disabled:opacity-50"
+          className="flex items-center gap-md bg-green-500/10 border border-green-500/30 rounded-2xl p-lg shadow-sm dark:shadow-none hover:border-green-500/50 transition-colors text-left disabled:opacity-50"
         >
           <div className="w-12 h-12 rounded-lg bg-green-500/20 flex items-center justify-center shrink-0">
             <Clock className="w-6 h-6 text-green-400" />
@@ -370,14 +370,14 @@ export default function ReportsPage() {
         <SectionHeader title="Session Reports" />
 
         <div className="mb-md flex flex-wrap items-center gap-md">
-          <div className="flex h-8 w-full max-w-[340px] items-center gap-md rounded-lg border border-outline-variant bg-surface-container-high px-md">
+          <div className="flex h-8 w-full max-w-[340px] items-center gap-md rounded-lg border border-outline-variant bg-slate-100 dark:bg-surface-container-high px-md">
             <Search className="w-4 h-4 shrink-0 text-on-surface-variant/60" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search reports..." className="h-full min-w-0 flex-1 bg-transparent text-body-sm text-on-surface placeholder:text-on-surface-variant/60 focus:outline-none" />
           </div>
           <select
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
-            className="h-8 px-md bg-surface-container border border-outline-variant rounded-lg text-body-sm text-on-surface focus:outline-none"
+            className="h-8 px-md bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-lg text-body-sm text-on-surface focus:outline-none"
           >
             <option value="all">All report types</option>
             <option value="safety">Safety</option>
@@ -386,11 +386,11 @@ export default function ReportsPage() {
           </select>
           <label className="flex items-center gap-sm text-[11px] text-on-surface-variant">
             From
-            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-8 px-md bg-surface-container border border-outline-variant rounded-lg text-body-sm text-on-surface focus:outline-none" />
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-8 px-md bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-lg text-body-sm text-on-surface focus:outline-none" />
           </label>
           <label className="flex items-center gap-sm text-[11px] text-on-surface-variant">
             To
-            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-8 px-md bg-surface-container border border-outline-variant rounded-lg text-body-sm text-on-surface focus:outline-none" />
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-8 px-md bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-lg text-body-sm text-on-surface focus:outline-none" />
           </label>
         </div>
 
@@ -415,7 +415,7 @@ export default function ReportsPage() {
                     key={r.id}
                     onClick={() => handleViewReport(r)}
                     disabled={selectedId === r.id && loadingDetail}
-                    className="w-full bg-surface-container border border-outline-variant rounded-lg p-md flex items-center gap-md hover:border-primary/30 transition-colors group text-left"
+                    className="w-full bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-lg p-md flex items-center gap-md hover:border-primary/30 transition-colors group text-left"
                   >
                     <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                       <Icon className={`w-5 h-5 ${cfg.color}`} />
@@ -568,12 +568,12 @@ function ReportView({ detail, onBack, onPrint, addToast }: { detail: SessionDeta
 
       {/* Title */}
       <div>
-        <h1 className="text-display-lg font-bold text-on-surface">Session Report</h1>
-        <p className="text-body-sm text-on-surface-variant mt-xs">{detail.id}</p>
+        <h1 className="text-display-lg font-bold text-slate-900 dark:text-on-surface">Session Report</h1>
+        <p className="text-body-sm text-slate-500 dark:text-on-surface-variant mt-xs">{detail.id}</p>
       </div>
 
       {/* Session Metadata */}
-      <section className="bg-surface-container border border-outline-variant rounded-xl p-lg space-y-md">
+      <section className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none space-y-md">
         <h2 className="text-title-sm font-bold text-on-surface">Session Metadata</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-md text-body-sm">
           <div>
@@ -617,7 +617,7 @@ function ReportView({ detail, onBack, onPrint, addToast }: { detail: SessionDeta
       </section>
 
       {/* Risk Breakdown */}
-      <section className="bg-surface-container border border-outline-variant rounded-xl p-lg space-y-md">
+      <section className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none space-y-md">
         <h2 className="text-title-sm font-bold text-on-surface">Risk Breakdown</h2>
         <div className="grid grid-cols-3 gap-md">
           {(['LOW', 'MEDIUM', 'HIGH'] as const).map((level) => {
@@ -644,7 +644,7 @@ function ReportView({ detail, onBack, onPrint, addToast }: { detail: SessionDeta
       </section>
 
       {/* Average Features */}
-      <section className="bg-surface-container border border-outline-variant rounded-xl p-lg space-y-md">
+      <section className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none space-y-md">
         <h2 className="text-title-sm font-bold text-on-surface">Average Ergonomic Features</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-md text-body-sm">
           <div>
@@ -668,11 +668,11 @@ function ReportView({ detail, onBack, onPrint, addToast }: { detail: SessionDeta
 
       {/* Alert Timeline */}
       {detail.alerts.length > 0 && (
-        <section className="bg-surface-container border border-outline-variant rounded-xl p-lg space-y-md">
+        <section className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none space-y-md">
           <h2 className="text-title-sm font-bold text-on-surface">Alert Timeline ({detail.alerts.length} alerts)</h2>
           <div className="space-y-sm">
             {detail.alerts.map((alert) => (
-              <div key={alert.id} className="flex items-start gap-md p-sm bg-surface-container-highest/50 rounded-lg">
+              <div key={alert.id} className="flex items-start gap-md p-sm bg-slate-50 dark:bg-surface-container-highest/50 rounded-lg">
                 {alert.severity === 'LOW' ? (
                   <CheckCircle className="w-4 h-4 text-green-400 shrink-0 mt-0.5" />
                 ) : (
@@ -698,7 +698,7 @@ function ReportView({ detail, onBack, onPrint, addToast }: { detail: SessionDeta
       )}
 
       {detail.alerts.length === 0 && (
-        <section className="bg-surface-container border border-outline-variant rounded-xl p-lg">
+        <section className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none">
           <h2 className="text-title-sm font-bold text-on-surface">Alert Timeline</h2>
           <p className="text-body-sm text-on-surface-variant mt-sm">No alerts recorded during this session.</p>
         </section>
@@ -759,14 +759,14 @@ function RiskTrendView({ data, onBack, addToast }: { data: RiskTrendResponse; on
       </div>
 
       <div>
-        <h1 className="text-display-lg font-bold text-on-surface">Risk Trend Report</h1>
-        <p className="text-body-sm text-on-surface-variant mt-xs">
+        <h1 className="text-display-lg font-bold text-slate-900 dark:text-on-surface">Risk Trend Report</h1>
+        <p className="text-body-sm text-slate-500 dark:text-on-surface-variant mt-xs">
           {data.total_sessions} sessions from {dateDisplay(data.earliest_session)} to {dateDisplay(data.latest_session)}
         </p>
       </div>
 
       {/* Risk Distribution */}
-      <section className="bg-surface-container border border-outline-variant rounded-xl p-lg space-y-md">
+      <section className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none space-y-md">
         <h2 className="text-title-sm font-bold text-on-surface">Risk Distribution (Cross-Session Average)</h2>
         <div className="grid grid-cols-3 gap-md">
           {(['LOW', 'MEDIUM', 'HIGH'] as const).map((level) => {
@@ -793,11 +793,11 @@ function RiskTrendView({ data, onBack, addToast }: { data: RiskTrendResponse; on
       </section>
 
       {/* Per-Metric Trend */}
-      <section className="bg-surface-container border border-outline-variant rounded-xl p-lg space-y-md">
+      <section className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none space-y-md">
         <h2 className="text-title-sm font-bold text-on-surface">Metric Trends</h2>
         <div className="space-y-sm">
           {data.metrics.map((m) => (
-            <div key={m.name} className="flex items-center justify-between p-sm bg-surface-container-highest/50 rounded-lg">
+            <div key={m.name} className="flex items-center justify-between p-sm bg-slate-50 dark:bg-surface-container-highest/50 rounded-lg">
               <div>
                 <p className="text-body-sm font-medium text-on-surface">{m.label}</p>
                 <p className="text-[10px] text-on-surface-variant">
@@ -814,7 +814,7 @@ function RiskTrendView({ data, onBack, addToast }: { data: RiskTrendResponse; on
       </section>
 
       {/* Overall Trend */}
-      <section className="bg-surface-container border border-outline-variant rounded-xl p-lg space-y-md">
+      <section className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none space-y-md">
         <h2 className="text-title-sm font-bold text-on-surface">Overall Trend</h2>
         <div className="flex items-center gap-md">
           {trendIcon(data.overall_trend)}
@@ -868,19 +868,19 @@ function SafetyReportView({ data, onBack, addToast }: { data: SafetyReportRespon
       </div>
 
       <div>
-        <h1 className="text-display-lg font-bold text-on-surface">Safety Report</h1>
-        <p className="text-body-sm text-on-surface-variant mt-xs">
+        <h1 className="text-display-lg font-bold text-slate-900 dark:text-on-surface">Safety Report</h1>
+        <p className="text-body-sm text-slate-500 dark:text-on-surface-variant mt-xs">
           {dateDisplay(data.earliest_session)} to {dateDisplay(data.latest_session)}
         </p>
       </div>
 
       {/* Coverage disclosure */}
-      <div className="bg-surface-container border border-orange-500/30 rounded-xl p-md">
+      <div className="bg-surface-container border border-orange-500/30 rounded-2xl p-md shadow-sm dark:shadow-none">
         <p className="text-body-sm text-on-surface-variant">{data.coverage_statement}</p>
       </div>
 
       {/* Alert Volume */}
-      <section className="bg-surface-container border border-outline-variant rounded-xl p-lg space-y-md">
+      <section className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none space-y-md">
         <h2 className="text-title-sm font-bold text-on-surface">Alert Volume</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-md text-center">
           <div>
@@ -903,7 +903,7 @@ function SafetyReportView({ data, onBack, addToast }: { data: SafetyReportRespon
       </section>
 
       {/* Severity Breakdown */}
-      <section className="bg-surface-container border border-outline-variant rounded-xl p-lg space-y-md">
+      <section className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none space-y-md">
         <h2 className="text-title-sm font-bold text-on-surface">Severity Breakdown</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-md text-center">
           {Object.entries(data.severity_breakdown).map(([sev, count]) => (
@@ -926,7 +926,7 @@ function SafetyReportView({ data, onBack, addToast }: { data: SafetyReportRespon
       </section>
 
       {/* Trigger Rules */}
-      <section className="bg-surface-container border border-outline-variant rounded-xl p-lg space-y-md">
+      <section className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none space-y-md">
         <h2 className="text-title-sm font-bold text-on-surface">Trigger Rules</h2>
         <div className="space-y-sm">
           {data.trigger_rule_breakdown.map((t) => (
@@ -946,7 +946,7 @@ function SafetyReportView({ data, onBack, addToast }: { data: SafetyReportRespon
       </section>
 
       {/* Density */}
-      <section className="bg-surface-container border border-outline-variant rounded-xl p-lg space-y-md">
+      <section className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none space-y-md">
         <h2 className="text-title-sm font-bold text-on-surface">Alert Density</h2>
         <div className="grid grid-cols-2 md:grid-cols-3 gap-md text-body-sm">
           <div>
@@ -965,11 +965,11 @@ function SafetyReportView({ data, onBack, addToast }: { data: SafetyReportRespon
       </section>
 
       {/* Top Sessions by Alert Count */}
-      <section className="bg-surface-container border border-outline-variant rounded-xl p-lg space-y-md">
+      <section className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none space-y-md">
         <h2 className="text-title-sm font-bold text-on-surface">Top Sessions by Alert Count</h2>
         <div className="space-y-sm">
           {data.top_sessions_by_alerts.map((s, i) => (
-            <div key={s.session_timestamp} className="flex items-center justify-between p-sm bg-surface-container-highest/50 rounded-lg">
+            <div key={s.session_timestamp} className="flex items-center justify-between p-sm bg-slate-50 dark:bg-surface-container-highest/50 rounded-lg">
               <div className="flex items-center gap-md">
                 <span className="text-body-sm font-bold text-on-surface-variant w-6">#{i + 1}</span>
                 <div>
@@ -984,11 +984,11 @@ function SafetyReportView({ data, onBack, addToast }: { data: SafetyReportRespon
       </section>
 
       {/* Most Frequent Issues */}
-      <section className="bg-surface-container border border-outline-variant rounded-xl p-lg space-y-md">
+      <section className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none space-y-md">
         <h2 className="text-title-sm font-bold text-on-surface">Most Frequent Issues (Alert Sessions)</h2>
         <div className="space-y-sm">
           {data.most_frequent_issues.map((iss) => (
-            <div key={iss.issue} className="flex items-center justify-between p-sm bg-surface-container-highest/50 rounded-lg">
+            <div key={iss.issue} className="flex items-center justify-between p-sm bg-slate-50 dark:bg-surface-container-highest/50 rounded-lg">
               <span className="text-body-sm font-medium text-on-surface">{iss.issue}</span>
               <span className="text-body-sm font-bold text-on-surface-variant">{iss.count} sessions</span>
             </div>
@@ -1015,14 +1015,14 @@ function WorkerTrendsView({ data, onBack, addToast }: { data: WorkerTrendsRespon
       </div>
 
       <div>
-        <h1 className="text-display-lg font-bold text-on-surface">Worker Trends Report</h1>
-        <p className="text-body-sm text-on-surface-variant mt-xs">
+        <h1 className="text-display-lg font-bold text-slate-900 dark:text-on-surface">Worker Trends Report</h1>
+        <p className="text-body-sm text-slate-500 dark:text-on-surface-variant mt-xs">
           Per-worker fatigue trends across {data.total_workers_with_data} workers with session data
         </p>
       </div>
 
       {/* Summary */}
-      <section className="bg-surface-container border border-outline-variant rounded-xl p-lg space-y-md">
+      <section className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none space-y-md">
         <h2 className="text-title-sm font-bold text-on-surface">Summary</h2>
         <div className="grid grid-cols-4 gap-md text-center">
           <div>
@@ -1045,11 +1045,11 @@ function WorkerTrendsView({ data, onBack, addToast }: { data: WorkerTrendsRespon
       </section>
 
       {/* Per-Department Summary */}
-      <section className="bg-surface-container border border-outline-variant rounded-xl p-lg space-y-md">
+      <section className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none space-y-md">
         <h2 className="text-title-sm font-bold text-on-surface">Department Patterns</h2>
         <div className="space-y-sm">
           {data.departments.map((dept) => (
-            <div key={dept.department} className="flex items-center justify-between p-sm bg-surface-container-highest/50 rounded-lg">
+            <div key={dept.department} className="flex items-center justify-between p-sm bg-slate-50 dark:bg-surface-container-highest/50 rounded-lg">
               <div>
                 <p className="text-body-sm font-medium text-on-surface">{dept.department}</p>
                 <p className="text-[10px] text-on-surface-variant">{dept.worker_count} worker{dept.worker_count !== 1 ? 's' : ''}</p>
@@ -1077,11 +1077,11 @@ function WorkerTrendsView({ data, onBack, addToast }: { data: WorkerTrendsRespon
       </section>
 
       {/* Per-Worker Details */}
-      <section className="bg-surface-container border border-outline-variant rounded-xl p-lg space-y-md">
+      <section className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none space-y-md">
         <h2 className="text-title-sm font-bold text-on-surface">Worker Details</h2>
         <div className="space-y-sm">
           {data.workers.map((w) => (
-            <div key={w.worker_id} className="p-sm bg-surface-container-highest/50 rounded-lg space-y-sm">
+            <div key={w.worker_id} className="p-sm bg-slate-50 dark:bg-surface-container-highest/50 rounded-lg space-y-sm">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-body-sm font-medium text-on-surface">{w.name}</p>
@@ -1110,7 +1110,7 @@ function WorkerTrendsView({ data, onBack, addToast }: { data: WorkerTrendsRespon
 
       {/* Temporal Curves (Weekly Risk per Worker) */}
       {data.temporal_curves.length > 0 && (
-        <section className="bg-surface-container border border-outline-variant rounded-xl p-lg space-y-md">
+        <section className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none space-y-md">
           <h2 className="text-title-sm font-bold text-on-surface">Weekly Risk Trends</h2>
           <p className="text-[10px] text-on-surface-variant">Average risk score per week for workers with 2+ weeks of data</p>
           <div className="space-y-lg">
@@ -1141,12 +1141,12 @@ function WorkerTrendsView({ data, onBack, addToast }: { data: WorkerTrendsRespon
 
       {/* Station Analysis */}
       {data.station_analysis.length > 0 && (
-        <section className="bg-surface-container border border-outline-variant rounded-xl p-lg space-y-md">
+        <section className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none space-y-md">
           <h2 className="text-title-sm font-bold text-on-surface">Station Risk Patterns</h2>
           <p className="text-[10px] text-on-surface-variant">Risk analysis grouped by camera/station (17 of 139 sessions have station data)</p>
           <div className="space-y-sm">
             {data.station_analysis.map((station) => (
-              <div key={station.station_id} className="flex items-center justify-between p-sm bg-surface-container-highest/50 rounded-lg">
+              <div key={station.station_id} className="flex items-center justify-between p-sm bg-slate-50 dark:bg-surface-container-highest/50 rounded-lg">
                 <div>
                   <p className="text-body-sm font-medium text-on-surface">{station.display_name}</p>
                   <p className="text-[10px] text-on-surface-variant">{station.sessions} sessions · {station.worker_count} worker{station.worker_count !== 1 ? 's' : ''}</p>

@@ -45,8 +45,8 @@ export default function AnalyticsPage() {
   return (
     <div className="p-lg space-y-lg pb-32">
       <div>
-        <h1 className="text-display-lg font-bold text-on-surface">Analytics</h1>
-        <p className="text-body-sm text-on-surface-variant mt-xs">Comprehensive ergonomic data overview</p>
+        <h1 className="text-display-lg font-bold text-slate-900 dark:text-on-surface">Analytics</h1>
+        <p className="text-body-sm text-slate-500 dark:text-on-surface-variant mt-xs">Comprehensive ergonomic data overview</p>
       </div>
 
       {/* Predictive forecast for the most recent session (advisory) */}
@@ -56,13 +56,13 @@ export default function AnalyticsPage() {
       <BenchmarkCard />
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-md">
-        <div className="bg-surface-container border border-outline-variant rounded-xl p-md">
-          <div className="flex items-center justify-between mb-sm"><span className="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest">Avg Risk Score</span><BarChart3 className="w-5 h-5 text-primary" /></div>
-          <span className="text-display-lg font-bold text-on-surface">{summary ? `${summary.avg_risk_score.toFixed(1)}` : '—'}</span>
+        <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-md shadow-sm dark:shadow-none">
+          <div className="flex items-center justify-between mb-sm"><span className="font-label-caps text-label-caps text-slate-400 dark:text-on-surface-variant uppercase tracking-widest">Avg Risk Score</span><BarChart3 className="w-5 h-5 text-blue-600 dark:text-primary" /></div>
+          <span className="text-display-lg font-bold text-slate-900 dark:text-slate-900 dark:text-on-surface">{summary ? `${summary.avg_risk_score.toFixed(1)}` : '—'}</span>
         </div>
-        <div className="bg-surface-container border border-outline-variant rounded-xl p-md">
+        <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-md shadow-sm dark:shadow-none">
           <div className="flex items-center justify-between mb-sm">
-            <span className="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest">Sessions</span>
+            <span className="font-label-caps text-label-caps text-slate-400 dark:text-on-surface-variant uppercase tracking-widest">Sessions</span>
             {sessionsDelta !== null && sessionsDelta !== 0 ? (
               <span className={`flex items-center gap-1 text-[11px] font-bold ${sessionsDelta > 0 ? 'text-green-400' : 'text-red-400'}`}>
                 {sessionsDelta > 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
@@ -70,20 +70,20 @@ export default function AnalyticsPage() {
               </span>
             ) : null}
           </div>
-          <span className="text-display-lg font-bold text-on-surface">{summary?.total_sessions || '—'}</span>
+          <span className="text-display-lg font-bold text-slate-900 dark:text-slate-900 dark:text-on-surface">{summary?.total_sessions || '—'}</span>
         </div>
-        <div className="bg-surface-container border border-orange-500/30 rounded-xl p-md">
-          <div className="flex items-center justify-between mb-sm"><span className="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest">Incidents</span><AlertTriangle className="w-5 h-5 text-orange-400" /></div>
-          <span className="text-display-lg font-bold text-orange-400">{summary ? summary.deteriorating : '—'}</span>
+        <div className="bg-surface-container border border-orange-500/30 rounded-2xl p-md shadow-sm dark:shadow-none">
+          <div className="flex items-center justify-between mb-sm"><span className="font-label-caps text-label-caps text-slate-400 dark:text-on-surface-variant uppercase tracking-widest">Incidents</span><AlertTriangle className="w-5 h-5 text-orange-400" /></div>
+          <span className="text-display-lg font-bold text-amber-500 dark:text-orange-400">{summary ? summary.deteriorating : '—'}</span>
         </div>
-        <div className="bg-surface-container border border-green-500/30 rounded-xl p-md">
-          <div className="flex items-center justify-between mb-sm"><span className="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-widest">Improving</span><CheckCircle className="w-5 h-5 text-green-400" /></div>
-          <span className="text-display-lg font-bold text-green-400">{summary ? summary.improving : '—'}</span>
+        <div className="bg-surface-container border border-green-500/30 rounded-2xl p-md shadow-sm dark:shadow-none">
+          <div className="flex items-center justify-between mb-sm"><span className="font-label-caps text-label-caps text-slate-400 dark:text-on-surface-variant uppercase tracking-widest">Improving</span><CheckCircle className="w-5 h-5 text-green-400" /></div>
+          <span className="text-display-lg font-bold text-emerald-500 dark:text-green-400">{summary ? summary.improving : '—'}</span>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-lg">
-        <div className="bg-surface-container border border-outline-variant rounded-xl p-lg">
+        <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none">
           <SectionHeader title="Weekly Risk Trend" />
           {loading ? <LoadingCard height="h-64" /> : weeklyRiskTrend.length === 0 ? <EmptyState message="No trend data available" /> : (
             <div className="h-64">
@@ -100,7 +100,7 @@ export default function AnalyticsPage() {
           )}
         </div>
 
-        <div className="bg-surface-container border border-outline-variant rounded-xl p-lg">
+        <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none">
           <SectionHeader title="Risk Distribution" />
           {loading ? <LoadingCard height="h-64" /> : distData.length === 0 ? <EmptyState message="No distribution data" /> : (
             <div className="h-64 flex items-center justify-center">
@@ -116,7 +116,7 @@ export default function AnalyticsPage() {
           )}
         </div>
 
-        <div className="bg-surface-container border border-outline-variant rounded-xl p-lg">
+        <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none">
           <SectionHeader title="Issue Frequency" />
           {loading ? <LoadingCard height="h-64" /> : issueFreq.length === 0 ? <EmptyState message="No issue data available" /> : (
             <div className="h-64">
@@ -132,7 +132,7 @@ export default function AnalyticsPage() {
           )}
         </div>
 
-        <div className="bg-surface-container border border-outline-variant rounded-xl p-lg">
+        <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none">
           <SectionHeader title="Neck & Trunk Trend" />
           {loading ? <LoadingCard height="h-64" /> : neckTrunkTrend.length === 0 ? <EmptyState message="No trend data available" /> : (
             <div className="h-64">

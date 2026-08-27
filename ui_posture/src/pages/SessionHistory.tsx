@@ -250,16 +250,16 @@ export default function SessionHistory() {
       <div className="flex flex-wrap items-start justify-between gap-lg">
         <div className="flex-1 min-w-0 space-y-lg">
           <div>
-            <h1 className="text-display-lg font-bold text-on-surface">Session History</h1>
-            <p className="text-body-sm text-on-surface-variant mt-xs">Browse, search, and review past monitoring sessions</p>
+            <h1 className="text-display-lg font-bold text-slate-900 dark:text-on-surface">Session History</h1>
+            <p className="text-body-sm text-slate-500 dark:text-on-surface-variant mt-xs">Browse, search, and review past monitoring sessions</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-md">
-            <div className="flex items-center gap-md flex-1 min-w-[200px] max-w-[24rem] bg-surface-container border border-outline-variant rounded-lg px-md py-sm">
+            <div className="flex items-center gap-md flex-1 min-w-[200px] max-w-[24rem] bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-lg px-md py-sm">
               <Search className="w-4 h-5 text-on-surface-variant shrink-0" />
               <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by ID or task..." className="flex-1 bg-transparent text-body-sm text-on-surface placeholder:text-outline focus:outline-none" />
             </div>
-            <div className="flex items-center gap-sm bg-surface-container border border-outline-variant rounded-lg p-xs">
+            <div className="flex items-center gap-sm bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-lg p-xs">
               {(['all', 'active', 'completed', 'interrupted'] as const).map((s) => (
                 <button key={s} onClick={() => setStatusFilter(s)} className={`px-md py-sm rounded text-[11px] font-bold uppercase tracking-wider transition-colors ${statusFilter === s ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface'}`}>{s}</button>
               ))}
@@ -267,7 +267,7 @@ export default function SessionHistory() {
             <select
               value={workerFilter}
               onChange={(e) => setWorkerFilter(e.target.value)}
-              className="px-md py-sm bg-surface-container border border-outline-variant rounded-lg text-body-sm text-on-surface focus:outline-none"
+              className="px-md py-sm bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-lg text-body-sm text-on-surface focus:outline-none"
             >
               <option value="">All workers</option>
               {workerOptions.map((w) => (
@@ -277,18 +277,18 @@ export default function SessionHistory() {
             <select
               value={riskFilter}
               onChange={(e) => setRiskFilter(e.target.value)}
-              className="px-md py-sm bg-surface-container border border-outline-variant rounded-lg text-body-sm text-on-surface focus:outline-none"
+              className="px-md py-sm bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-lg text-body-sm text-on-surface focus:outline-none"
             >
               <option value="">Any risk</option>
               <option value="LOW">LOW</option>
               <option value="MEDIUM">MEDIUM</option>
               <option value="HIGH">HIGH</option>
             </select>
-            <button onClick={() => { setSortAsc(!sortAsc); }} className="flex items-center gap-sm px-md py-sm bg-surface-container border border-outline-variant rounded-lg text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">
+            <button onClick={() => { setSortAsc(!sortAsc); }} className="flex items-center gap-sm px-md py-sm bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-lg text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">
               {sortKey === 'date' ? (sortAsc ? 'Date Asc' : 'Date Desc') : sortKey === 'duration' ? 'Duration' : 'Task'}
             </button>
             {hasActiveFilters && (
-              <button onClick={clearFilters} className="flex items-center gap-sm px-md py-sm bg-surface-container border border-outline-variant rounded-lg text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">
+              <button onClick={clearFilters} className="flex items-center gap-sm px-md py-sm bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-lg text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">
                 <RotateCcw className="w-3.5 h-3.5" /> Clear
               </button>
             )}
@@ -321,7 +321,7 @@ export default function SessionHistory() {
         <EmptyState title="No sessions found" message="Try adjusting your search or filters." />
       ) : (
         <div>
-          <div className="bg-surface-container border border-outline-variant rounded-xl overflow-hidden">
+          <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
@@ -445,7 +445,7 @@ export default function SessionHistory() {
                 className="mt-md w-full flex items-center justify-center gap-sm rounded-lg border border-outline-variant bg-surface-container-low px-md py-sm text-body-sm font-semibold text-on-surface hover:border-primary/40 hover:bg-surface-container transition-colors"
                 onClick={() => downloadEvidence(detail.id)}
               >
-                <FileDown className="w-4 h-4 text-primary" />
+                <FileDown className="w-4 h-4 text-blue-600 dark:text-primary" />
                 Incident Evidence Package (zip)
               </button>
             </div>
