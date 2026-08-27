@@ -38,8 +38,8 @@ class AlertRule:
 RULE_HIGH_RISK = AlertRule(
     name="high_risk",
     severity=AlertSeverity.HIGH,
-    title_template="High Risk Posture Detected",
-    message_template="Worker posture risk is HIGH (final_risk={final_risk:.0f}). Immediate attention recommended.",
+    title_template="Unsafe Posture — Needs Attention",
+    message_template="Posture risk is high ({final_risk:.0f}/100). Straighten up and take a break.",
     requires_ack=True,
     cooldown_frames=30,
 )
@@ -47,8 +47,8 @@ RULE_HIGH_RISK = AlertRule(
 RULE_CRITICAL_RISK = AlertRule(
     name="critical_risk",
     severity=AlertSeverity.CRITICAL,
-    title_template="Critical Risk Posture — Escalated",
-    message_template="Worker posture risk has been HIGH for {consecutive_high} consecutive frames. Escalated to CRITICAL.",
+    title_template="Stop Work — Injury Risk",
+    message_template="Unsafe posture sustained for too long. Stop and correct your position now.",
     requires_ack=True,
     cooldown_frames=30,
     escalation_threshold=10,
@@ -57,8 +57,8 @@ RULE_CRITICAL_RISK = AlertRule(
 RULE_RECOVERY = AlertRule(
     name="recovery",
     severity=AlertSeverity.LOW,
-    title_template="Posture Recovered",
-    message_template="Worker posture has returned to safe levels (final_risk={final_risk:.0f}). Alert resolved.",
+    title_template="Posture Improved",
+    message_template="Posture back to safe levels ({final_risk:.0f}/100). Keep it up.",
     requires_ack=False,
     cooldown_frames=0,
 )
@@ -66,8 +66,8 @@ RULE_RECOVERY = AlertRule(
 RULE_RAPID_MOVEMENT = AlertRule(
     name="rapid_movement",
     severity=AlertSeverity.WARNING,
-    title_template="Rapid Repetitive Movement Detected",
-    message_template="Rapid movement: {velocity:.1f} deg/s during {risk_level} posture.",
+    title_template="Fast Movement Detected",
+    message_template="Quick repetitive motion detected ({velocity:.1f} deg/s). Slow down to avoid strain.",
     requires_ack=False,
     cooldown_frames=90,
 )

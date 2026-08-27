@@ -252,7 +252,7 @@ export default function LiveMonitoring() {
         )}
       </section>
 
-      {/* ── RULA / Assessment + Camera Framing + Context Risk ── */}
+      {/* ── Posture Score + Camera Framing + Context Risk ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-lg">
         <RulaScoreCard snapshot={contextSnapshot} active={isActive} />
         <CameraFramingCard snapshot={contextSnapshot} unavailableFeatures={unavailableFeatures} active={isActive} />
@@ -412,9 +412,9 @@ function TelemetrySidebar({
         );
       })()}
 
-      {/* ── Assessment (RULA / REBA) ── */}
+      {/* ── Assessment (Posture Score) ── */}
       <div className="rounded border border-purple-400/30 bg-purple-500/10 p-sm">
-        <p className="font-label-caps text-xs text-on-surface-variant uppercase tracking-widest">Assessment</p>
+        <p className="font-label-caps text-xs text-on-surface-variant uppercase tracking-widest">Posture Score</p>
         {!active ? (
           <p className="text-sm text-on-surface-variant mt-0.5">No active session — assessment starts when monitoring begins.</p>
         ) : contextSnapshot?.assessment_method ? (
@@ -472,7 +472,7 @@ function riskColorHex(level: string): string {
   }
 }
 
-// ── RULA / REBA score card (mirrors the demo's RULA SCORE panel) ──
+// ── Posture Score card ──
 function RulaScoreCard({ snapshot, active }: { snapshot: ContextSnapshot | null; active: boolean }) {
   const method = snapshot?.assessment_method ?? null;
   const score = snapshot?.assessment_score ?? null;
@@ -484,9 +484,9 @@ function RulaScoreCard({ snapshot, active }: { snapshot: ContextSnapshot | null;
     <div className="bg-surface-container border border-outline-variant rounded-xl p-lg">
       <div className="flex items-center gap-sm mb-md">
         <Brain className="w-4 h-4 text-purple-400" />
-        <SectionHeader title="Posture Assessment" />
+        <SectionHeader title="Posture Score" />
       </div>
-      <p className="text-[11px] text-on-surface-variant/70 -mt-sm mb-md">RULA/REBA-informed score (technical detail for supervisors)</p>
+      <p className="text-[11px] text-on-surface-variant/70 -mt-sm mb-md">Based on standardized ergonomic assessment</p>
       {!active ? (
         <IdleNote message="Start monitoring to see the posture assessment." />
       ) : method && score != null ? (
@@ -505,9 +505,8 @@ function RulaScoreCard({ snapshot, active }: { snapshot: ContextSnapshot | null;
             <p className="mt-sm text-sm text-amber-400 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1">
               Partial assessment — some landmarks unavailable (legs out of frame score neutral).
             </p>
-          )}
-          <p className="mt-md text-sm text-on-surface-variant leading-relaxed">
-            RULA 1–2 low · 3–4 medium · 5+ high. REBA 1–3 low · 4–7 medium · 8+ high.
+          )}            <p className="mt-md text-sm text-on-surface-variant leading-relaxed">
+            Score ranges: low (safe) · medium (watch your posture) · high (correct immediately).
           </p>
         </>
       ) : (
@@ -543,7 +542,7 @@ function CameraFramingCard({ snapshot, unavailableFeatures, active }: { snapshot
 
   const guidanceLines = framingGuidance?.length
     ? framingGuidance
-    : ['Lower body out of frame — reposition camera to mid-thigh for full-body REBA.'];
+    : ['Lower body out of frame — reposition camera to mid-thigh for full assessment.'];
 
   return (
     <div className={`bg-surface-container border rounded-xl p-lg ${bad ? 'border-amber-500/40' : 'border-outline-variant'}`}>

@@ -789,9 +789,9 @@ function AIInsightsCard({ snapshot }: { snapshot: { fatigue_score: number; expos
 
     if (snapshot.rula_informed_score !== undefined) {
       if (snapshot.rula_informed_score >= 5) {
-        insights.push({ icon: AlertTriangle, color: 'text-red-400', bg: 'bg-red-500/10', title: 'Poor Posture Detected', desc: `RULA score ${snapshot.rula_informed_score}/7. Adjust now.` });
+        insights.push({ icon: AlertTriangle, color: 'text-red-400', bg: 'bg-red-500/10', title: 'Poor Posture Detected', desc: `Posture score ${snapshot.rula_informed_score}/7. Adjust now.` });
       } else if (snapshot.rula_informed_score >= 3) {
-        insights.push({ icon: TrendingUp, color: 'text-orange-400', bg: 'bg-orange-500/10', title: 'Moderate Posture Risk', desc: `RULA score ${snapshot.rula_informed_score}/7. Review positioning.` });
+        insights.push({ icon: TrendingUp, color: 'text-orange-400', bg: 'bg-orange-500/10', title: 'Moderate Posture Risk', desc: `Posture score ${snapshot.rula_informed_score}/7. Review positioning.` });
       }
     }
 
