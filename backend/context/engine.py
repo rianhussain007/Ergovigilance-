@@ -17,6 +17,7 @@ from typing import Any, Optional
 
 from backend.context.exposure import ExposureTracker
 from backend.context.fatigue import FatigueModel
+from backend.context.temporal_risk import TemporalRiskTracker, TemporalRiskPattern
 from backend.core.constants import RISK_ORDER
 from backend.services.features import FEATURE_DEPENDENCIES
 
@@ -140,6 +141,9 @@ class ContextSnapshot:
     #   "low"    (camera < 70% OR many features unavailable)
     confidence_band: str = "medium"
 
+    # Temporal risk patterns (sustained risk, trajectory, prediction)
+    temporal_risk: dict = field(default_factory=dict)
+
     # Ollama-generated plain-language explanation (populated post-scoring,
     # never in the critical path — a slow or failed LLM call never blocks
     # or corrupts the actual risk computation).
@@ -169,6 +173,7 @@ class ContextSnapshot:
             "approximate_features": list(self.approximate_features),
             "standard_assessment": dict(self.standard_assessment),
             "confidence_band": self.confidence_band,
+            "temporal_risk": self.temporal_risk,
             "ai_explanation": self.ai_explanation,
         }
 
@@ -201,6 +206,7 @@ class ContextSnapshot:
             approximate_features=tuple(data.get("approximate_features", [])),
             standard_assessment=data.get("standard_assessment", {}),
             confidence_band=data.get("confidence_band", "medium"),
+            temporal_risk=data.get("temporal_risk", {}),
             ai_explanation=data.get("ai_explanation", ""),
         )
 
@@ -236,6 +242,7 @@ class ContextIntelligenceEngine:
     def __init__(self, session_id: str = "", worker_id: str = "") -> None:
         self._exposure = ExposureTracker()
         self._fatigue = FatigueModel()
+        self._temporal_risk = TemporalRiskTracker()
         self._previous_state = "SAFE"
         self._state_since: float = 0.0
         self._session_id = session_id
@@ -506,6 +513,19 @@ class ContextIntelligenceEngine:
             final_risk, active_rules,
         )
 
+        # ── Step 11: Temporal risk patterns ────────────────────────
+        temporal_pattern = self._temporal_risk.update(final_risk, delta_seconds)
+        temporal_risk = temporal_pattern.to_dict()
+        
+        if temporal_pattern.sustained_risk_seconds > 10:
+            active_rules.append(f"temporal: elevated risk for {temporal_pattern.sustained_risk_seconds:.0f}s")
+        if temporal_pattern.sustained_high_seconds > 5:
+            active_rules.append(f"temporal: HIGH risk sustained for {temporal_pattern.sustained_high_seconds:.0f}s")
+        if temporal_pattern.is_burst:
+            active_rules.append(f"temporal: sudden spike (+{temporal_pattern.burst_magnitude:.1f} risk/sec)")
+        if temporal_pattern.trajectory == "worsening" and temporal_pattern.trajectory_confidence > 60:
+            active_rules.append(f"temporal: risk worsening (slope={temporal_pattern.trajectory_slope:.2f}, conf={temporal_pattern.trajectory_confidence:.0f}%)")
+
         return ContextSnapshot(
             session_id=self._session_id,
             frame_number=self._frame_counter,
@@ -530,12 +550,14 @@ class ContextIntelligenceEngine:
             feature_scores=feature_scores,
             standard_assessment=dict(std) if std_valid else {},
             confidence_band=confidence_band,
+            temporal_risk=temporal_risk,
         )
 
     def reset(self) -> None:
         """Reset all internal state (e.g., on session restart)."""
         self._exposure.reset()
         self._fatigue.reset()
+        self._temporal_risk.reset()
         self._previous_state = "SAFE"
         self._state_since = 0.0
         self._frame_counter = 0
