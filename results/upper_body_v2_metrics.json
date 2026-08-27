@@ -1,0 +1,113 @@
+{
+  "version": "upper_body_v2_balanced",
+  "best_model_type": "hist_gradient_boosting",
+  "n_samples": 119,
+  "features": [
+    "neck_flexion",
+    "right_shoulder_elev",
+    "shoulder_symmetry",
+    "alignment_deviation",
+    "forward_head_posture",
+    "head_tilt_angle",
+    "movement_velocity"
+  ],
+  "class_distribution": {
+    "Seated Work": 90,
+    "Neutral Standing": 22,
+    "Inspection": 4,
+    "Assembly Work": 3
+  },
+  "class_weights": {
+    "Assembly Work": 9.916666666666666,
+    "Inspection": 7.4375,
+    "Neutral Standing": 1.3522727272727273,
+    "Seated Work": 0.33055555555555555
+  },
+  "cv_results": {
+    "hist_gradient_boosting": {
+      "cv_accuracy": 0.05876068376068375,
+      "cv_std": 0.011494852697703216,
+      "per_fold": [
+        0.05,
+        0.075,
+        0.05128205128205128
+      ]
+    },
+    "random_forest": {
+      "cv_accuracy": 0.05876068376068375,
+      "cv_std": 0.011494852697703216,
+      "per_fold": [
+        0.05,
+        0.075,
+        0.05128205128205128
+      ]
+    }
+  },
+  "classification_report": {
+    "Assembly Work": {
+      "precision": 0.06521739130434782,
+      "recall": 1.0,
+      "f1-score": 0.12244897959183673,
+      "support": 3.0
+    },
+    "Inspection": {
+      "precision": 0.0547945205479452,
+      "recall": 1.0,
+      "f1-score": 0.1038961038961039,
+      "support": 4.0
+    },
+    "Neutral Standing": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 22.0
+    },
+    "Seated Work": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 90.0
+    },
+    "accuracy": 0.058823529411764705,
+    "macro avg": {
+      "precision": 0.030002977963073257,
+      "recall": 0.5,
+      "f1-score": 0.05658627087198516,
+      "support": 119.0
+    },
+    "weighted avg": {
+      "precision": 0.003485968538696002,
+      "recall": 0.058823529411764705,
+      "f1-score": 0.006579255078654839,
+      "support": 119.0
+    }
+  },
+  "confusion_matrix": [
+    [
+      3,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      4,
+      0,
+      0
+    ],
+    [
+      14,
+      8,
+      0,
+      0
+    ],
+    [
+      29,
+      61,
+      0,
+      0
+    ]
+  ],
+  "feature_importances": {},
+  "caveat": "Metrics computed on training data. True accuracy requires held-out human-labeled ground truth."
+}
