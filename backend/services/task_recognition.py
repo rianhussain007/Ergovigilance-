@@ -90,6 +90,7 @@ class TaskRecognition:
 
     DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "task_model_v3.pkl"
     FALLBACK_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "task_model_v2.pkl"
+    UPPER_BODY_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "upper_body_task_model.pkl"
 
     def __init__(self, window_size: int = 10,
                  model_path: Optional[str] = None) -> None:
@@ -159,16 +160,49 @@ class TaskRecognition:
         return self._model_bundle
 
     def _predict_with_model(self, features: Dict[str, float]) -> tuple[str, float] | None:
-        """Return (task, confidence) if the model is confident, else None."""
-        bundle = self._get_model_bundle()
-        if bundle is None:
+        """Return (task, confidence) if the model is confident, else None.
+        
+        Automatically selects the best model based on feature availability:
+        - If lower-body features are available: use full v3 model
+        - If only upper-body features: use upper-body model
+        """
+        # Check which features are available (non-NaN, non-zero)
+        lower_body_features = ["knee_angle", "trunk_flexion", "left_shoulder_elev",
+                               "stance_stability", "weight_shift_offset"]
+        upper_body_features = ["neck_flexion", "right_shoulder_elev", "shoulder_symmetry",
+                               "alignment_deviation", "forward_head_posture", "head_tilt_angle"]
+        
+        has_lower = any(features.get(f, 0) != 0 and features.get(f, 0) == features.get(f, 0) 
+                       for f in lower_body_features)
+        has_upper = any(features.get(f, 0) != 0 and features.get(f, 0) == features.get(f, 0)
+                       for f in upper_body_features)
+        
+        # Select model based on available features
+        if has_lower and self.DEFAULT_MODEL_PATH.exists():
+            model_path = self.DEFAULT_MODEL_PATH
+        elif has_upper and self.UPPER_BODY_MODEL_PATH.exists():
+            model_path = self.UPPER_BODY_MODEL_PATH
+        elif self._model_path.exists():
+            model_path = self._model_path
+        else:
             return None
+        
+        # Load model bundle
+        try:
+            import joblib
+            bundle = joblib.load(model_path)
+            if not isinstance(bundle, dict) or "model" not in bundle:
+                return None
+        except Exception:
+            return None
+        
         try:
             # Add current features to window for temporal computation
             self._feature_window.append(dict(features))
             
             # For v3 models, compute temporal features
-            if self._model_version == "v3":
+            model_version = bundle.get("version", "unknown")
+            if "v3" in model_version:
                 temporal = _compute_temporal_features(list(self._feature_window))
                 features_with_temporal = {**features, **temporal}
             else:
@@ -180,12 +214,7 @@ class TaskRecognition:
             proba = model.predict_proba([row])[0]
             best = int(np.argmax(proba))
             conf = float(proba[best])
-            # sklearn's predict_proba columns follow model.classes_ (sorted),
-            # NOT bundle["labels"] (canonical CLASSES order). Resolving via
-            # classes_ prevents a systematic label misalignment that rotated
-            # every prediction (e.g. a confident Neutral Standing read back as
-            # 'Lifting / Picking'). Fall back to bundle labels for legacy
-            # bundles without classes_ (e.g. test doubles).
+            
             classes = getattr(model, "classes_", None)
             if classes is None:
                 classes = bundle.get("labels", [])
@@ -195,7 +224,9 @@ class TaskRecognition:
             task = str(classes[best])
         except Exception:
             return None
-        if conf < self._confidence_threshold:
+        
+        threshold = float(bundle.get("config", {}).get("confidence_threshold", 0.6))
+        if conf < threshold:
             return None
         return task, conf
 
@@ -241,6 +272,17 @@ class TaskRecognition:
         mid_hip = _midpoint(lhip, rhip)
         torso_height = _dist_2d(mid_shoulder, mid_hip)
 
+        # ── Fast path: try trained model first ──
+        # This handles upper-body-only views where keypoints are degenerate
+        # but features are valid (e.g. camera shows only upper body).
+        model_pred = self._predict_with_model(features)
+        if model_pred is not None:
+            self._using_model = True
+            model_task, model_conf = model_pred
+            model_label = f"Trained task classifier ({self._model_version})"
+            return self._finalize(model_task, round(model_conf * 100.0, 1),
+                                  model_label, kps)
+
         if torso_height < 1e-6:
             self._current_task = "Unknown"
             self._confidence = 0.0
@@ -277,14 +319,7 @@ class TaskRecognition:
                 "Seated Work", 95.0,
                 "Knees bent - seated posture detected", kps, force=True)
 
-        # ── Model-primary path: confident trained classifier wins ──
-        model_pred = self._predict_with_model(features)
-        if model_pred is not None:
-            self._using_model = True
-            model_task, model_conf = model_pred
-            model_label = f"Trained task classifier ({self._model_version})"
-            return self._finalize(model_task, round(model_conf * 100.0, 1),
-                                  model_label, kps)
+        # Model already tried above. Fall through to Gaussian scorer.
         self._using_model = False
 
         l_elbow_angle = _angle_between(lsh, lel, lwr)
