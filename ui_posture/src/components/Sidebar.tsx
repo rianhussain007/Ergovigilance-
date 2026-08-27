@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { NavLink } from 'react-router';
-import { LayoutDashboard, Radio, BarChart3, FileText, History, Settings, ChevronLeft, ChevronRight, Activity, Building2, Camera, ScrollText, Server, Clapperboard, Users, ClipboardList, UserCog } from 'lucide-react';
+import { LayoutDashboard, Radio, BarChart3, FileText, History, Settings, ChevronLeft, ChevronRight, Activity, Building2, Camera, ScrollText, Server, Clapperboard, Users, ClipboardList, UserCog, Heart } from 'lucide-react';
 import { motion } from 'motion/react';
 
 // Navigation grouped into labeled sections. Each item keeps its own role gate
@@ -12,6 +12,7 @@ const NAV_SECTIONS: { title: string; items: { to: string; label: string; icon: t
     items: [
       { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['operator', 'supervisor', 'safety_mgr', 'admin'] },
       { to: '/monitoring', label: 'Live Monitoring', icon: Radio, roles: ['operator', 'supervisor', 'safety_mgr', 'admin'] },
+      { to: '/my-posture', label: 'My Posture', icon: Heart, roles: ['operator'] },
       { to: '/video-review', label: 'Video Review', icon: Clapperboard, roles: ['operator', 'supervisor', 'safety_mgr', 'admin'] },
     ],
   },

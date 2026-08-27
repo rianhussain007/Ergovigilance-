@@ -36,6 +36,7 @@ from app.api.predictions import router as predictions_router
 from app.api.retention import router as retention_router
 from app.api.privacy import router as privacy_router
 from app.api.observations import router as observations_router
+from app.api.worker_summary import router as worker_summary_router
 from app.api.report_digest import router as report_digest_router
 from app.api.evidence import router as evidence_router
 from app.api.setup import router as setup_router
@@ -76,6 +77,7 @@ api_router.include_router(predictions_router, prefix="/api", tags=["Predictions"
 api_router.include_router(retention_router, prefix="/api", tags=["Retention"])
 api_router.include_router(privacy_router, prefix="/api", tags=["Privacy"])
 api_router.include_router(observations_router, prefix="/api", tags=["Session Lifecycle"])
+api_router.include_router(worker_summary_router, prefix="/api", tags=["Worker Self-View"])
 api_router.include_router(report_digest_router, prefix="/api", tags=["Reports"])
 api_router.include_router(evidence_router, prefix="/api", tags=["Sessions"])
 api_router.include_router(setup_router, prefix="/api", tags=["Setup"])

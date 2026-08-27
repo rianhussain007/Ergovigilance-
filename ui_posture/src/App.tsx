@@ -29,6 +29,7 @@ const DeploymentCenter = lazy(() => import('./pages/DeploymentCenter'));
 const MultiCameraView = lazy(() => import('./pages/MultiCameraView'));
 const AuditTrail = lazy(() => import('./pages/AuditTrail'));
 const WorkersPage = lazy(() => import('./pages/WorkersPage'));
+const WorkerSelfView = lazy(() => import('./pages/WorkerSelfView'));
 const UsersPage = lazy(() => import('./pages/UsersPage'));
 const PilotRequestsPage = lazy(() => import('./pages/PilotRequestsPage'));
 const SetupWizardPage = lazy(() => import('./pages/SetupWizardPage'));
@@ -81,6 +82,7 @@ export default function App() {
               <Route path="/cameras" element={<MultiCameraView />} />
               <Route path="/audit" element={<AuditTrail />} />
               <Route path="/workers" element={<WorkersPage />} />
+              <Route path="/my-posture" element={<WorkerSelfView />} />
               <Route path="/users" element={<UsersPage />} />
               <Route path="/pilot-requests" element={<PilotRequestsPage />} />
               <Route path="/setup" element={<SetupWizardPage />} />
