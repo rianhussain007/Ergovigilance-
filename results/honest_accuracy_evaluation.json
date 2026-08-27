@@ -1,0 +1,24 @@
+{
+  "model": "task_classifier_v3_gaussian_fallback",
+  "dataset": "real_factory_footage",
+  "total_frames": 119,
+  "accuracy": 0.09243697478991597,
+  "per_class": {
+    "Assembly Work": 1.0,
+    "Seated Work": 0.0,
+    "Neutral Standing": 0.36363636363636365,
+    "Inspection": 0.0
+  },
+  "risk_distribution": {
+    "LOW": 84,
+    "MEDIUM": 35
+  },
+  "task_distribution": {
+    "Seated Work": 90,
+    "Neutral Standing": 22,
+    "Inspection": 4,
+    "Assembly Work": 3
+  },
+  "caveat": "Evaluated on 119 real frames from 4 recordings. No human labels yet - labels are from the pipeline itself (circular).",
+  "timestamp": "2026-08-27"
+}
