@@ -475,6 +475,9 @@ export interface AlertData {
   trigger_rule: string;
   confidence: number;
   confidence_band: string;
+  priority_score: number;
+  group_id: string;
+  occurrence_count: number;
   requires_ack: boolean;
   expires_at: string;
 }

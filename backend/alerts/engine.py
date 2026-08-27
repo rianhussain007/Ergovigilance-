@@ -21,6 +21,40 @@ from backend.events.events import ContextSnapshotCreatedEvent
 
 logger = logging.getLogger(__name__)
 
+# Severity weights for priority scoring.  Higher = more urgent.
+# CRITICAL alerts always float to the top; LOW recovery alerts sink.
+_SEVERITY_WEIGHT: dict[AlertSeverity, float] = {
+    AlertSeverity.CRITICAL: 5.0,
+    AlertSeverity.HIGH: 3.0,
+    AlertSeverity.WARNING: 2.0,
+    AlertSeverity.MEDIUM: 1.5,
+    AlertSeverity.LOW: 0.5,
+}
+
+
+def _compute_priority(
+    severity: AlertSeverity,
+    confidence: float,
+    age_seconds: float,
+    occurrence_count: int,
+) -> float:
+    """Composite priority score: severity × confidence × age × occurrence.
+
+    Returns 0-100.  CRITICAL + long-lived + high-confidence + repeated
+    alerts float to the top of the queue.  LOW recovery alerts sink.
+    """
+    sev = _SEVERITY_WEIGHT.get(severity, 1.0)
+    # Confidence contributes 0.5-1.0 (never zero — even low-confidence
+    # alerts need to be visible)
+    conf_factor = 0.5 + 0.5 * max(0.0, min(1.0, confidence))
+    # Age: logarithmic ramp — a 10-minute-old alert scores ~2x a fresh one
+    import math
+    age_factor = 1.0 + math.log1p(min(age_seconds, 3600) / 60)  # caps at ~60 min
+    # Occurrence: repeat alerts from the same rule are more urgent
+    occ_factor = 1.0 + 0.2 * min(occurrence_count - 1, 10)  # caps at +2.0
+    raw = sev * conf_factor * age_factor * occ_factor
+    return min(100.0, raw * 10)  # scale to 0-100 range
+
 
 class AlertEngine:
     """Subscribes to ContextSnapshotCreatedEvent and produces alerts.
@@ -50,6 +84,8 @@ class AlertEngine:
         self._consecutive_high: int = 0
         self._frame_counter: int = 0
         self._last_risk_level: str = "LOW"
+        # Grouping: track occurrence count per rule for the current active set
+        self._rule_occurrences: dict[str, int] = {}  # rule_name -> count
 
         # Rehydrate from SQLite if persistence is enabled
         if self._db_enabled:
@@ -78,6 +114,42 @@ class AlertEngine:
         """Return all currently active (unresolved) alerts."""
         return self.active_alerts
 
+    def get_active_alerts_prioritized(self) -> list[Alert]:
+        """Return active alerts sorted by priority score (highest first).
+
+        Refreshes each alert's priority_score based on its current age
+        before sorting, so the list stays accurate as time passes.
+        """
+        now = datetime.now(timezone.utc)
+        refreshed: list[Alert] = []
+        for alert in self._active_alerts.values():
+            try:
+                created = datetime.fromisoformat(alert.created_at.replace("Z", "+00:00"))
+                age_seconds = (now - created).total_seconds()
+            except (ValueError, TypeError):
+                age_seconds = 0.0
+            new_priority = _compute_priority(
+                alert.severity, alert.confidence, age_seconds, alert.occurrence_count,
+            )
+            if new_priority != alert.priority_score:
+                updated = Alert(
+                    id=alert.id, session_id=alert.session_id,
+                    frame_number=alert.frame_number, created_at=alert.created_at,
+                    severity=alert.severity, state=alert.state,
+                    title=alert.title, message=alert.message,
+                    trigger_rule=alert.trigger_rule, confidence=alert.confidence,
+                    confidence_band=alert.confidence_band,
+                    priority_score=new_priority,
+                    group_id=alert.group_id, occurrence_count=alert.occurrence_count,
+                    requires_ack=alert.requires_ack, expires_at=alert.expires_at,
+                )
+                self._active_alerts[alert.id] = updated
+                refreshed.append(updated)
+            else:
+                refreshed.append(alert)
+        refreshed.sort(key=lambda a: a.priority_score, reverse=True)
+        return refreshed
+
     def get_alert_by_id(self, alert_id: str) -> Optional[Alert]:
         """Find an alert by its ID."""
         return self._active_alerts.get(alert_id) or next(
@@ -99,6 +171,10 @@ class AlertEngine:
                 message=alert.message,
                 trigger_rule=alert.trigger_rule,
                 confidence=alert.confidence,
+                confidence_band=alert.confidence_band,
+                priority_score=alert.priority_score,
+                group_id=alert.group_id,
+                occurrence_count=alert.occurrence_count,
                 requires_ack=alert.requires_ack,
                 expires_at=alert.expires_at,
             )
@@ -123,6 +199,10 @@ class AlertEngine:
                 message=alert.message,
                 trigger_rule=alert.trigger_rule,
                 confidence=alert.confidence,
+                confidence_band=alert.confidence_band,
+                priority_score=alert.priority_score,
+                group_id=alert.group_id,
+                occurrence_count=alert.occurrence_count,
                 requires_ack=alert.requires_ack,
                 expires_at=alert.expires_at,
             )
@@ -140,6 +220,7 @@ class AlertEngine:
         self._consecutive_high = 0
         self._frame_counter = 0
         self._last_risk_level = "LOW"
+        self._rule_occurrences.clear()
 
     # ── Persistence ────────────────────────────────────────────────────
 
@@ -191,6 +272,10 @@ class AlertEngine:
             message=row.get("message", ""),
             trigger_rule=row.get("trigger_rule", ""),
             confidence=row.get("confidence", 0.0),
+            confidence_band=row.get("confidence_band", "medium"),
+            priority_score=row.get("priority_score", 0.0),
+            group_id=row.get("group_id", ""),
+            occurrence_count=row.get("occurrence_count", 1),
             requires_ack=bool(row.get("requires_ack", 0)),
             expires_at=row.get("expires_at", ""),
         )
@@ -367,6 +452,15 @@ class AlertEngine:
             risk_level=snapshot.risk_level,
         )
 
+        # ── Priority scoring ──────────────────────────────────────
+        # Track how many times this rule has fired in the current active set
+        self._rule_occurrences[rule.name] = self._rule_occurrences.get(rule.name, 0) + 1
+        occ_count = self._rule_occurrences[rule.name]
+        group_id = f"GRP-{rule.name.upper()}"
+        priority_score = _compute_priority(
+            rule.severity, confidence, 0.0, occ_count,
+        )
+
         alert = Alert(
             id=alert_id,
             session_id=snapshot.session_id,
@@ -379,6 +473,9 @@ class AlertEngine:
             trigger_rule=rule.name,
             confidence=confidence,
             confidence_band=snapshot.confidence_band,
+            priority_score=priority_score,
+            group_id=group_id,
+            occurrence_count=occ_count,
             requires_ack=rule.requires_ack,
         )
 

@@ -910,7 +910,7 @@ class LiveRepository(DashboardRepository):
         service = get_live_service()
         engine = service.alert_engine
 
-        active = [AlertResponse(**a) for a in [v.to_dict() for v in engine.get_active_alerts()]]
+        active = [AlertResponse(**a) for a in [v.to_dict() for v in engine.get_active_alerts_prioritized()]]
         history_tail = [
             AlertResponse(**a) for a in [a.to_dict() for a in engine._history[-recent_n:]]
         ]

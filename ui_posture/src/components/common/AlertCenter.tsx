@@ -23,6 +23,9 @@ interface Notification {
   state: string;
   confidence: number;
   confidence_band: string;
+  priority_score: number;
+  group_id: string;
+  occurrence_count: number;
 }
 
 // Theme-aware severity colors
@@ -99,6 +102,9 @@ function alertToNotification(alert: AlertData, read: boolean): Notification {
     state: alert.state,
     confidence: alert.confidence,
     confidence_band: alert.confidence_band || 'medium',
+    priority_score: alert.priority_score || 0,
+    group_id: alert.group_id || '',
+    occurrence_count: alert.occurrence_count || 1,
   };
 }
 
@@ -194,7 +200,7 @@ function AlertItem({
             <div className="mt-2 space-y-2">
               <p className="text-xs text-on-surface-variant">{alert.description}</p>
               
-              <div className="flex items-center gap-4 text-[9px] text-on-surface-variant">
+              <div className="flex items-center gap-3 text-[9px] text-on-surface-variant flex-wrap">
                 <span className="flex items-center gap-1">
                   <BarChart3 className="w-3 h-3" />
                   {alert.confidence.toFixed(0)}% confidence
@@ -208,6 +214,16 @@ function AlertItem({
                    alert.confidence_band === 'low' ? '● Low certainty' :
                    '● Medium certainty'}
                 </span>
+                {alert.occurrence_count > 1 && (
+                  <span className="px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-400 font-medium">
+                    ×{alert.occurrence_count} repeated
+                  </span>
+                )}
+                {alert.priority_score >= 30 && (
+                  <span className="px-1.5 py-0.5 rounded bg-red-500/15 text-red-400 font-bold">
+                    PRIORITY
+                  </span>
+                )}
                 <span className="flex items-center gap-1">
                   <Clock className="w-3 h-3" />
                   {alert.trigger_rule}
@@ -325,7 +341,7 @@ export function AlertCenter({ onClose }: { onClose?: () => void }) {
   const searchQ = search.trim().toLowerCase();
 
   const filteredActive = useMemo(
-    () => activeNotifs.filter((n) => matchesFilter(n, filter, searchQ)).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
+    () => activeNotifs.filter((n) => matchesFilter(n, filter, searchQ)).sort((a, b) => b.priority_score - a.priority_score || new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()),
     [activeNotifs, filter, searchQ],
   );
   const filteredHistory = useMemo(

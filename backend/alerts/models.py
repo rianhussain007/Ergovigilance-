@@ -47,6 +47,9 @@ class Alert:
     trigger_rule: str = ""
     confidence: float = 0.0
     confidence_band: str = "medium"
+    priority_score: float = 0.0
+    group_id: str = ""
+    occurrence_count: int = 1
     requires_ack: bool = False
     expires_at: str = ""
 
@@ -64,6 +67,9 @@ class Alert:
             "trigger_rule": self.trigger_rule,
             "confidence": self.confidence,
             "confidence_band": self.confidence_band,
+            "priority_score": self.priority_score,
+            "group_id": self.group_id,
+            "occurrence_count": self.occurrence_count,
             "requires_ack": self.requires_ack,
             "expires_at": self.expires_at,
         }

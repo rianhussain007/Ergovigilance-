@@ -339,6 +339,9 @@ class AlertResponse(BaseModel):
     trigger_rule: str
     confidence: float
     confidence_band: str = "medium"
+    priority_score: float = 0.0
+    group_id: str = ""
+    occurrence_count: int = 1
     requires_ack: bool
     expires_at: str
 

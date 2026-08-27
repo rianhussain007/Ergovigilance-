@@ -136,6 +136,47 @@ export default function ManagerDashboard() {
         </div>
       </div>
 
+      {/* ── Stations Needing Attention — ranked by risk ── */}
+      {data.workers.length > 0 && (
+        <div className="bg-surface-container border border-outline-variant rounded-xl p-lg">
+          <SectionHeader title="Stations Needing Attention" />
+          <p className="text-[10px] text-on-surface-variant/60 mb-md">Ranked by risk — highest first. Click to see worker details.</p>
+          <div className="space-y-sm">
+            {[...data.workers]
+              .sort((a, b) => b.risk - a.risk)
+              .slice(0, 5)
+              .map((w, i) => (
+                <button
+                  key={w.id}
+                  onClick={() => setSelected(selected?.id === w.id ? null : w)}
+                  className={`w-full flex items-center gap-md p-md rounded-lg border transition-all ${
+                    w.status === 'high' ? 'border-red-500/30 bg-red-500/5 hover:bg-red-500/10' :
+                    w.status === 'moderate' ? 'border-orange-500/30 bg-orange-500/5 hover:bg-orange-500/10' :
+                    'border-outline-variant/50 bg-surface-container-low hover:bg-surface-container-higher'
+                  }`}
+                >
+                  <span className="font-label-mono text-[10px] text-on-surface-variant w-4">#{i + 1}</span>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold ${
+                    w.status === 'high' ? 'bg-red-500' : w.status === 'moderate' ? 'bg-orange-500' : 'bg-green-500'
+                  }`}>
+                    {workerInitials(w.name)}
+                  </div>
+                  <div className="flex-1 text-left min-w-0">
+                    <p className="text-body-sm font-medium text-on-surface truncate">{w.name}</p>
+                    <p className="text-[10px] text-on-surface-variant">{w.task}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className={`font-label-mono text-title-sm font-bold ${
+                      w.status === 'high' ? 'text-red-400' : w.status === 'moderate' ? 'text-orange-400' : 'text-green-400'
+                    }`}>{w.risk.toFixed(1)}</p>
+                    <p className="text-[9px] text-on-surface-variant uppercase tracking-widest">{w.status}</p>
+                  </div>
+                </button>
+              ))}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-lg">
         <div className="lg:col-span-2 bg-surface-container border border-outline-variant rounded-xl p-lg">
           <SectionHeader title="Factory Floor" />
