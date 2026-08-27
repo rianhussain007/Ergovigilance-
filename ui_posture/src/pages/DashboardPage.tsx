@@ -168,10 +168,10 @@ export default function DashboardPage() {
     <div className="p-lg space-y-lg pb-xl">
       <div className="flex flex-wrap items-end justify-between gap-md">
         <div>
-          <h1 className="text-display-lg font-bold text-on-surface">
+          <h1 className="text-display-lg font-bold text-slate-900 dark:text-on-surface">
             {user?.role === 'operator' ? 'My Dashboard' : 'Dashboard'}
           </h1>
-          <p className="text-body-sm text-on-surface-variant mt-xs">
+          <p className="text-body-sm text-slate-500 dark:text-on-surface-variant mt-xs">
             {user?.role === 'operator' && ('Welcome back, ' + user.email.split('@')[0] + '. Here is your current posture status.')}
             {(user?.role === 'supervisor' || user?.role === 'safety_mgr') && "Real-time visibility across your team's ergonomic risk."}
             {user?.role === 'admin' && 'System health, monitoring activity, and team performance at a glance.'}
@@ -276,7 +276,7 @@ function OperatorDashboard({
       </section>
 
       <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-lg">
-        <div className="bg-surface-container border border-outline-variant rounded-lg p-lg space-y-lg">
+        <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg space-y-lg shadow-sm dark:shadow-none">
           <SectionHeader title="My Health Context" />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
             <ContextTile label="Fatigue" value={snapshot ? `${snapshot.fatigue_score.toFixed(1)}%` : 'Waiting for live context'} />
@@ -284,7 +284,7 @@ function OperatorDashboard({
             <ContextTile label="Context Risk" value={snapshot ? snapshot.final_risk.toFixed(1) : 'Waiting for live context'} />
           </div>
           <div>
-            <p className="font-label-caps text-[10px] text-on-surface-variant mb-sm">My Feature Averages</p>
+            <p className="font-label-caps text-[10px] text-slate-400 dark:text-on-surface-variant mb-sm">My Feature Averages</p>
             {detailLoading ? (
               <LoadingCard height="h-32" />
             ) : featureAverages.length === 0 ? (
@@ -304,7 +304,7 @@ function OperatorDashboard({
         <aside className="space-y-lg">
           <FeedCard title="My Alerts" icon={AlertTriangle}>
             {ownAlerts.length === 0 ? (
-              <p className="text-body-sm text-on-surface-variant">No alerts visible for your current scope.</p>
+              <p className="text-body-sm text-slate-500 dark:text-on-surface-variant">No alerts visible for your current scope.</p>
             ) : ownAlerts.map((alert) => (
               <div key={alert.id}>
                 <FeedRow title={alert.title} meta={`${alert.severity} - frame ${alert.frame_number}`} />
@@ -314,7 +314,7 @@ function OperatorDashboard({
 
           <FeedCard title="My Recommendations" icon={Lightbulb}>
             {latestRecommendations.length === 0 ? (
-              <p className="text-body-sm text-on-surface-variant">No current recommendations from the Recommendation Engine.</p>
+              <p className="text-body-sm text-slate-500 dark:text-on-surface-variant">No current recommendations from the Recommendation Engine.</p>
             ) : latestRecommendations.slice(0, 4).map((rec) => (
               <div key={rec.id}>
                 <FeedRow title={rec.title} meta={`${rec.priority} - ${rec.description}`} />
@@ -327,7 +327,7 @@ function OperatorDashboard({
       <section className="grid grid-cols-1 xl:grid-cols-3 gap-lg">
         <FeedCard title="My Recent Sessions" icon={History}>
           {operatorRecentSessions.length === 0 ? (
-            <p className="text-body-sm text-on-surface-variant">No completed sessions are visible for your account yet.</p>
+            <p className="text-body-sm text-slate-500 dark:text-on-surface-variant">No completed sessions are visible for your account yet.</p>
           ) : operatorRecentSessions.map((session) => (
             <div key={session.id}>
               <FeedRow title={formatSessionLabel(session.date, session.id)} meta={`${session.status} - ${session.duration} - ${session.highestRisk}`} />
@@ -401,12 +401,12 @@ function ElevatedDashboard({
       )}
 
       <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_380px] gap-lg">
-        <div className="bg-surface-container border border-outline-variant rounded-lg p-lg">
+        <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none">
           <SectionHeader title="Visible Worker Activity" />
           <div className="mt-lg grid grid-cols-1 md:grid-cols-2 gap-md">
             <FeedCard title="Recent Sessions" icon={History}>
               {summary.recent_sessions.length === 0 ? (
-                <p className="text-body-sm text-on-surface-variant">No sessions are visible for this role yet.</p>
+                <p className="text-body-sm text-slate-500 dark:text-on-surface-variant">No sessions are visible for this role yet.</p>
               ) : summary.recent_sessions.map((session) => (
                 <div key={session.id}>
                   <FeedRow title={formatSessionLabel(session.date, session.id)} meta={`${session.status} - ${session.duration} - ${session.worker_id ?? 'No worker assigned'}`} />
@@ -415,7 +415,7 @@ function ElevatedDashboard({
             </FeedCard>
             <FeedCard title="Recent Alerts" icon={AlertTriangle}>
               {summary.recent_alerts.length === 0 ? (
-                <p className="text-body-sm text-on-surface-variant">No alert history is currently available.</p>
+                <p className="text-body-sm text-slate-500 dark:text-on-surface-variant">No alert history is currently available.</p>
               ) : summary.recent_alerts.map((alert) => (
                 <div key={alert.id}>
                   <FeedRow title={alert.title} meta={`${alert.severity} - ${alert.state} - ${alert.session_id}`} />
@@ -427,27 +427,27 @@ function ElevatedDashboard({
 
         <aside className="space-y-lg">
           {isAdmin && adminSummary ? (
-            <div className="bg-surface-container border border-outline-variant rounded-lg p-lg">
+            <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none">
               <div className="flex items-center gap-sm mb-md">
-                <Database className="w-4 h-4 text-primary" />
+                <Database className="w-4 h-4 text-blue-600 dark:text-primary" />
                 <SectionHeader title="Role Distribution" />
               </div>
               <div className="space-y-sm">
                 {Object.entries(adminSummary.role_distribution).map(([role, count]) => (
-                  <div key={role} className="flex items-center justify-between rounded-lg bg-surface-container-low border border-outline-variant/60 px-md py-sm">
-                    <span className="text-body-sm text-on-surface-variant">{role}</span>
-                    <span className="font-label-mono text-on-surface">{count}</span>
+                  <div key={role} className="flex items-center justify-between rounded-xl bg-slate-50 dark:bg-surface-container-low border border-slate-100 dark:border-outline-variant/60 px-md py-sm">
+                    <span className="text-body-sm text-slate-600 dark:text-on-surface-variant">{role}</span>
+                    <span className="font-label-mono text-slate-800 dark:text-on-surface">{count}</span>
                   </div>
                 ))}
               </div>
             </div>
           ) : (
-            <div className="bg-surface-container border border-outline-variant rounded-lg p-lg">
+            <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none">
               <div className="flex items-center gap-sm mb-md">
-                <HeartPulse className="w-4 h-4 text-primary" />
+                <HeartPulse className="w-4 h-4 text-blue-600 dark:text-primary" />
                 <SectionHeader title="Safety Scope" />
               </div>
-              <p className="text-body-sm text-on-surface-variant">
+              <p className="text-body-sm text-slate-500 dark:text-on-surface-variant">
                 Aggregates are computed across workers and sessions visible to this role.
               </p>
             </div>
@@ -472,46 +472,40 @@ function ElevatedDashboard({
 }
 
 function MetricCard({ icon: Icon, label, value, detail, tone = 'neutral', onClick, isUrgent = false }: { icon: ElementType; label: string; value: string; detail: string; tone?: 'neutral' | 'good' | 'warning' | 'danger'; onClick?: () => void; isUrgent?: boolean }) {
-  // Check if value is non-zero (for urgent metrics)
   const numericValue = parseFloat(value);
   const hasNonZeroUrgent = isUrgent && !isNaN(numericValue) && numericValue > 0;
-  
-  const iconClass = tone === 'danger' ? 'text-red-400' : tone === 'warning' ? 'text-orange-400' : tone === 'good' ? 'text-green-400' : 'text-primary';
-  
-  // Left border
-  const leftBorderClass = tone === 'danger' ? 'border-l-red-500' : tone === 'warning' ? 'border-l-orange-500' : tone === 'good' ? 'border-l-green-500' : 'border-l-outline-variant';
-  
-  // Background: neutral card in light mode (status colour carried by the
-  // left border + icon); pastel tint only in dark mode where it reads well.
+
+  const iconClass = tone === 'danger' ? 'text-red-500 dark:text-red-400' : tone === 'warning' ? 'text-amber-500 dark:text-orange-400' : tone === 'good' ? 'text-emerald-500 dark:text-green-400' : 'text-blue-600 dark:text-primary';
+
+  const leftBorderClass = tone === 'danger' ? 'border-l-red-500' : tone === 'warning' ? 'border-l-amber-500' : tone === 'good' ? 'border-l-emerald-500' : 'border-l-slate-200 dark:border-l-outline-variant';
+
   const bgClass = hasNonZeroUrgent
-    ? (tone === 'danger' ? 'bg-surface-container dark:bg-red-500/10' : tone === 'warning' ? 'bg-surface-container dark:bg-orange-500/10' : 'bg-surface-container dark:bg-green-500/10')
-    : 'bg-surface-container';
-  
-  // Other borders
-  const otherBorderClass = tone === 'danger' ? 'border-t border-r border-b border-red-500/30' : tone === 'warning' ? 'border-t border-r border-b border-orange-500/30' : tone === 'good' ? 'border-t border-r border-b border-green-500/30' : 'border-t border-r border-b border-outline-variant';
-  
-  // Size for urgent metrics
+    ? (tone === 'danger' ? 'bg-red-50 dark:bg-red-500/10' : tone === 'warning' ? 'bg-amber-50 dark:bg-orange-500/10' : 'bg-emerald-50 dark:bg-green-500/10')
+    : 'bg-white dark:bg-surface-container';
+
+  const borderClass = tone === 'danger' ? 'border border-red-100 dark:border-red-500/30' : tone === 'warning' ? 'border border-amber-100 dark:border-orange-500/30' : tone === 'good' ? 'border border-emerald-100 dark:border-green-500/30' : 'border border-slate-200 dark:border-outline-variant';
+
   const sizeClass = isUrgent ? 'min-h-[140px]' : 'min-h-[132px]';
   const textSizeClass = isUrgent ? 'text-display-lg' : 'text-display-md';
-  
+
   const Tag = onClick ? 'button' : 'div';
   return (
-    <Tag onClick={onClick} className={`${bgClass} border-l-4 ${leftBorderClass} ${otherBorderClass} rounded-xl p-md ${sizeClass} text-left w-full ${onClick ? 'cursor-pointer hover:shadow-md hover:shadow-black/5 hover:-translate-y-0.5 transition-all duration-200' : ''}`}>
+    <Tag onClick={onClick} className={`${bgClass} border-l-4 ${leftBorderClass} ${borderClass} rounded-xl shadow-sm dark:shadow-none p-md ${sizeClass} text-left w-full ${onClick ? 'cursor-pointer hover:shadow-md hover:-translate-y-0.5 transition-all duration-200' : ''}`}>
       <div className="flex items-center justify-between mb-sm gap-sm">
-        <span className="font-label-caps text-[10px] text-on-surface-variant">{label}</span>
+        <span className="font-label-caps text-[10px] text-slate-400 dark:text-on-surface-variant">{label}</span>
         <Icon className={`w-5 h-5 ${iconClass} shrink-0`} />
       </div>
-      <p className={`${textSizeClass} font-bold text-on-surface break-words`}>{value}</p>
-      <p className="text-[11px] text-on-surface-variant mt-xs">{detail}</p>
+      <p className={`${textSizeClass} font-bold text-slate-900 dark:text-on-surface break-words`}>{value}</p>
+      <p className="text-[11px] text-slate-500 dark:text-on-surface-variant mt-xs">{detail}</p>
     </Tag>
   );
 }
 
 function ContextTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-outline-variant/60 bg-surface-container-low p-md min-h-[96px] hover:border-primary/20 transition-colors">
-      <p className="font-label-caps text-[10px] text-on-surface-variant">{label}</p>
-      <p className="mt-sm text-display-sm font-bold text-on-surface break-words">{value}</p>
+    <div className="rounded-xl border border-slate-200 dark:border-outline-variant/60 bg-slate-50 dark:bg-surface-container-low p-md min-h-[96px] hover:border-blue-200 dark:hover:border-primary/20 transition-colors">
+      <p className="font-label-caps text-[10px] text-slate-400 dark:text-on-surface-variant">{label}</p>
+      <p className="mt-sm text-display-sm font-bold text-slate-900 dark:text-on-surface break-words">{value}</p>
     </div>
   );
 }
@@ -521,11 +515,11 @@ function FeatureAverageBar({ label, value, unit }: { label: string; value: numbe
   return (
     <div className="group">
       <div className="flex justify-between text-body-sm mb-xs gap-md">
-        <span className="text-on-surface-variant group-hover:text-on-surface transition-colors">{label}</span>
-        <span className="font-label-mono text-on-surface">{value.toFixed(1)} {unit}</span>
+        <span className="text-slate-500 dark:text-on-surface-variant group-hover:text-slate-700 dark:group-hover:text-on-surface transition-colors">{label}</span>
+        <span className="font-label-mono text-slate-700 dark:text-on-surface">{value.toFixed(1)} {unit}</span>
       </div>
-      <div className="h-2 rounded-full bg-surface-container-highest overflow-hidden">
-        <div className="h-full rounded-full bg-primary transition-all duration-500 ease-out" style={{ width: `${width}%` }} />
+      <div className="h-2 rounded-full bg-slate-100 dark:bg-surface-container-highest overflow-hidden">
+        <div className="h-full rounded-full bg-blue-500 dark:bg-primary transition-all duration-500 ease-out" style={{ width: `${width}%` }} />
       </div>
     </div>
   );
@@ -533,9 +527,9 @@ function FeatureAverageBar({ label, value, unit }: { label: string; value: numbe
 
 function FeedCard({ children, icon: Icon, title }: { children: ReactNode; icon: ElementType; title: string }) {
   return (
-    <div className="bg-surface-container border border-outline-variant rounded-xl p-lg min-h-[220px]">
+    <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg min-h-[220px] shadow-sm dark:shadow-none">
       <div className="flex items-center gap-sm mb-md">
-        <Icon className="w-4 h-4 text-primary" />
+        <Icon className="w-4 h-4 text-blue-600 dark:text-primary" />
         <SectionHeader title={title} />
       </div>
       <div className="space-y-sm">{children}</div>
@@ -545,9 +539,9 @@ function FeedCard({ children, icon: Icon, title }: { children: ReactNode; icon: 
 
 function FeedRow({ title, meta }: { title: string; meta: string }) {
   return (
-    <div className="rounded-lg border border-outline-variant/60 bg-surface-container-low p-sm">
-      <p className="text-body-sm font-medium text-on-surface">{title}</p>
-      <p className="text-[11px] text-on-surface-variant mt-0.5">{meta}</p>
+    <div className="rounded-xl border border-slate-100 dark:border-outline-variant/60 bg-slate-50 dark:bg-surface-container-low p-sm">
+      <p className="text-body-sm font-medium text-slate-800 dark:text-on-surface">{title}</p>
+      <p className="text-[11px] text-slate-500 dark:text-on-surface-variant mt-0.5">{meta}</p>
     </div>
   );
 }
@@ -564,8 +558,8 @@ function TrendSummaryCard({ trendAnalysis, analytics }: { trendAnalysis: { trend
       ? 'improving'
       : 'stable';
   const TrendIcon = effectiveTrend === 'improving' ? TrendingUp : effectiveTrend === 'declining' ? TrendingDown : Minus;
-  const trendColor = effectiveTrend === 'improving' ? 'text-green-400' : effectiveTrend === 'declining' ? 'text-red-400' : 'text-on-surface-variant';
-  const trendBg = effectiveTrend === 'improving' ? 'bg-green-500/10 border-green-500/30' : effectiveTrend === 'declining' ? 'bg-red-500/10 border-red-500/30' : 'bg-surface-container-low border-outline-variant';
+  const trendColor = effectiveTrend === 'improving' ? 'text-emerald-600 dark:text-green-400' : effectiveTrend === 'declining' ? 'text-red-600 dark:text-red-400' : 'text-slate-600 dark:text-on-surface-variant';
+  const trendBg = effectiveTrend === 'improving' ? 'bg-emerald-50 dark:bg-green-500/10 border-emerald-200 dark:border-green-500/30' : effectiveTrend === 'declining' ? 'bg-red-50 dark:bg-red-500/10 border-red-200 dark:border-red-500/30' : 'bg-slate-50 dark:bg-surface-container-low border-slate-200 dark:border-outline-variant';
   const weeklyData = analytics?.weekly_risk_trend ?? [];
 
   return (
@@ -582,9 +576,9 @@ function TrendSummaryCard({ trendAnalysis, analytics }: { trendAnalysis: { trend
           Based on {analytics?.summary.total_sessions ?? trendAnalysis.sessionsAnalyzed} session{((analytics?.summary.total_sessions ?? trendAnalysis.sessionsAnalyzed) !== 1) ? 's' : ''}
         </p>
         <div className="flex gap-md mt-sm text-[11px]">
-          <span className="text-green-400">{improving} improving</span>
-          <span className="text-on-surface-variant">{analytics?.summary.stable ?? trendAnalysis.stable} stable</span>
-          <span className="text-red-400">{deteriorating} deteriorating</span>
+          <span className="text-emerald-600 dark:text-green-400">{improving} improving</span>
+          <span className="text-slate-500 dark:text-on-surface-variant">{analytics?.summary.stable ?? trendAnalysis.stable} stable</span>
+          <span className="text-red-600 dark:text-red-400">{deteriorating} deteriorating</span>
         </div>
       </div>
       {weeklyData.length > 0 && (
@@ -613,23 +607,23 @@ function TopIssuesCard({ analytics }: { analytics: AnalyticsResponse | null }) {
   const issues = analytics?.issue_frequency ?? [];
   const maxCount = issues.length > 0 ? Math.max(...issues.map((i) => i.count)) : 1;
   return (
-    <div className="bg-surface-container border border-outline-variant rounded-lg p-lg min-h-[180px]">
+    <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg min-h-[180px] shadow-sm dark:shadow-none">
       <div className="flex items-center gap-sm mb-md">
-        <AlertTriangle className="w-4 h-4 text-orange-400" />
+        <AlertTriangle className="w-4 h-4 text-amber-500 dark:text-orange-400" />
         <SectionHeader title="Top Ergonomic Issues" />
       </div>
       {issues.length === 0 ? (
-        <p className="text-body-sm text-on-surface-variant">No issue data available.</p>
+        <p className="text-body-sm text-slate-500 dark:text-on-surface-variant">No issue data available.</p>
       ) : (
         <div className="space-y-sm">
           {issues.slice(0, 5).map((issue) => (
             <div key={issue.name}>
               <div className="flex justify-between text-body-sm mb-xs">
-                <span className="text-on-surface-variant">{issue.name}</span>
-                <span className="font-label-mono text-on-surface">{issue.count}</span>
+                <span className="text-slate-600 dark:text-on-surface-variant">{issue.name}</span>
+                <span className="font-label-mono text-slate-800 dark:text-on-surface">{issue.count}</span>
               </div>
-              <div className="h-1.5 rounded-full bg-surface-container-highest overflow-hidden">
-                <div className="h-full rounded-full bg-orange-400" style={{ width: `${(issue.count / maxCount) * 100}%` }} />
+              <div className="h-1.5 rounded-full bg-slate-100 dark:bg-surface-container-highest overflow-hidden">
+                <div className="h-full rounded-full bg-amber-400 dark:bg-orange-400" style={{ width: `${(issue.count / maxCount) * 100}%` }} />
               </div>
             </div>
           ))}
@@ -642,9 +636,9 @@ function TopIssuesCard({ analytics }: { analytics: AnalyticsResponse | null }) {
 function RiskDistributionCard({ analytics }: { analytics: AnalyticsResponse | null }) {
   const distData = analytics?.risk_distribution ?? [];
   return (
-    <div className="bg-surface-container border border-outline-variant rounded-lg p-lg min-h-[180px]">
+    <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg min-h-[180px] shadow-sm dark:shadow-none">
       <div className="flex items-center gap-sm mb-md">
-        <BarChart3 className="w-4 h-4 text-primary" />
+        <BarChart3 className="w-4 h-4 text-blue-600 dark:text-primary" />
         <SectionHeader title="Risk Distribution" />
       </div>
       {distData.length === 0 ? (
@@ -668,9 +662,9 @@ function RiskDistributionCard({ analytics }: { analytics: AnalyticsResponse | nu
 function NeckTrunkTrendCard({ analytics }: { analytics: AnalyticsResponse | null }) {
   const neckTrunkData = analytics?.neck_trunk_trend ?? [];
   return (
-    <div className="bg-surface-container border border-outline-variant rounded-lg p-lg min-h-[180px]">
+    <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg min-h-[180px] shadow-sm dark:shadow-none">
       <div className="flex items-center gap-sm mb-md">
-        <Activity className="w-4 h-4 text-primary" />
+        <Activity className="w-4 h-4 text-blue-600 dark:text-primary" />
         <SectionHeader title="Neck & Trunk Trend" />
       </div>
       {neckTrunkData.length === 0 ? (
@@ -688,30 +682,30 @@ function SessionSummaryCard({ analytics }: { analytics: AnalyticsResponse | null
   const summary = analytics?.summary;
   const avgRisk = summary?.avg_risk_score ?? 0;
   const riskLabel = avgRisk < 40 ? 'Low' : avgRisk < 70 ? 'Moderate' : 'High';
-  const riskColor = avgRisk < 40 ? 'text-green-400' : avgRisk < 70 ? 'text-orange-400' : 'text-red-400';
+  const riskColor = avgRisk < 40 ? 'text-emerald-600 dark:text-green-400' : avgRisk < 70 ? 'text-amber-600 dark:text-orange-400' : 'text-red-600 dark:text-red-400';
   return (
-    <div className="bg-surface-container border border-outline-variant rounded-lg p-lg min-h-[180px]">
+    <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg min-h-[180px] shadow-sm dark:shadow-none">
       <div className="flex items-center gap-sm mb-md">
-        <Gauge className="w-4 h-4 text-primary" />
+        <Gauge className="w-4 h-4 text-blue-600 dark:text-primary" />
         <SectionHeader title="Session Summary" />
       </div>
       {summary ? (
         <div className="space-y-sm">
-          <div className="flex items-center justify-between rounded-lg bg-surface-container-low border border-outline-variant/60 px-md py-sm">
-            <span className="text-body-sm text-on-surface-variant">Total Sessions</span>
-            <span className="font-label-mono text-on-surface">{summary.total_sessions}</span>
+          <div className="flex items-center justify-between rounded-xl bg-slate-50 dark:bg-surface-container-low border border-slate-100 dark:border-outline-variant/60 px-md py-sm">
+            <span className="text-body-sm text-slate-500 dark:text-on-surface-variant">Total Sessions</span>
+            <span className="font-label-mono text-slate-800 dark:text-on-surface">{summary.total_sessions}</span>
           </div>
-          <div className="flex items-center justify-between rounded-lg bg-surface-container-low border border-outline-variant/60 px-md py-sm">
-            <span className="text-body-sm text-on-surface-variant">Avg Risk</span>
+          <div className="flex items-center justify-between rounded-xl bg-slate-50 dark:bg-surface-container-low border border-slate-100 dark:border-outline-variant/60 px-md py-sm">
+            <span className="text-body-sm text-slate-500 dark:text-on-surface-variant">Avg Risk</span>
             <span className={`font-label-mono ${riskColor}`}>{avgRisk.toFixed(1)} ({riskLabel})</span>
           </div>
-          <div className="flex items-center justify-between rounded-lg bg-surface-container-low border border-outline-variant/60 px-md py-sm">
-            <span className="text-body-sm text-on-surface-variant">Improving</span>
-            <span className="font-label-mono text-green-400">{summary.improving}</span>
+          <div className="flex items-center justify-between rounded-xl bg-slate-50 dark:bg-surface-container-low border border-slate-100 dark:border-outline-variant/60 px-md py-sm">
+            <span className="text-body-sm text-slate-500 dark:text-on-surface-variant">Improving</span>
+            <span className="font-label-mono text-emerald-600 dark:text-green-400">{summary.improving}</span>
           </div>
-          <div className="flex items-center justify-between rounded-lg bg-surface-container-low border border-outline-variant/60 px-md py-sm">
-            <span className="text-body-sm text-on-surface-variant">Deteriorating</span>
-            <span className="font-label-mono text-red-400">{summary.deteriorating}</span>
+          <div className="flex items-center justify-between rounded-xl bg-slate-50 dark:bg-surface-container-low border border-slate-100 dark:border-outline-variant/60 px-md py-sm">
+            <span className="text-body-sm text-slate-500 dark:text-on-surface-variant">Deteriorating</span>
+            <span className="font-label-mono text-red-600 dark:text-red-400">{summary.deteriorating}</span>
           </div>
         </div>
       ) : (
@@ -748,22 +742,22 @@ function TaskRecognitionCard({ task, taskDuration }: { task: string; taskDuratio
   const TaskIcon = TASK_ICONS[task] || Activity;
 
   return (
-    <div className="bg-surface-container border border-outline-variant rounded-lg p-lg min-h-[180px]">
+    <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg min-h-[180px] shadow-sm dark:shadow-none">
       <div className="flex items-center gap-sm mb-md">
-        <Cpu className="w-4 h-4 text-primary" />
+        <Cpu className="w-4 h-4 text-blue-600 dark:text-primary" />
         <SectionHeader title="Current Task" />
       </div>
       <div className="space-y-sm">
-        <div className="flex items-center justify-between rounded-lg bg-surface-container-low border border-outline-variant/60 px-md py-sm">
+        <div className="flex items-center justify-between rounded-xl bg-slate-50 dark:bg-surface-container-low border border-slate-100 dark:border-outline-variant/60 px-md py-sm">
           <div className="flex items-center gap-sm">
-            <TaskIcon className="w-4 h-4 text-primary" />
-            <span className="text-body-sm text-on-surface font-medium">{task || 'No active session'}</span>
+            <TaskIcon className="w-4 h-4 text-blue-600 dark:text-primary" />
+            <span className="text-body-sm text-slate-800 dark:text-on-surface font-medium">{task || 'No active session'}</span>
           </div>
           {taskDuration && taskDuration !== '—' && (
-            <span className="font-label-mono text-on-surface">{taskDuration}</span>
+            <span className="font-label-mono text-slate-700 dark:text-on-surface">{taskDuration}</span>
           )}
         </div>
-        <p className="text-[11px] text-on-surface-variant leading-relaxed">
+        <p className="text-[11px] text-slate-500 dark:text-on-surface-variant leading-relaxed">
           The activity recognized from the live camera feed (e.g. lifting, reaching, seated work).
         </p>
       </div>
@@ -776,52 +770,52 @@ function AIInsightsCard({ snapshot }: { snapshot: { fatigue_score: number; expos
 
   if (snapshot) {
     if (snapshot.fatigue_score > 70) {
-      insights.push({ icon: AlertTriangle, color: 'text-red-400', bg: 'bg-red-500/10', title: 'Fatigue Risk Elevated', desc: `Fatigue at ${snapshot.fatigue_score.toFixed(1)}%. Consider a break.` });
+      insights.push({ icon: AlertTriangle, color: 'text-red-500 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-500/10', title: 'Fatigue Risk Elevated', desc: `Fatigue at ${snapshot.fatigue_score.toFixed(1)}%. Consider a break.` });
     } else if (snapshot.fatigue_score > 40) {
-      insights.push({ icon: TrendingUp, color: 'text-orange-400', bg: 'bg-orange-500/10', title: 'Fatigue Building', desc: `Fatigue at ${snapshot.fatigue_score.toFixed(1)}%. Monitor closely.` });
+      insights.push({ icon: TrendingUp, color: 'text-amber-500 dark:text-orange-400', bg: 'bg-amber-50 dark:bg-orange-500/10', title: 'Fatigue Building', desc: `Fatigue at ${snapshot.fatigue_score.toFixed(1)}%. Monitor closely.` });
     }
 
     if (snapshot.exposure_score > 60) {
-      insights.push({ icon: Activity, color: 'text-red-400', bg: 'bg-red-500/10', title: 'High Exposure Duration', desc: `Exposure at ${snapshot.exposure_score.toFixed(1)}%. Extended session detected.` });
+      insights.push({ icon: Activity, color: 'text-red-500 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-500/10', title: 'High Exposure Duration', desc: `Exposure at ${snapshot.exposure_score.toFixed(1)}%. Extended session detected.` });
     } else if (snapshot.exposure_score > 35) {
-      insights.push({ icon: Activity, color: 'text-orange-400', bg: 'bg-orange-500/10', title: 'Moderate Exposure', desc: `Exposure at ${snapshot.exposure_score.toFixed(1)}%. Keep monitoring.` });
+      insights.push({ icon: Activity, color: 'text-amber-500 dark:text-orange-400', bg: 'bg-amber-50 dark:bg-orange-500/10', title: 'Moderate Exposure', desc: `Exposure at ${snapshot.exposure_score.toFixed(1)}%. Keep monitoring.` });
     }
 
     if (snapshot.rula_informed_score !== undefined) {
       if (snapshot.rula_informed_score >= 5) {
-        insights.push({ icon: AlertTriangle, color: 'text-red-400', bg: 'bg-red-500/10', title: 'Poor Posture Detected', desc: `Posture score ${snapshot.rula_informed_score}/7. Adjust now.` });
+        insights.push({ icon: AlertTriangle, color: 'text-red-500 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-500/10', title: 'Poor Posture Detected', desc: `Posture score ${snapshot.rula_informed_score}/7. Adjust now.` });
       } else if (snapshot.rula_informed_score >= 3) {
-        insights.push({ icon: TrendingUp, color: 'text-orange-400', bg: 'bg-orange-500/10', title: 'Moderate Posture Risk', desc: `Posture score ${snapshot.rula_informed_score}/7. Review positioning.` });
+        insights.push({ icon: TrendingUp, color: 'text-amber-500 dark:text-orange-400', bg: 'bg-amber-50 dark:bg-orange-500/10', title: 'Moderate Posture Risk', desc: `Posture score ${snapshot.rula_informed_score}/7. Review positioning.` });
       }
     }
 
     if (snapshot.feature_scores) {
       const neck = snapshot.feature_scores['avg_neck_flexion'] ?? snapshot.feature_scores['neck_flexion'] ?? 0;
       if (neck > 30) {
-        insights.push({ icon: AlertTriangle, color: 'text-yellow-400', bg: 'bg-yellow-500/10', title: 'High Neck Flexion', desc: `Neck angle at ${neck.toFixed(1)}°. Lower chin slightly.` });
+        insights.push({ icon: AlertTriangle, color: 'text-amber-600 dark:text-yellow-400', bg: 'bg-amber-50 dark:bg-yellow-500/10', title: 'High Neck Flexion', desc: `Neck angle at ${neck.toFixed(1)}°. Lower chin slightly.` });
       }
     }
   }
 
   if (insights.length === 0) {
-    insights.push({ icon: CheckCircle, color: 'text-green-400', bg: 'bg-green-500/10', title: 'All Clear', desc: 'All ergonomic indicators within safe ranges.' });
+    insights.push({ icon: CheckCircle, color: 'text-emerald-500 dark:text-green-400', bg: 'bg-emerald-50 dark:bg-green-500/10', title: 'All Clear', desc: 'All ergonomic indicators within safe ranges.' });
   }
 
   return (
-    <div className="bg-surface-container border border-outline-variant rounded-lg p-lg min-h-[180px]">
+    <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg min-h-[180px] shadow-sm dark:shadow-none">
       <div className="flex items-center gap-sm mb-md">
-        <Brain className="w-4 h-4 text-primary" />
+        <Brain className="w-4 h-4 text-blue-600 dark:text-primary" />
         <SectionHeader title="AI Insights" />
       </div>
       <div className="space-y-sm">
         {insights.slice(0, 4).map((item, i) => {
           const Icon = item.icon;
           return (
-            <div key={i} className={`flex gap-sm p-sm rounded-lg ${item.bg} border border-transparent`}>
+            <div key={i} className={`flex gap-sm p-sm rounded-xl ${item.bg} border border-transparent`}>
               <Icon className={`w-4 h-4 ${item.color} shrink-0 mt-0.5`} />
               <div className="min-w-0">
-                <p className="text-body-sm font-medium text-on-surface">{item.title}</p>
-                <p className="text-[10px] text-on-surface-variant mt-0.5 leading-tight">{item.desc}</p>
+                <p className="text-body-sm font-medium text-slate-800 dark:text-on-surface">{item.title}</p>
+                <p className="text-[10px] text-slate-500 dark:text-on-surface-variant mt-0.5 leading-tight">{item.desc}</p>
               </div>
             </div>
           );
