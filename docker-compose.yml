@@ -15,7 +15,7 @@ services:
     # Ports are .env-driven so one file deploys on any clean machine
     # (override with POSTGRES_PORT / BACKEND_PORT / FRONTEND_PORT).
     ports:
-      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ergovigilance} -d ${POSTGRES_DB:-ergovigilance}"]
       interval: 5s
@@ -31,7 +31,7 @@ services:
     # Loopback-only: the API is reached through the nginx frontend (which talks
     # to it over the internal Docker network). Never publish :8000 publicly.
     ports:
-      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+      - "127.0.0.1:${BACKEND_PORT:-8001}:8000"
     environment:
       - DEBUG=true
       # Set a strong secret for production: DEBUG=false + missing/known secret = refused to start
@@ -49,6 +49,7 @@ services:
       - PG_TIMESCALEDB=${PG_TIMESCALEDB:-false}
     volumes:
       - ergovigilance-db:/data
+      - ./outputs/sessions:/data/sessions:ro
     depends_on:
       db:
         condition: service_healthy
