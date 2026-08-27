@@ -68,16 +68,16 @@ export default function Sidebar({ role = 'administrator', rolePaths, collapsed: 
   }, [role]);
 
   return (
-    <aside className={`h-screen fixed left-0 top-0 flex flex-col py-md bg-surface-container-low/95 backdrop-blur-sm border-r border-outline-variant/60 z-50 transition-all duration-300 ease-out ${collapsed ? 'w-16' : 'w-64'}`}>
+    <aside className={`h-screen fixed left-0 top-0 flex flex-col py-md bg-white dark:bg-surface-container-low/95 border-r border-slate-200 dark:border-outline-variant/60 z-50 transition-all duration-300 ease-out ${collapsed ? 'w-16' : 'w-64'}`}>
       <div className={`mb-xl transition-all duration-300 ${collapsed ? 'w-full flex justify-center' : 'px-lg'}`}>
         {collapsed ? (
-          <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center hover:bg-primary/30 transition-colors">
-            <Activity className="w-5 h-5 text-primary" />
+          <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-primary/20 flex items-center justify-center hover:bg-blue-100 dark:hover:bg-primary/30 transition-colors">
+            <Activity className="w-5 h-5 text-blue-600 dark:text-primary" />
           </div>
         ) : (
           <div className="transition-all duration-300">
-            <h1 className="text-headline-md font-bold text-primary tracking-tight">ErgoVigilance</h1>
-            <p className="font-label-mono text-[10px] text-on-surface-variant uppercase tracking-widest mt-xs opacity-70">Industrial Ergonomics</p>
+            <h1 className="text-headline-md font-bold text-blue-600 dark:text-primary tracking-tight">ErgoVigilance</h1>
+            <p className="font-label-mono text-[10px] text-slate-400 dark:text-on-surface-variant uppercase tracking-widest mt-xs opacity-70">Industrial Ergonomics</p>
           </div>
         )}
       </div>
@@ -86,7 +86,7 @@ export default function Sidebar({ role = 'administrator', rolePaths, collapsed: 
         {sections.map((section) => (
           <div key={section.title} className={collapsed ? 'mt-md' : 'mt-sm'}>
             {!collapsed && (
-              <p className="font-label-caps text-[9px] text-on-surface-variant/60 uppercase tracking-widest px-md mb-xs mt-md">
+              <p className="font-label-caps text-[9px] text-slate-400 dark:text-on-surface-variant/60 uppercase tracking-widest px-md mb-xs mt-md">
                 {section.title}
               </p>
             )}
@@ -97,11 +97,11 @@ export default function Sidebar({ role = 'administrator', rolePaths, collapsed: 
                   to={item.to}
                   end={item.to === '/'}
                   className={({ isActive }) =>
-                    `w-full flex items-center gap-md rounded-lg text-body-sm font-medium transition-all duration-200 relative group ${
+                    `w-full flex items-center gap-md rounded-xl text-body-sm font-medium transition-all duration-200 relative group ${
                       isActive
-                        ? 'text-primary bg-primary/10 border border-primary/15 shadow-sm shadow-primary/5'
-                        : 'text-on-surface-variant hover:bg-surface-container-highest/80 hover:text-on-surface border border-transparent'
-                    } ${collapsed ? 'justify-center gap-0 py-sm' : 'px-md py-sm'}`
+                        ? 'text-blue-700 dark:text-primary bg-blue-50 dark:bg-primary/10 border border-blue-200 dark:border-primary/15 shadow-sm shadow-blue-100 dark:shadow-primary/5'
+                        : 'text-slate-600 dark:text-on-surface-variant hover:bg-slate-100 dark:hover:bg-surface-container-highest/80 hover:text-slate-900 dark:hover:text-on-surface border border-transparent'
+                    } ${collapsed ? 'justify-center gap-0 py-2.5' : 'px-md py-2.5'}`
                   }
                 >
                   {({ isActive }) => (
@@ -109,11 +109,11 @@ export default function Sidebar({ role = 'administrator', rolePaths, collapsed: 
                       {isActive && !collapsed && (
                         <motion.div
                           layoutId="navIndicator"
-                          className="absolute left-0 top-1 bottom-1 w-0.5 bg-primary rounded-full"
+                          className="absolute left-0 top-1 bottom-1 w-0.5 bg-blue-600 dark:bg-primary rounded-full"
                           transition={{ type: 'spring', stiffness: 500, damping: 35 }}
                         />
                       )}
-                      <item.icon className={`w-5 h-5 shrink-0 transition-colors duration-150 ${isActive ? 'text-primary' : 'text-on-surface-variant group-hover:text-on-surface'}`} />
+                      <item.icon className={`w-5 h-5 shrink-0 transition-colors duration-150 ${isActive ? 'text-blue-600 dark:text-primary' : 'text-slate-400 dark:text-on-surface-variant group-hover:text-slate-700 dark:group-hover:text-on-surface'}`} />
                       {!collapsed && (
                         <span className="truncate">{item.label}</span>
                       )}
@@ -126,10 +126,10 @@ export default function Sidebar({ role = 'administrator', rolePaths, collapsed: 
         ))}
       </nav>
 
-      <div className="px-sm pt-md border-t border-outline-variant mt-auto">
+      <div className="px-sm pt-md border-t border-slate-200 dark:border-outline-variant mt-auto">
         <button
           onClick={toggleCollapsed}
-          className="w-full flex items-center justify-center px-md py-sm rounded-lg text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface transition-all duration-150 gap-md"
+          className="w-full flex items-center justify-center px-md py-2.5 rounded-xl text-slate-400 dark:text-on-surface-variant hover:bg-slate-100 dark:hover:bg-surface-container-highest hover:text-slate-700 dark:hover:text-on-surface transition-all duration-150 gap-md"
         >
           {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
           {!collapsed && <span className="text-body-sm">Collapse</span>}
