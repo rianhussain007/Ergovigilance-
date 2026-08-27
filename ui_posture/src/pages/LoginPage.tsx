@@ -47,36 +47,36 @@ export default function LoginPage() {
   };
 
   const inputClass = (invalid: boolean) =>
-    `w-full h-11 rounded-lg border bg-surface px-md text-body-sm text-on-surface outline-none transition-all ${
+    `w-full h-11 rounded-xl border bg-slate-50 dark:bg-surface px-md text-body-sm text-slate-900 dark:text-on-surface outline-none transition-all ${
       invalid
-        ? 'border-danger/60 focus:border-danger focus:ring-2 focus:ring-danger/20'
-        : 'border-outline-variant/80 focus:border-primary focus:ring-2 focus:ring-primary/15 hover:border-outline'
+        ? 'border-red-300 dark:border-danger/60 focus:border-red-500 focus:ring-2 focus:ring-red-500/20'
+        : 'border-slate-200 dark:border-outline-variant/80 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 hover:border-slate-300 dark:hover:border-outline'
     }`;
 
   return (
-    <div className="relative min-h-screen bg-surface text-on-surface grid place-items-center p-lg overflow-hidden">
+    <div className="relative min-h-screen bg-slate-50 dark:bg-surface text-slate-900 dark:text-on-surface grid place-items-center p-lg overflow-hidden">
       {/* Industrial backdrop — shared with every public page */}
       <IndustrialBackdrop accentLine />
 
       <main className="relative w-[400px] max-w-[90vw] animate-fade-in">
-        <form onSubmit={handleSubmit} noValidate className="rounded-xl border border-outline-variant/60 bg-surface-container shadow-2xl shadow-black/20 overflow-hidden">
+        <form onSubmit={handleSubmit} noValidate className="rounded-2xl border border-slate-200 dark:border-outline-variant/60 bg-white dark:bg-surface-container shadow-xl shadow-slate-200/50 dark:shadow-2xl dark:shadow-black/20 overflow-hidden">
           {/* Brand header — wordmark links back to the marketing homepage */}
           <div className="px-xl pt-xl pb-md space-y-md">
             <Link to="/" className="flex items-center gap-sm group w-fit">
-              <div className="h-11 w-11 rounded-lg bg-primary/15 text-primary grid place-items-center group-hover:bg-primary/25 transition-colors">
+              <div className="h-11 w-11 rounded-xl bg-blue-50 dark:bg-primary/15 text-blue-600 dark:text-primary grid place-items-center group-hover:bg-blue-100 dark:group-hover:bg-primary/25 transition-colors">
                 <Activity className="h-5 w-5" />
               </div>
-              <span className="text-headline-md font-bold text-on-surface">ErgoVigilance</span>
+              <span className="text-headline-md font-bold text-slate-900 dark:text-on-surface">ErgoVigilance</span>
             </Link>
             <div>
-              <h1 className="text-headline-md font-bold text-on-surface">Sign in</h1>
-              <p className="text-body-sm text-on-surface-variant mt-1">Sign in with your assigned role.</p>
+              <h1 className="text-headline-md font-bold text-slate-900 dark:text-on-surface">Sign in</h1>
+              <p className="text-body-sm text-slate-500 dark:text-on-surface-variant mt-1">Sign in with your assigned role.</p>
             </div>
           </div>
 
           <div className="px-xl pb-xl space-y-md">
             <div className="space-y-xs">
-              <label htmlFor="login-email" className="block font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">
+              <label htmlFor="login-email" className="block font-label-caps text-[10px] uppercase tracking-widest text-slate-400 dark:text-on-surface-variant">
                 Email
               </label>
               <input
@@ -96,7 +96,7 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-xs">
-              <label htmlFor="login-password" className="block font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">
+              <label htmlFor="login-password" className="block font-label-caps text-[10px] uppercase tracking-widest text-slate-400 dark:text-on-surface-variant">
                 Password
               </label>
               <div className="relative">
@@ -117,13 +117,13 @@ export default function LoginPage() {
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-on-surface-variant hover:text-on-surface hover:bg-surface-variant/40 transition-colors"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md text-slate-400 dark:text-on-surface-variant hover:text-slate-600 dark:hover:text-on-surface hover:bg-slate-100 dark:hover:bg-surface-variant/40 transition-colors"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
               <div className="flex justify-end">
-                <Link to="/forgot-password" className="text-body-sm text-on-surface-variant hover:text-primary transition-colors">
+                <Link to="/forgot-password" className="text-body-sm text-slate-500 dark:text-on-surface-variant hover:text-blue-600 dark:hover:text-primary transition-colors">
                   Forgot password?
                 </Link>
               </div>
@@ -136,26 +136,26 @@ export default function LoginPage() {
               <div
                 id="login-field-error"
                 role="alert"
-                className="flex items-start gap-sm rounded-lg border border-danger/40 bg-danger/10 px-md py-sm"
+                className="flex items-start gap-sm rounded-xl border border-red-200 dark:border-danger/40 bg-red-50 dark:bg-danger/10 px-md py-sm"
               >
-                <AlertTriangle className="h-4 w-4 text-danger shrink-0 mt-0.5" />
-                <p className="text-body-sm text-danger">{fieldError ?? serverError}</p>
+                <AlertTriangle className="h-4 w-4 text-red-500 dark:text-danger shrink-0 mt-0.5" />
+                <p className="text-body-sm text-red-600 dark:text-danger">{fieldError ?? serverError}</p>
               </div>
             )}
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full h-11 rounded-lg bg-primary text-on-primary text-body-sm font-semibold hover:shadow-lg hover:shadow-primary/25 disabled:opacity-60 disabled:hover:shadow-none flex items-center justify-center gap-sm transition-all active:scale-[0.98]"
+              className="w-full h-12 rounded-xl bg-blue-600 dark:bg-primary text-white dark:text-on-primary text-body-sm font-semibold hover:bg-blue-700 dark:hover:shadow-lg dark:hover:shadow-primary/25 disabled:opacity-60 disabled:hover:shadow-none flex items-center justify-center gap-sm transition-all active:scale-[0.98]"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
               {loading ? 'Signing in…' : 'Sign In'}
             </button>
 
-            <div className="pt-md border-t border-outline-variant/60">
-              <p className="text-center text-body-sm text-on-surface-variant">
+            <div className="pt-md border-t border-slate-100 dark:border-outline-variant/60">
+              <p className="text-center text-body-sm text-slate-500 dark:text-on-surface-variant">
                 Don’t have access yet?{' '}
-                <Link to="/request-pilot" className="inline-flex items-center gap-0.5 font-semibold text-primary hover:underline">
+                <Link to="/request-pilot" className="inline-flex items-center gap-0.5 font-semibold text-blue-600 dark:text-primary hover:underline">
                   Request a pilot <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </p>
@@ -163,7 +163,7 @@ export default function LoginPage() {
           </div>
         </form>
 
-        <p className="mt-lg text-center text-[11px] text-on-surface-variant/60">
+        <p className="mt-lg text-center text-[11px] text-slate-400 dark:text-on-surface-variant/60">
           Heuristic risk thresholds · Not a medical device · Video never leaves your building
         </p>
       </main>

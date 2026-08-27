@@ -51,19 +51,19 @@ const PILOT_CTA = 'Request a Free Pilot';
 const PILOT_MICROCOPY = 'Free · No card · 2-week trial on one workstation';
 
 const FeatureCard = ({ icon: Icon, title, description }: { icon: React.ElementType; title: string; description: string }) => (
-  <div className="group bg-surface-container border border-outline-variant rounded-xl p-lg hover:border-primary/40 hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5 transition-all duration-200">
-    <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center mb-md group-hover:bg-primary/15 group-hover:scale-105 transition-all">
-      <Icon className="w-6 h-6 text-primary" />
+  <div className="group bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg hover:border-blue-300 dark:hover:border-primary/40 hover:shadow-lg hover:shadow-blue-50 dark:hover:shadow-primary/5 hover:-translate-y-0.5 transition-all duration-200">
+    <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-primary/10 flex items-center justify-center mb-md group-hover:bg-blue-100 dark:group-hover:bg-primary/15 group-hover:scale-105 transition-all">
+      <Icon className="w-6 h-6 text-blue-600 dark:text-primary" />
     </div>
-    <h3 className="text-title-lg font-bold text-on-surface mb-sm group-hover:text-primary transition-colors">{title}</h3>
-    <p className="text-body-sm text-on-surface-variant leading-relaxed">{description}</p>
+    <h3 className="text-title-lg font-bold text-slate-900 dark:text-on-surface mb-sm group-hover:text-blue-600 dark:group-hover:text-primary transition-colors">{title}</h3>
+    <p className="text-body-sm text-slate-500 dark:text-on-surface-variant leading-relaxed">{description}</p>
   </div>
 );
 
 const Stat = ({ value, label }: { value: string; label: string }) => (
   <div className="text-center group">
-    <p className="text-display-md font-bold text-primary group-hover:scale-105 transition-transform">{value}</p>
-    <p className="text-body-sm text-on-surface-variant mt-1">{label}</p>
+    <p className="text-display-md font-bold text-blue-600 dark:text-primary group-hover:scale-105 transition-transform">{value}</p>
+    <p className="text-body-sm text-slate-500 dark:text-on-surface-variant mt-1">{label}</p>
   </div>
 );
 
@@ -170,20 +170,20 @@ export default function LandingPage() {
       <IndustrialBackdrop />
 
       {/* ── Navigation ─────────────────────────────────────────────────── */}
-      <nav className="sticky top-0 z-50 bg-surface/80 backdrop-blur-xl border-b border-outline-variant/60">
+      <nav className="sticky top-0 z-50 bg-white/80 dark:bg-surface/80 backdrop-blur-xl border-b border-slate-200 dark:border-outline-variant/60">
         <div className="max-w-7xl mx-auto px-lg py-md flex items-center justify-between">
           <Link to="/" className="flex items-center gap-sm group">
             <img src="/favicon.png" alt="ErgoVigilance" className="w-10 h-10 rounded-lg group-hover:scale-105 transition-transform" />
-            <span className="text-title-lg font-bold text-on-surface">ErgoVigilance</span>
+            <span className="text-title-lg font-bold text-slate-900 dark:text-on-surface">ErgoVigilance</span>
           </Link>
           <div className="flex items-center gap-md">
-            <a href="#how-it-works" className="hidden sm:block text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">How it works</a>
-            <a href="#who-for" className="hidden sm:block text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">Who it’s for</a>
-            <a href="#faq" className="hidden sm:block text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">FAQ</a>
-            <Link to="/login" className="flex items-center gap-sm px-md py-sm rounded-lg bg-surface-container-high text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest hover:shadow-sm transition-all text-body-sm">
+            <a href="#how-it-works" className="hidden sm:block text-body-sm text-slate-500 dark:text-on-surface-variant hover:text-slate-700 dark:hover:text-on-surface transition-colors">How it works</a>
+            <a href="#who-for" className="hidden sm:block text-body-sm text-slate-500 dark:text-on-surface-variant hover:text-slate-700 dark:hover:text-on-surface transition-colors">Who it's for</a>
+            <a href="#faq" className="hidden sm:block text-body-sm text-slate-500 dark:text-on-surface-variant hover:text-slate-700 dark:hover:text-on-surface transition-colors">FAQ</a>
+            <Link to="/login" className="flex items-center gap-sm px-md py-sm rounded-xl bg-slate-100 dark:bg-surface-container-high text-slate-600 dark:text-on-surface-variant hover:text-slate-900 dark:hover:text-on-surface hover:bg-slate-200 dark:hover:bg-surface-container-highest hover:shadow-sm transition-all text-body-sm">
               Log In <ArrowUpRight className="w-4 h-4" />
             </Link>
-            <Link to="/request-pilot" className="hidden md:flex items-center gap-sm px-md py-sm rounded-lg bg-primary text-body-sm font-bold text-on-primary hover:shadow-lg hover:shadow-primary/25 transition-all">
+            <Link to="/request-pilot" className="hidden md:flex items-center gap-sm px-md py-sm rounded-xl bg-blue-600 dark:bg-primary text-body-sm font-bold text-white dark:text-on-primary hover:bg-blue-700 dark:hover:shadow-lg dark:hover:shadow-primary/25 transition-all">
               {PILOT_CTA}
             </Link>
           </div>
@@ -200,18 +200,18 @@ export default function LandingPage() {
         <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'linear-gradient(var(--color-primary) 1px, transparent 1px), linear-gradient(90deg, var(--color-primary) 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
         <div className="relative max-w-7xl mx-auto px-lg py-20 sm:py-24 lg:py-28 grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
           <div className="space-y-lg">
-            <div className="inline-flex items-center gap-sm rounded-full border border-primary/30 bg-primary/10 px-md py-xs text-[10px] font-bold uppercase tracking-widest text-primary">
+            <div className="inline-flex items-center gap-sm rounded-full border border-blue-200 dark:border-primary/30 bg-blue-50 dark:bg-primary/10 px-md py-xs text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-primary">
               <Zap className="w-3.5 h-3.5" />
               Continuous ergonomics monitoring — no wearables
             </div>
             <div className="space-y-md">
-              <h1 className="text-display-xl font-bold leading-[1.08] text-on-surface sm:text-5xl">
+              <h1 className="text-display-xl font-bold leading-[1.08] text-slate-900 dark:text-on-surface sm:text-5xl">
                 Your next comp claim is{' '}
-                <span className="text-primary">preventable</span>.
+                <span className="text-blue-600 dark:text-primary">preventable</span>.
                 <br />
                 You just can’t see it yet.
               </h1>
-              <p className="text-body-lg leading-8 text-on-surface-variant max-w-2xl">
+              <p className="text-body-lg leading-8 text-slate-500 dark:text-on-surface-variant max-w-2xl">
                 A worker holds an awkward reach for the 400th time this shift — a strain that
                 accumulates silently until it’s an incident report, a comp claim, and lost
                 production. ErgoVigilance watches that workstation with a camera you already
@@ -221,16 +221,16 @@ export default function LandingPage() {
             <div className="space-y-md">
               <div className="flex items-center gap-md flex-wrap">
                 {PILOT_CTA_BUTTON}
-                <a href="#how-it-works" className="rounded-lg border border-outline-variant bg-surface/60 px-lg py-md font-bold text-on-surface-variant backdrop-blur-sm transition-colors hover:border-outline hover:text-on-surface">
+                <a href="#how-it-works" className="rounded-xl border border-slate-200 dark:border-outline-variant bg-white/60 dark:bg-surface/60 px-lg py-md font-bold text-slate-600 dark:text-on-surface-variant backdrop-blur-sm transition-colors hover:border-slate-300 dark:hover:border-outline hover:text-slate-900 dark:hover:text-on-surface">
                   See how it works
                 </a>
               </div>
-              <span className="block text-[11px] text-on-surface-variant">{PILOT_MICROCOPY}</span>
+              <span className="block text-[11px] text-slate-400 dark:text-on-surface-variant">{PILOT_MICROCOPY}</span>
             </div>
-            <div className="flex items-center gap-md pt-sm text-body-sm text-on-surface-variant">
-              <span className="flex items-center gap-1.5"><Lock className="w-4 h-4 text-primary" /> 100% on-premise</span>
-              <span className="flex items-center gap-1.5"><MonitorCheck className="w-4 h-4 text-primary" /> No wearables</span>
-              <span className="flex items-center gap-1.5"><ShieldCheck className="w-4 h-4 text-primary" /> No cloud upload</span>
+            <div className="flex items-center gap-md pt-sm text-body-sm text-slate-500 dark:text-on-surface-variant">
+              <span className="flex items-center gap-1.5"><Lock className="w-4 h-4 text-blue-500 dark:text-primary" /> 100% on-premise</span>
+              <span className="flex items-center gap-1.5"><MonitorCheck className="w-4 h-4 text-blue-500 dark:text-primary" /> No wearables</span>
+              <span className="flex items-center gap-1.5"><ShieldCheck className="w-4 h-4 text-blue-500 dark:text-primary" /> No cloud upload</span>
             </div>
           </div>
 
@@ -301,7 +301,7 @@ export default function LandingPage() {
       </section>
 
       {/* ── Stats strip — credibility, kept lean ───────────────────────── */}
-      <section className="border-y border-outline-variant/60 bg-surface-container-low/80 backdrop-blur-sm">
+      <section className="border-y border-slate-200 dark:border-outline-variant/60 bg-slate-50/80 dark:bg-surface-container-low/80 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-lg py-10 grid grid-cols-2 md:grid-cols-4 gap-lg">
           <Stat value="33" label="Skeletal landmarks tracked per frame" />
           <Stat value="12" label="Biomechanical risk features scored" />
@@ -313,22 +313,22 @@ export default function LandingPage() {
       {/* ── Who this is for — recognition before features ─────────────── */}
       <AnimatedSection className="py-20 px-lg">
         <div className="max-w-4xl mx-auto" id="who-for">
-          <div className="flex items-center gap-sm mb-md text-primary">
+          <div className="flex items-center gap-sm mb-md text-blue-600 dark:text-primary">
             <UserCheck className="w-5 h-5" />
             <span className="text-[10px] font-bold uppercase tracking-widest">Is this you?</span>
           </div>
-          <h2 className="text-display-md font-bold text-on-surface mb-lg">
+          <h2 className="text-display-md font-bold text-slate-900 dark:text-on-surface mb-lg">
             If any of this sounds familiar, this is for you.
           </h2>
           <div className="space-y-sm">
             {RECOGNITION_POINTS.map((point) => (
-              <div key={point} className="flex items-start gap-md rounded-lg bg-surface-container border border-outline-variant/60 px-lg py-md">
-                <CheckCircle2 className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                <p className="text-body-lg text-on-surface leading-relaxed">{point}</p>
+              <div key={point} className="flex items-start gap-md rounded-xl bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant/60 px-lg py-md shadow-sm dark:shadow-none">
+                <CheckCircle2 className="w-5 h-5 text-blue-500 dark:text-primary shrink-0 mt-0.5" />
+                <p className="text-body-lg text-slate-700 dark:text-on-surface leading-relaxed">{point}</p>
               </div>
             ))}
           </div>
-          <p className="text-body-md text-on-surface-variant mt-lg">
+          <p className="text-body-md text-slate-500 dark:text-on-surface-variant mt-lg">
             Most small and mid-size plants can’t afford continuous ergonomics monitoring — and can’t
             afford the claims, either. That gap is the whole reason this exists.
           </p>
@@ -336,14 +336,14 @@ export default function LandingPage() {
       </AnimatedSection>
 
       {/* ── Founder note — a person built this ────────────────────────── */}
-      <AnimatedSection className="py-20 px-lg bg-surface-container-low">
+      <AnimatedSection className="py-20 px-lg bg-slate-50 dark:bg-surface-container-low">
         <div className="max-w-4xl mx-auto">
-          <div className="flex items-center gap-sm mb-md text-primary">
+          <div className="flex items-center gap-sm mb-md text-blue-600 dark:text-primary">
             <HeartHandshake className="w-5 h-5" />
             <span className="text-[10px] font-bold uppercase tracking-widest">A note from the builder</span>
           </div>
-          <div className="bg-surface border border-outline-variant rounded-2xl p-xl">
-            <p className="text-body-lg leading-relaxed text-on-surface mb-md">
+          <div className="bg-white dark:bg-surface border border-slate-200 dark:border-outline-variant rounded-2xl p-xl shadow-sm dark:shadow-none">
+            <p className="text-body-lg leading-relaxed text-slate-700 dark:text-on-surface mb-md">
               I built ErgoVigilance as an engineering intern at GGS Information Services, where I
               designed the pose-estimation module for an industrial ergonomics system. The deeper
               I got, the clearer the gap became: classic ergonomic audits (RULA/REBA) are
@@ -351,15 +351,15 @@ export default function LandingPage() {
               injures a worker is the one that repeats a thousand times a shift and never lands
               on a form.
             </p>
-            <p className="text-body-lg leading-relaxed text-on-surface">
+            <p className="text-body-lg leading-relaxed text-slate-700 dark:text-on-surface">
               So I built what I couldn’t find: a camera on one workstation, measuring
               continuously, explaining every alert it fires. It’s early — and I’d rather
               be upfront about that than pretend otherwise.
             </p>
           </div>
-          <div className="mt-lg rounded-xl border border-primary/30 bg-primary/10 px-lg py-md">
-            <p className="text-body-sm text-on-surface leading-relaxed">
-              <strong className="text-on-surface">Why the pilots are free:</strong> we’re new and we don’t have
+          <div className="mt-lg rounded-xl border border-blue-200 dark:border-primary/30 bg-blue-50 dark:bg-primary/10 px-lg py-md">
+            <p className="text-body-sm text-slate-700 dark:text-on-surface leading-relaxed">
+              <strong className="text-slate-900 dark:text-on-surface">Why the pilots are free:</strong> we’re new and we don’t have
               testimonials — and we won’t fake them. We’re onboarding a small number of pilot sites this
               quarter in exchange for real feedback and, if you’re willing, a case study. We’d rather earn
               a reference than invent one.
@@ -372,11 +372,11 @@ export default function LandingPage() {
       <AnimatedSection className="py-20 px-lg">
         <div className="max-w-7xl mx-auto" id="how-it-works">
           <div className="text-center mb-14">
-            <div className="inline-flex items-center gap-sm rounded-full border border-outline-variant bg-surface px-md py-xs text-[10px] font-bold uppercase tracking-widest text-on-surface-variant mb-md">
+            <div className="inline-flex items-center gap-sm rounded-full border border-slate-200 dark:border-outline-variant bg-white dark:bg-surface px-md py-xs text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-on-surface-variant mb-md">
               <ScanLine className="w-3.5 h-3.5" /> The core pipeline
             </div>
-            <h2 className="text-display-md font-bold text-on-surface mb-md">How the Risk Assessment Works</h2>
-            <p className="text-body-lg text-on-surface-variant max-w-2xl mx-auto">
+            <h2 className="text-display-md font-bold text-slate-900 dark:text-on-surface mb-md">How the Risk Assessment Works</h2>
+            <p className="text-body-lg text-slate-500 dark:text-on-surface-variant max-w-2xl mx-auto">
               From camera frame to defensible report in six auditable steps. No black box —
               every risk score traces back to a specific joint angle and a specific threshold.
             </p>
@@ -384,14 +384,14 @@ export default function LandingPage() {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-lg">
             {PIPELINE_STEPS.map((step, i) => (
-              <div key={i} className="relative bg-surface border border-outline-variant rounded-xl p-lg hover:border-primary/30 hover:shadow-md hover:shadow-primary/5 transition-all group">
+              <div key={i} className="relative bg-white dark:bg-surface border border-slate-200 dark:border-outline-variant rounded-2xl p-lg hover:border-blue-300 dark:hover:border-primary/30 hover:shadow-md hover:shadow-blue-50 dark:hover:shadow-primary/5 transition-all group">
                 <div className="flex items-start gap-md">
-                  <div className="w-11 h-11 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-primary/15 transition-colors">
-                    <step.icon className="w-5 h-5 text-primary" />
+                  <div className="w-11 h-11 rounded-xl bg-blue-50 dark:bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-blue-100 dark:group-hover:bg-primary/15 transition-colors">
+                    <step.icon className="w-5 h-5 text-blue-600 dark:text-primary" />
                   </div>
                   <div>
-                    <h3 className="text-title-sm font-bold text-on-surface mb-sm">{step.title}</h3>
-                    <p className="text-body-sm text-on-surface-variant leading-relaxed">{step.desc}</p>
+                    <h3 className="text-title-sm font-bold text-slate-900 dark:text-on-surface mb-sm">{step.title}</h3>
+                    <p className="text-body-sm text-slate-500 dark:text-on-surface-variant leading-relaxed">{step.desc}</p>
                   </div>
                 </div>
               </div>
@@ -399,10 +399,10 @@ export default function LandingPage() {
           </div>
 
           {/* Example feature readout */}
-          <div className="mt-12 bg-surface border border-outline-variant rounded-xl p-lg max-w-3xl mx-auto">
+          <div className="mt-12 bg-white dark:bg-surface border border-slate-200 dark:border-outline-variant rounded-2xl p-lg max-w-3xl mx-auto shadow-sm dark:shadow-none">
             <div className="flex items-center gap-md mb-md">
-              <BarChart3 className="w-5 h-5 text-primary" />
-              <h3 className="text-title-md font-bold text-on-surface">A live feature readout (what the safety manager sees)</h3>
+              <BarChart3 className="w-5 h-5 text-blue-600 dark:text-primary" />
+              <h3 className="text-title-md font-bold text-slate-900 dark:text-on-surface">A live feature readout (what the safety manager sees)</h3>
             </div>
             <div className="grid sm:grid-cols-2 gap-sm">
               {[
@@ -415,14 +415,14 @@ export default function LandingPage() {
                 ['Weight Shift', '14.5%', 'moderate'],
                 ['Wrist Deviation', '7.2°', 'good'],
               ].map(([name, val, status]) => (
-                <div key={name} className="flex items-center justify-between gap-md rounded-lg bg-surface-container px-md py-sm border border-outline-variant/50">
-                  <span className="text-body-sm text-on-surface-variant">{name}</span>
+                <div key={name} className="flex items-center justify-between gap-md rounded-xl bg-slate-50 dark:bg-surface-container px-md py-sm border border-slate-100 dark:border-outline-variant/50">
+                  <span className="text-body-sm text-slate-500 dark:text-on-surface-variant">{name}</span>
                   <span className="flex items-center gap-sm">
-                    <span className="font-label-mono text-body-sm text-on-surface">{val}</span>
+                    <span className="font-label-mono text-body-sm text-slate-800 dark:text-on-surface">{val}</span>
                     <span
                       className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
-                        status === 'high' ? 'bg-red-500/15 text-red-400' :
-                        status === 'moderate' ? 'bg-orange-500/15 text-orange-400' : 'bg-green-500/15 text-green-400'
+                        status === 'high' ? 'bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-400' :
+                        status === 'moderate' ? 'bg-amber-50 text-amber-600 dark:bg-orange-500/15 dark:text-orange-400' : 'bg-emerald-50 text-emerald-600 dark:bg-green-500/15 dark:text-green-400'
                       }`}
                     >
                       {status}
@@ -431,8 +431,8 @@ export default function LandingPage() {
                 </div>
               ))}
             </div>
-            <p className="text-body-sm text-on-surface-variant mt-md flex items-start gap-sm">
-              <CheckCircle2 className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+            <p className="text-body-sm text-slate-500 dark:text-on-surface-variant mt-md flex items-start gap-sm">
+              <CheckCircle2 className="w-4 h-4 text-blue-500 dark:text-primary shrink-0 mt-0.5" />
               Every feature maps to a threshold the safety manager can inspect and tune —
               not a mysterious AI score.
             </p>
@@ -441,20 +441,20 @@ export default function LandingPage() {
       </AnimatedSection>
 
       {/* ── Visual proof — the human moment being caught ──────────────── */}
-      <AnimatedSection className="py-20 px-lg bg-surface-container-low">
+      <AnimatedSection className="py-20 px-lg bg-slate-50 dark:bg-surface-container-low">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12">
-            <h2 className="text-display-md font-bold text-on-surface mb-md">See the System Working</h2>
-            <p className="text-body-lg text-on-surface-variant max-w-2xl mx-auto">
+            <h2 className="text-display-md font-bold text-slate-900 dark:text-on-surface mb-md">See the System Working</h2>
+            <p className="text-body-lg text-slate-500 dark:text-on-surface-variant max-w-2xl mx-auto">
               The moment that matters isn’t the dashboard — it’s the reach, the bend, the
               repetition that happens a hundred times an hour. This is what that looks like
               through ErgoVigilance.
             </p>
           </div>
           <div className="grid md:grid-cols-2 gap-lg">
-            <div className="bg-surface-container border border-outline-variant rounded-xl overflow-hidden shadow-xl shadow-black/10 hover:shadow-2xl hover:shadow-black/15 transition-shadow">
+            <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl overflow-hidden shadow-lg dark:shadow-xl dark:shadow-black/10 hover:shadow-xl dark:hover:shadow-2xl dark:hover:shadow-black/15 transition-shadow">
               {/* Live Camera simulation */}
-              <div className="relative bg-surface-container-low rounded-t-xl overflow-hidden">
+              <div className="relative bg-slate-100 dark:bg-surface-container-low rounded-t-2xl overflow-hidden">
                 {/* Header bar */}
                 <div className="flex items-center justify-between px-md py-2 border-b border-outline-variant/50">
                   <div className="flex items-center gap-2">
@@ -540,22 +540,22 @@ export default function LandingPage() {
                 </div>
               </div>
               <div className="p-lg">
-                <h3 className="text-title-lg font-bold text-on-surface mb-sm">Normal work, watched continuously</h3>
-                <p className="text-body-sm text-on-surface-variant leading-relaxed">
+                <h3 className="text-title-lg font-bold text-slate-900 dark:text-on-surface mb-sm">Normal work, watched continuously</h3>
+                <p className="text-body-sm text-slate-500 dark:text-on-surface-variant leading-relaxed">
                   When posture stays within safe ranges the overlay reads calm and green — the
                   system runs quietly in the background, so the risky reach never gets to be the
                   first time anyone notices.
                 </p>
               </div>
             </div>
-            <div className="bg-surface-container border border-outline-variant rounded-xl overflow-hidden shadow-xl shadow-black/10 hover:shadow-2xl hover:shadow-black/15 transition-shadow">
+            <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl overflow-hidden shadow-lg dark:shadow-xl dark:shadow-black/10 hover:shadow-xl dark:hover:shadow-2xl dark:hover:shadow-black/15 transition-shadow">
               <div className="aspect-video relative">
                 <img src="/images/dashboard-admin.png" alt="ErgoVigilance dashboard" className="w-full h-full object-cover object-top" />
                 <div className="absolute inset-0 bg-gradient-to-t from-surface/60 to-transparent pointer-events-none" />
               </div>
               <div className="p-lg">
-                <h3 className="text-title-lg font-bold text-on-surface mb-sm">The worker sees their own risk in real time</h3>
-                <p className="text-body-sm text-on-surface-variant leading-relaxed">
+                <h3 className="text-title-lg font-bold text-slate-900 dark:text-on-surface mb-sm">The worker sees their own risk in real time</h3>
+                <p className="text-body-sm text-slate-500 dark:text-on-surface-variant leading-relaxed">
                   Per-joint readouts, fatigue and exposure curves, and a running alert timeline —
                   with the corrective action spelled out, not buried in a report.
                 </p>
@@ -569,8 +569,8 @@ export default function LandingPage() {
       <AnimatedSection className="py-20 px-lg">
         <div className="max-w-7xl mx-auto" id="capabilities">
           <div className="text-center mb-12">
-            <h2 className="text-display-md font-bold text-on-surface mb-md">Core Capabilities</h2>
-            <p className="text-body-lg text-on-surface-variant max-w-2xl mx-auto">
+            <h2 className="text-display-md font-bold text-slate-900 dark:text-on-surface mb-md">Core Capabilities</h2>
+            <p className="text-body-lg text-slate-500 dark:text-on-surface-variant max-w-2xl mx-auto">
               Built for real factory floors: explainable, auditable, and entirely on-premise.
             </p>
           </div>
@@ -586,16 +586,16 @@ export default function LandingPage() {
       </AnimatedSection>
 
       {/* ── Why threshold-based ────────────────────────────────────────── */}
-      <AnimatedSection className="py-20 px-lg bg-surface-container-low/80">
+      <AnimatedSection className="py-20 px-lg bg-slate-50/80 dark:bg-surface-container-low/80">
         <div className="max-w-4xl mx-auto">
-          <div className="bg-surface-container border border-primary/30 rounded-2xl p-xl shadow-lg shadow-primary/5">
-            <h2 className="text-display-md font-bold text-on-surface mb-md">Why Threshold-Based, Not Black-Box AI?</h2>
-            <p className="text-body-lg text-on-surface-variant mb-md leading-relaxed">
+          <div className="bg-white dark:bg-surface-container border border-blue-200 dark:border-primary/30 rounded-2xl p-xl shadow-sm dark:shadow-lg dark:shadow-primary/5">
+            <h2 className="text-display-md font-bold text-slate-900 dark:text-on-surface mb-md">Why Threshold-Based, Not Black-Box AI?</h2>
+            <p className="text-body-lg text-slate-500 dark:text-on-surface-variant mb-md leading-relaxed">
               A deliberate design choice. For safety software a factory has to trust and defend:
             </p>
-            <ul className="space-y-sm text-body-sm text-on-surface-variant">
+            <ul className="space-y-sm text-body-sm text-slate-600 dark:text-on-surface-variant">
               <li className="flex items-start gap-sm">
-                <div className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />
+                <div className="w-2 h-2 rounded-full bg-blue-500 dark:bg-primary mt-1.5 shrink-0" />
                 <span>Every alert traces to a specific, auditable joint angle or time threshold</span>
               </li>
               <li className="flex items-start gap-sm">
@@ -622,17 +622,17 @@ export default function LandingPage() {
             <HelpCircle className="w-5 h-5" />
             <span className="text-[10px] font-bold uppercase tracking-widest">Straight answers</span>
           </div>
-          <h2 className="text-display-md font-bold text-on-surface mb-lg text-center">
+          <h2 className="text-display-md font-bold text-slate-900 dark:text-on-surface mb-lg text-center">
             Questions safety managers actually ask
           </h2>
           <div className="space-y-sm">
             {FAQ_ITEMS.map(([question, answer]) => (
-              <details key={question} className="group rounded-xl border border-outline-variant bg-surface-container px-lg transition-all open:border-primary/30 open:shadow-md open:shadow-primary/5">
-                <summary className="flex items-center justify-between gap-md py-md cursor-pointer list-none text-body-lg font-semibold text-on-surface hover:text-primary transition-colors">
+              <details key={question} className="group rounded-xl border border-slate-200 dark:border-outline-variant bg-white dark:bg-surface-container px-lg transition-all open:border-blue-300 dark:open:border-primary/30 open:shadow-md dark:open:shadow-md dark:open:shadow-primary/5">
+                <summary className="flex items-center justify-between gap-md py-md cursor-pointer list-none text-body-lg font-semibold text-slate-800 dark:text-on-surface hover:text-blue-600 dark:hover:text-primary transition-colors">
                   {question}
-                  <ChevronRight className="w-5 h-5 text-on-surface-variant shrink-0 transition-transform duration-200 group-open:rotate-90 group-open:text-primary" />
+                  <ChevronRight className="w-5 h-5 text-slate-400 dark:text-on-surface-variant shrink-0 transition-transform duration-200 group-open:rotate-90 group-open:text-blue-500 dark:group-open:text-primary" />
                 </summary>
-                <p className="pb-md text-body-sm text-on-surface-variant leading-relaxed border-t border-outline-variant/50 pt-md">{answer}</p>
+                <p className="pb-md text-body-sm text-slate-500 dark:text-on-surface-variant leading-relaxed border-t border-slate-100 dark:border-outline-variant/50 pt-md">{answer}</p>
               </details>
             ))}
           </div>
@@ -640,20 +640,20 @@ export default function LandingPage() {
       </AnimatedSection>
 
       {/* ── Final pilot CTA — action ───────────────────────────────────── */}
-      <AnimatedSection className="py-20 px-lg bg-surface-container-low">
+      <AnimatedSection className="py-20 px-lg bg-slate-50 dark:bg-surface-container-low">
         <div className="max-w-4xl mx-auto text-center" id="pilot">
-          <h2 className="text-display-md font-bold text-on-surface mb-md">
+          <h2 className="text-display-md font-bold text-slate-900 dark:text-on-surface mb-md">
             Put it on one workstation for two weeks.
           </h2>
-          <p className="text-body-lg text-on-surface-variant mb-lg leading-relaxed">
+          <p className="text-body-lg text-slate-500 dark:text-on-surface-variant mb-lg leading-relaxed">
             Free. No card. We deploy on your camera, your network, your workers — and your video
             never leaves your building.
           </p>
           <div className="flex flex-col items-center gap-md">
             {PILOT_CTA_BUTTON}
-            <span className="text-[11px] text-on-surface-variant">{PILOT_MICROCOPY}</span>
-            <p className="text-body-sm text-primary flex items-center gap-sm">
-              <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+            <span className="text-[11px] text-slate-400 dark:text-on-surface-variant">{PILOT_MICROCOPY}</span>
+            <p className="text-body-sm text-blue-600 dark:text-primary flex items-center gap-sm">
+              <span className="w-2 h-2 rounded-full bg-blue-500 dark:bg-primary animate-pulse" />
               Currently onboarding 2 pilot sites this quarter — we’re keeping it deliberately small.
             </p>
           </div>
@@ -661,23 +661,23 @@ export default function LandingPage() {
       </AnimatedSection>
 
       {/* ── Footer ─────────────────────────────────────────────────────── */}
-      <footer className="py-12 px-lg border-t border-outline-variant/60 bg-surface-container-low/50">
+      <footer className="py-12 px-lg border-t border-slate-200 dark:border-outline-variant/60 bg-slate-50 dark:bg-surface-container-low/50">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-md">
           <div className="flex items-center gap-sm">
             <img src="/favicon.png" alt="ErgoVigilance" className="w-10 h-10 rounded-lg" />
-            <span className="text-title-lg font-bold text-on-surface">ErgoVigilance</span>
+            <span className="text-title-lg font-bold text-slate-900 dark:text-on-surface">ErgoVigilance</span>
           </div>
-          <p className="text-body-sm text-on-surface-variant/80 text-center">
+          <p className="text-body-sm text-slate-400 dark:text-on-surface-variant/80 text-center">
             Heuristic risk thresholds · Not a medical device · For awareness &amp; prioritization
           </p>
           <div className="flex items-center gap-md">
-            <Link to="/validation" className="text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">
+            <Link to="/validation" className="text-body-sm text-slate-500 dark:text-on-surface-variant hover:text-slate-700 dark:hover:text-on-surface transition-colors">
               How we validate
             </Link>
-            <Link to="/request-pilot" className="text-body-sm font-semibold text-primary hover:underline">
+            <Link to="/request-pilot" className="text-body-sm font-semibold text-blue-600 dark:text-primary hover:underline">
               {PILOT_CTA}
             </Link>
-            <Link to="/login" className="text-body-sm text-on-surface-variant hover:text-on-surface transition-colors">
+            <Link to="/login" className="text-body-sm text-slate-500 dark:text-on-surface-variant hover:text-slate-700 dark:hover:text-on-surface transition-colors">
               Log In
             </Link>
           </div>
