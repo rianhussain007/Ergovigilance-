@@ -1,0 +1,18 @@
+{
+  "timestamp": "2026-08-27",
+  "evaluation_type": "HUMAN GROUND TRUTH",
+  "n_frames": 46,
+  "model_vs_human_accuracy": 0.891,
+  "auto_pipeline_accuracy": 0.609,
+  "human_distribution": {
+    "Seated Work": 41,
+    "Assembly Work": 4,
+    "Inspection": 1
+  },
+  "model_predictions": "All 46 frames predicted as Seated Work",
+  "strengths": "Perfect on majority class (Seated Work: 41/41)",
+  "weaknesses": "Zero recall on minority classes (Assembly: 0/4, Inspection: 0/1)",
+  "root_cause": "Extreme class imbalance (41 Seated vs 4 Assembly vs 1 Inspection)",
+  "next_step": "Collect more Assembly and Inspection footage for balanced training",
+  "caveat": "89.1% is misleading \u2014 model has 0% recall on 2 of 3 classes"
+}
