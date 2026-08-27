@@ -20,12 +20,11 @@ import csv
 import json
 import os
 import sys
-import base64
-import io
 from http.server import HTTPServer, SimpleHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -45,6 +44,7 @@ RISK_LEVELS = ["LOW", "MEDIUM", "HIGH"]
 
 def load_frames(data_dir: Path) -> list[dict[str, Any]]:
     """Load frames from the real_data directory."""
+    data_dir = data_dir.resolve()
     frames = []
 
     # Try real_features.csv first (has task labels)
@@ -55,8 +55,9 @@ def load_frames(data_dir: Path) -> list[dict[str, Any]]:
             for row in reader:
                 frame_path = data_dir / "frames" / row.get("frame", "")
                 if frame_path.exists():
+                    rel_path = str(frame_path.relative_to(ROOT))
                     frames.append({
-                        "path": str(frame_path),
+                        "path": rel_path,
                         "video": row.get("video", ""),
                         "frame_name": row.get("frame", ""),
                         "auto_task": row.get("task_label", "Unknown"),
@@ -73,8 +74,9 @@ def load_frames(data_dir: Path) -> list[dict[str, Any]]:
         frames_dir = data_dir / "frames"
         if frames_dir.exists():
             for img in sorted(frames_dir.glob("*.jpg")):
+                rel_path = str(img.relative_to(ROOT))
                 frames.append({
-                    "path": str(img),
+                    "path": rel_path,
                     "video": "",
                     "frame_name": img.name,
                     "auto_task": "Unknown",
@@ -115,6 +117,27 @@ def load_existing_labels(output_path: Path) -> dict[str, dict]:
     return labels
 
 
+def _build_task_buttons() -> str:
+    """Build HTML for task category buttons."""
+    return "\n".join(
+        f'<button class="task-btn" onclick="selectTask(\'{task}\', this)">{task}</button>'
+        for task in TASK_CATEGORIES
+    )
+
+
+def _build_risk_buttons() -> str:
+    """Build HTML for risk level buttons."""
+    return "\n".join(
+        f'<button class="risk-btn" onclick="selectRisk(\'{risk}\', this)">{risk}</button>'
+        for risk in RISK_LEVELS
+    )
+
+
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    """Multi-threaded HTTP server so the browser can load images concurrently."""
+    daemon_threads = True
+
+
 class LabelHandler(SimpleHTTPRequestHandler):
     """HTTP handler for the labeling tool."""
 
@@ -142,7 +165,6 @@ class LabelHandler(SimpleHTTPRequestHandler):
             body = self.rfile.read(content_length)
             data = json.loads(body)
 
-            # Update frame label
             frame_name = data.get("frame_name")
             for frame in self.frames:
                 if frame["frame_name"] == frame_name:
@@ -152,7 +174,6 @@ class LabelHandler(SimpleHTTPRequestHandler):
                     frame["notes"] = data.get("notes", "")
                     break
 
-            # Save after each label
             save_labels(self.frames, self.labels_path)
 
             self.send_response(200)
@@ -163,49 +184,50 @@ class LabelHandler(SimpleHTTPRequestHandler):
             self.send_error(404)
 
     def _serve_index(self) -> None:
-        html = """<!DOCTYPE html>
+        task_buttons = _build_task_buttons()
+        risk_buttons = _build_risk_buttons()
+
+        html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ErgoVigilance — Frame Labeling Tool</title>
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; }
-.header { background: #1e293b; padding: 16px 24px; border-bottom: 1px solid #334155; display: flex; align-items: center; gap: 16px; }
-.header h1 { font-size: 18px; color: #38bdf8; }
-.stats { font-size: 13px; color: #94a3b8; margin-left: auto; }
-.main { display: flex; height: calc(100vh - 60px); }
-.frame-panel { flex: 1; padding: 24px; display: flex; flex-direction: column; align-items: center; gap: 16px; overflow-y: auto; }
-.frame-panel img { max-width: 100%; max-height: 60vh; border-radius: 8px; border: 2px solid #334155; }
-.frame-info { background: #1e293b; border-radius: 8px; padding: 12px 16px; font-size: 13px; width: 100%; max-width: 640px; }
-.frame-info span { color: #38bdf8; }
-.label-panel { width: 380px; background: #1e293b; border-left: 1px solid #334155; padding: 24px; overflow-y: auto; }
-.label-panel h2 { font-size: 16px; margin-bottom: 16px; color: #38bdf8; }
-.field { margin-bottom: 16px; }
-.field label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 6px; }
-.field select, .field input, .field textarea { width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: #e2e8f0; font-size: 14px; }
-.field textarea { height: 60px; resize: vertical; }
-.btn-group { display: flex; gap: 8px; margin-top: 20px; }
-.btn { flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
-.btn-save { background: #22c55e; color: #fff; }
-.btn-save:hover { background: #16a34a; }
-.btn-next { background: #3b82f6; color: #fff; }
-.btn-next:hover { background: #2563eb; }
-.btn-skip { background: #475569; color: #94a3b8; }
-.btn-skip:hover { background: #64748b; }
-.task-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-.task-btn { padding: 10px 8px; border: 2px solid #475569; border-radius: 8px; background: transparent; color: #e2e8f0; font-size: 12px; cursor: pointer; text-align: center; }
-.task-btn:hover { border-color: #38bdf8; }
-.task-btn.selected { border-color: #22c55e; background: rgba(34,197,94,0.15); color: #22c55e; }
-.risk-btn { padding: 10px; border: 2px solid #475569; border-radius: 8px; background: transparent; color: #e2e8f0; font-size: 13px; cursor: pointer; flex: 1; text-align: center; }
-.risk-btn:hover { border-color: #38bdf8; }
-.risk-btn.selected.low { border-color: #22c55e; background: rgba(34,197,94,0.15); color: #22c55e; }
-.risk-btn.selected.medium { border-color: #eab308; background: rgba(234,179,8,0.15); color: #eab308; }
-.risk-btn.selected.high { border-color: #ef4444; background: rgba(239,68,68,0.15); color: #ef4444; }
-.progress-bar { height: 4px; background: #334155; border-radius: 2px; margin-bottom: 16px; }
-.progress-fill { height: 100%; background: #38bdf8; border-radius: 2px; transition: width 0.3s; }
-.auto-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: #334155; color: #94a3b8; margin-left: 8px; }
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+body {{ font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; }}
+.header {{ background: #1e293b; padding: 16px 24px; border-bottom: 1px solid #334155; display: flex; align-items: center; gap: 16px; }}
+.header h1 {{ font-size: 18px; color: #38bdf8; }}
+.stats {{ font-size: 13px; color: #94a3b8; margin-left: auto; }}
+.main {{ display: flex; height: calc(100vh - 60px); }}
+.frame-panel {{ flex: 1; padding: 24px; display: flex; flex-direction: column; align-items: center; gap: 16px; overflow-y: auto; }}
+.frame-panel img {{ max-width: 100%; max-height: 60vh; border-radius: 8px; border: 2px solid #334155; }}
+.frame-info {{ background: #1e293b; border-radius: 8px; padding: 12px 16px; font-size: 13px; width: 100%; max-width: 640px; }}
+.frame-info span {{ color: #38bdf8; }}
+.label-panel {{ width: 380px; background: #1e293b; border-left: 1px solid #334155; padding: 24px; overflow-y: auto; }}
+.label-panel h2 {{ font-size: 16px; margin-bottom: 16px; color: #38bdf8; }}
+.field {{ margin-bottom: 16px; }}
+.field label {{ display: block; font-size: 13px; color: #94a3b8; margin-bottom: 6px; }}
+.field select, .field input, .field textarea {{ width: 100%; padding: 8px 12px; border-radius: 6px; border: 1px solid #475569; background: #0f172a; color: #e2e8f0; font-size: 14px; }}
+.field textarea {{ height: 60px; resize: vertical; }}
+.btn-group {{ display: flex; gap: 8px; margin-top: 20px; }}
+.btn {{ flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }}
+.btn-save {{ background: #22c55e; color: #fff; }}
+.btn-save:hover {{ background: #16a34a; }}
+.btn-skip {{ background: #475569; color: #94a3b8; }}
+.btn-skip:hover {{ background: #64748b; }}
+.task-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }}
+.task-btn {{ padding: 10px 8px; border: 2px solid #475569; border-radius: 8px; background: transparent; color: #e2e8f0; font-size: 12px; cursor: pointer; text-align: center; }}
+.task-btn:hover {{ border-color: #38bdf8; }}
+.task-btn.selected {{ border-color: #22c55e; background: rgba(34,197,94,0.15); color: #22c55e; }}
+.risk-btn {{ padding: 10px; border: 2px solid #475569; border-radius: 8px; background: transparent; color: #e2e8f0; font-size: 13px; cursor: pointer; flex: 1; text-align: center; }}
+.risk-btn:hover {{ border-color: #38bdf8; }}
+.risk-btn.selected.low {{ border-color: #22c55e; background: rgba(34,197,94,0.15); color: #22c55e; }}
+.risk-btn.selected.medium {{ border-color: #eab308; background: rgba(234,179,8,0.15); color: #eab308; }}
+.risk-btn.selected.high {{ border-color: #ef4444; background: rgba(239,68,68,0.15); color: #ef4444; }}
+.progress-bar {{ height: 4px; background: #334155; border-radius: 2px; margin-bottom: 16px; }}
+.progress-fill {{ height: 100%; background: #38bdf8; border-radius: 2px; transition: width 0.3s; }}
+.auto-badge {{ display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; background: #334155; color: #94a3b8; margin-left: 8px; }}
 </style>
 </head>
 <body>
@@ -255,117 +277,114 @@ let currentIdx = 0;
 let selectedTask = '';
 let selectedRisk = '';
 
-async function init() {
-  const res = await fetch('/api/frames');
-  frames = await res.json();
-  
-  const statsRes = await fetch('/api/stats');
-  const stats = await statsRes.json();
-  document.getElementById('stats').textContent = 
-    stats.labeled + '/' + stats.total + ' labeled (' + Math.round(stats.labeled/stats.total*100) + '%)';
-  
-  // Build task buttons
-  const taskGrid = document.getElementById('task-grid');
-  """ + "".join([
-      f'<button class="task-btn" onclick="selectTask(\'{task}\', this)">{task}</button>\n'
-      for task in TASK_CATEGORIES
-  ]) + """
-  
-  // Build risk buttons
-  const riskGrid = document.getElementById('risk-grid');
-  """ + "".join([
-      f'<button class="risk-btn" onclick="selectRisk(\'{risk}\', this)">{risk}</button>\n'
-      for risk in RISK_LEVELS
-  ]) + """
-  
-  loadFrame(0);
-}
+async function init() {{
+  try {{
+    const res = await fetch('/api/frames');
+    frames = await res.json();
 
-function loadFrame(idx) {
-  if (idx >= frames.length) { 
-    alert('All frames labeled! You can close this window.'); 
-    return; 
-  }
+    const statsRes = await fetch('/api/stats');
+    const stats = await statsRes.json();
+    document.getElementById('stats').textContent =
+      stats.labeled + '/' + stats.total + ' labeled (' + Math.round(stats.labeled/stats.total*100) + '%)';
+
+    // Build task buttons
+    document.getElementById('task-grid').innerHTML = `{task_buttons}`;
+
+    // Build risk buttons
+    document.getElementById('risk-grid').innerHTML = `{risk_buttons}`;
+
+    loadFrame(0);
+  }} catch (err) {{
+    console.error('Init failed:', err);
+    document.getElementById('stats').textContent = 'Error: ' + err.message;
+  }}
+}}
+
+function loadFrame(idx) {{
+  if (idx >= frames.length) {{
+    alert('All frames labeled! You can close this window.');
+    return;
+  }}
   currentIdx = idx;
   const frame = frames[idx];
-  
+
   document.getElementById('frame-img').src = '/frame/' + frame.path;
-  document.getElementById('frame-info').innerHTML = 
+  document.getElementById('frame-info').innerHTML =
     '<strong>' + frame.frame_name + '</strong>' +
     ' <span class="auto-badge">Auto: ' + frame.auto_task + ' (' + Math.round(frame.confidence) + '%)</span>' +
     '<br>Video: ' + (frame.video || 'N/A') +
     ' | Risk: ' + frame.auto_risk;
-  
+
   // Pre-fill if already labeled
   selectedTask = frame.human_task || '';
   selectedRisk = frame.human_risk || '';
   document.getElementById('quality').value = frame.quality || '';
   document.getElementById('notes').value = frame.notes || '';
-  
+
   // Update button states
-  document.querySelectorAll('.task-btn').forEach(b => {
+  document.querySelectorAll('.task-btn').forEach(b => {{
     b.classList.toggle('selected', b.textContent === selectedTask);
-  });
-  document.querySelectorAll('.risk-btn').forEach(b => {
+  }});
+  document.querySelectorAll('.risk-btn').forEach(b => {{
     b.classList.remove('selected');
-    if (b.textContent === selectedRisk) {
+    if (b.textContent === selectedRisk) {{
       b.classList.add('selected');
       b.classList.add(selectedRisk.toLowerCase());
-    }
-  });
-  
+    }}
+  }});
+
   // Progress
   const labeled = frames.filter(f => f.human_task).length;
   document.getElementById('progress').style.width = (labeled/frames.length*100) + '%';
-}
+}}
 
-function selectTask(task, btn) {
+function selectTask(task, btn) {{
   selectedTask = task;
   document.querySelectorAll('.task-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
-}
+}}
 
-function selectRisk(risk, btn) {
+function selectRisk(risk, btn) {{
   selectedRisk = risk;
-  document.querySelectorAll('.risk-btn').forEach(b => { b.classList.remove('selected', 'low', 'medium', 'high'); });
+  document.querySelectorAll('.risk-btn').forEach(b => {{ b.classList.remove('selected', 'low', 'medium', 'high'); }});
   btn.classList.add('selected', risk.toLowerCase());
-}
+}}
 
-async function saveAndNext() {
-  if (!selectedTask) { alert('Select a task category'); return; }
-  if (!selectedRisk) { alert('Select a risk level'); return; }
-  
+async function saveAndNext() {{
+  if (!selectedTask) {{ alert('Select a task category'); return; }}
+  if (!selectedRisk) {{ alert('Select a risk level'); return; }}
+
   const frame = frames[currentIdx];
-  await fetch('/api/label', {
+  await fetch('/api/label', {{
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
+    headers: {{ 'Content-Type': 'application/json' }},
+    body: JSON.stringify({{
       frame_name: frame.frame_name,
       human_task: selectedTask,
       human_risk: selectedRisk,
       quality: document.getElementById('quality').value,
       notes: document.getElementById('notes').value,
-    })
-  });
-  
+    }})
+  }});
+
   frame.human_task = selectedTask;
   frame.human_risk = selectedRisk;
-  
-  loadFrame(currentIdx + 1);
-}
 
-function skipFrame() {
   loadFrame(currentIdx + 1);
-}
+}}
+
+function skipFrame() {{
+  loadFrame(currentIdx + 1);
+}}
 
 // Keyboard shortcuts
-document.addEventListener('keydown', e => {
-  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); saveAndNext(); }
-  if (e.key === 's' || e.key === 'S') { selectedTask = 'Seated Work'; saveAndNext(); }
-  if (e.key === 'n' || e.key === 'N') { selectedTask = 'Neutral Standing'; saveAndNext(); }
-  if (e.key === 'a' || e.key === 'A') { selectedTask = 'Assembly Work'; saveAndNext(); }
-  if (e.key === 'i' || e.key === 'I') { selectedTask = 'Inspection'; saveAndNext(); }
-});
+document.addEventListener('keydown', e => {{
+  if (e.key === 'Enter' || e.key === ' ') {{ e.preventDefault(); saveAndNext(); }}
+  if (e.key === 's' || e.key === 'S') {{ selectedTask = 'Seated Work'; saveAndNext(); }}
+  if (e.key === 'n' || e.key === 'N') {{ selectedTask = 'Neutral Standing'; saveAndNext(); }}
+  if (e.key === 'a' || e.key === 'A') {{ selectedTask = 'Assembly Work'; saveAndNext(); }}
+  if (e.key === 'i' || e.key === 'I') {{ selectedTask = 'Inspection'; saveAndNext(); }}
+}});
 
 init();
 </script>
@@ -391,20 +410,22 @@ init();
         self.wfile.write(json.dumps({"total": total, "labeled": labeled}).encode())
 
     def _serve_frame(self, path: str) -> None:
-        # path is /frame/outputs/real_data/frames/frame_000030.jpg
-        file_path = ROOT / path.replace("/frame/", "")
+        rel = path.replace("/frame/", "")
+        file_path = ROOT / rel
         if file_path.exists():
             self.send_response(200)
             content_type = "image/jpeg" if file_path.suffix == ".jpg" else "image/png"
             self.send_header("Content-Type", content_type)
+            self.send_header("Cache-Control", "no-cache")
             self.end_headers()
             with open(file_path, "rb") as f:
                 self.wfile.write(f.read())
         else:
+            print(f"[WARN] Frame not found: {file_path}")
             self.send_error(404)
 
     def log_message(self, format: str, *args: Any) -> None:
-        pass  # Suppress default logging
+        pass
 
 
 def main() -> None:
@@ -437,11 +458,10 @@ def main() -> None:
     print(f"Output: {output_path}")
     print(f"Starting labeling server on http://localhost:{args.port}")
 
-    # Set class variables
     LabelHandler.frames = frames
     LabelHandler.labels_path = output_path
 
-    server = HTTPServer(("0.0.0.0", args.port), LabelHandler)
+    server = ThreadedHTTPServer(("0.0.0.0", args.port), LabelHandler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
