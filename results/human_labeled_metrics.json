@@ -1,0 +1,45 @@
+{
+  "model_version": "human_labeled_v1",
+  "cv_accuracy": 0.6354166666666666,
+  "cv_std": 0.0,
+  "train_accuracy": 1.0,
+  "n_samples": 96,
+  "n_classes": 7,
+  "classes": [
+    "Assembly Work",
+    "Inspection",
+    "Lifting / Picking",
+    "Neutral Standing",
+    "Reaching",
+    "Seated Work",
+    "Walking / Moving"
+  ],
+  "class_distribution": {
+    "Assembly Work": 23,
+    "Inspection": 3,
+    "Lifting / Picking": 31,
+    "Neutral Standing": 3,
+    "Reaching": 9,
+    "Seated Work": 20,
+    "Walking / Moving": 7
+  },
+  "feature_cols": [
+    "neck_flexion",
+    "trunk_flexion",
+    "left_shoulder_elev",
+    "right_shoulder_elev",
+    "shoulder_symmetry",
+    "alignment_deviation",
+    "knee_angle",
+    "forward_head_posture",
+    "head_tilt_angle",
+    "wrist_deviation_angle",
+    "stance_stability",
+    "weight_shift_offset",
+    "body_visibility"
+  ],
+  "evaluation_type": "HONEST \u2014 human ground truth, no data leakage",
+  "data_source": "105 frames with both pose features AND human labels",
+  "auto_label_agreement": "2.9% \u2014 previous auto-labels were 97% wrong",
+  "caveat": "Small dataset (105 frames) \u2014 accuracy will improve with more labels"
+}

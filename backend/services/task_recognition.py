@@ -89,6 +89,7 @@ class TaskRecognition:
     """
 
     DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "task_model_v3.pkl"
+    HUMAN_LABELED_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "human_labeled_task_model.pkl"
     DIVERSE_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "diverse_task_model.pkl"
     FALLBACK_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "task_model_v2.pkl"
     UPPER_BODY_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "upper_body_task_model.pkl"
@@ -178,8 +179,10 @@ class TaskRecognition:
         has_upper = any(features.get(f, 0) != 0 and features.get(f, 0) == features.get(f, 0)
                        for f in upper_body_features)
         
-        # Select model: prefer diverse (web-trained) > full v3 > upper-body > fallback
-        if self.DIVERSE_MODEL_PATH.exists():
+        # Select model: prefer human-labeled > diverse > full v3 > upper-body > fallback
+        if self.HUMAN_LABELED_MODEL_PATH.exists():
+            model_path = self.HUMAN_LABELED_MODEL_PATH
+        elif self.DIVERSE_MODEL_PATH.exists():
             model_path = self.DIVERSE_MODEL_PATH
         elif has_lower and self.DEFAULT_MODEL_PATH.exists():
             model_path = self.DEFAULT_MODEL_PATH
