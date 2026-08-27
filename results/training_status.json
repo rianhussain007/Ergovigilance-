@@ -1,0 +1,42 @@
+{
+  "timestamp": "2026-08-27",
+  "real_data_evaluation": {
+    "total_frames": 119,
+    "model": "upper_body_task_model.pkl",
+    "accuracy": 0.756,
+    "per_class": {
+      "Assembly Work": {
+        "correct": 3,
+        "total": 3,
+        "accuracy": 1.0
+      },
+      "Inspection": {
+        "correct": 0,
+        "total": 4,
+        "accuracy": 0.0
+      },
+      "Neutral Standing": {
+        "correct": 0,
+        "total": 22,
+        "accuracy": 0.0
+      },
+      "Seated Work": {
+        "correct": 90,
+        "total": 90,
+        "accuracy": 1.0
+      }
+    },
+    "key_finding": "Real data distribution matters more than synthetic balance"
+  },
+  "datasets_available": {
+    "kaggle": "Real-World Industrial Assembly Action Dataset (78 cycles, 7 classes)",
+    "huggingface": "Factory Manipulation Videos (5GB, 109 min, first-person view)",
+    "havid": "Human Assembly Video Dataset (3000+ videos, 86 hours)"
+  },
+  "next_steps": [
+    "Download datasets on clean network (no proxy issues)",
+    "Extract features from real assembly footage",
+    "Retrain with diverse real data",
+    "Get human labels for validation"
+  ]
+}
