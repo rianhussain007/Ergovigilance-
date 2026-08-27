@@ -216,6 +216,8 @@ body {{ font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0;
 .btn-save:hover {{ background: #16a34a; }}
 .btn-skip {{ background: #475569; color: #94a3b8; }}
 .btn-skip:hover {{ background: #64748b; }}
+.saved-toast {{ position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #22c55e; color: #fff; padding: 8px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; opacity: 0; transition: opacity 0.3s; z-index: 999; }}
+.saved-toast.show {{ opacity: 1; }}
 .task-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }}
 .task-btn {{ padding: 10px 8px; border: 2px solid #475569; border-radius: 8px; background: transparent; color: #e2e8f0; font-size: 12px; cursor: pointer; text-align: center; }}
 .task-btn:hover {{ border-color: #38bdf8; }}
@@ -370,6 +372,11 @@ async function saveAndNext() {{
   frame.human_task = selectedTask;
   frame.human_risk = selectedRisk;
 
+  // Show saved toast
+  const toast = document.getElementById('toast');
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 1500);
+
   loadFrame(currentIdx + 1);
 }}
 
@@ -379,15 +386,37 @@ function skipFrame() {{
 
 // Keyboard shortcuts
 document.addEventListener('keydown', e => {{
+  if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return; // don't intercept typing
   if (e.key === 'Enter' || e.key === ' ') {{ e.preventDefault(); saveAndNext(); }}
-  if (e.key === 's' || e.key === 'S') {{ selectedTask = 'Seated Work'; saveAndNext(); }}
-  if (e.key === 'n' || e.key === 'N') {{ selectedTask = 'Neutral Standing'; saveAndNext(); }}
-  if (e.key === 'a' || e.key === 'A') {{ selectedTask = 'Assembly Work'; saveAndNext(); }}
-  if (e.key === 'i' || e.key === 'I') {{ selectedTask = 'Inspection'; saveAndNext(); }}
+  if (e.key === 's' || e.key === 'S') {{ e.preventDefault(); selectTaskByKey('Seated Work'); }}
+  if (e.key === 'n' || e.key === 'N') {{ e.preventDefault(); selectTaskByKey('Neutral Standing'); }}
+  if (e.key === 'a' || e.key === 'A') {{ e.preventDefault(); selectTaskByKey('Assembly Work'); }}
+  if (e.key === 'i' || e.key === 'I') {{ e.preventDefault(); selectTaskByKey('Inspection'); }}
+  if (e.key === 'l' || e.key === 'L') {{ e.preventDefault(); selectRiskByKey('LOW'); }}
+  if (e.key === 'm' || e.key === 'M') {{ e.preventDefault(); selectRiskByKey('MEDIUM'); }}
+  if (e.key === 'h' || e.key === 'H') {{ e.preventDefault(); selectRiskByKey('HIGH'); }}
 }});
+
+function selectTaskByKey(task) {{
+  selectedTask = task;
+  document.querySelectorAll('.task-btn').forEach(b => {{
+    b.classList.toggle('selected', b.textContent === task);
+  }});
+}}
+
+function selectRiskByKey(risk) {{
+  selectedRisk = risk;
+  document.querySelectorAll('.risk-btn').forEach(b => {{
+    b.classList.remove('selected', 'low', 'medium', 'high');
+    if (b.textContent === risk) {{
+      b.classList.add('selected', risk.toLowerCase());
+    }}
+  }});
+}}
 
 init();
 </script>
+<div class="saved-toast" id="toast">✓ Saved!</div>
 </body>
 </html>"""
         self.send_response(200)
@@ -432,11 +461,15 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Frame labeling tool")
     parser.add_argument("--data", default="outputs/real_data", help="Data directory")
     parser.add_argument("--port", type=int, default=8899, help="Port")
-    parser.add_argument("--output", default="outputs/real_data/human_labels.csv", help="Output CSV")
+    parser.add_argument("--output", default=None, help="Output CSV (default: <data_dir>/human_labels.csv)")
     args = parser.parse_args()
 
     data_dir = ROOT / args.data
-    output_path = ROOT / args.output
+    # Auto-derive output path from data directory if not specified
+    if args.output:
+        output_path = ROOT / args.output
+    else:
+        output_path = data_dir / "human_labels.csv"
 
     frames = load_frames(data_dir)
     if not frames:
