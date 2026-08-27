@@ -72,4 +72,45 @@ RULE_RAPID_MOVEMENT = AlertRule(
     cooldown_frames=90,
 )
 
-DEFAULT_RULES = [RULE_HIGH_RISK, RULE_CRITICAL_RISK, RULE_RECOVERY, RULE_RAPID_MOVEMENT]
+# ── Temporal Risk Rules ─────────────────────────────────────────────
+
+RULE_SUSTAINED_RISK = AlertRule(
+    name="sustained_risk",
+    severity=AlertSeverity.WARNING,
+    title_template="Posture Risk Sustained",
+    message_template="Elevated posture risk sustained for {sustained_seconds:.0f} seconds. Take a break or adjust position.",
+    requires_ack=False,
+    cooldown_frames=60,
+)
+
+RULE_SUSTAINED_HIGH = AlertRule(
+    name="sustained_high",
+    severity=AlertSeverity.HIGH,
+    title_template="High Risk Sustained — Action Needed",
+    message_template="HIGH risk sustained for {sustained_seconds:.0f} seconds. Correct posture immediately.",
+    requires_ack=True,
+    cooldown_frames=30,
+)
+
+RULE_WORSENING_TRAJECTORY = AlertRule(
+    name="worsening_trajectory",
+    severity=AlertSeverity.WARNING,
+    title_template="Risk Trend Worsening",
+    message_template="Posture risk is increasing ({slope:.1f} risk/sec). Current: {current_risk:.0f}/100, predicted: {predicted_30s:.0f}/100 in 30s.",
+    requires_ack=False,
+    cooldown_frames=120,
+)
+
+RULE_RISK_BURST = AlertRule(
+    name="risk_burst",
+    severity=AlertSeverity.WARNING,
+    title_template="Sudden Posture Change Detected",
+    message_template="Rapid posture change detected (+{burst_magnitude:.0f} risk/sec). Check for sudden movement or equipment issue.",
+    requires_ack=False,
+    cooldown_frames=60,
+)
+
+DEFAULT_RULES = [
+    RULE_HIGH_RISK, RULE_CRITICAL_RISK, RULE_RECOVERY, RULE_RAPID_MOVEMENT,
+    RULE_SUSTAINED_RISK, RULE_SUSTAINED_HIGH, RULE_WORSENING_TRAJECTORY, RULE_RISK_BURST,
+]

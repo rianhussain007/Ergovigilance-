@@ -8,6 +8,22 @@ export type FeatureStatus = 'good' | 'low' | 'moderate' | 'high' | 'unavailable'
 export type TrendDirection = 'improving' | 'stable' | 'deteriorating';
 export type TabId = 'dashboard' | 'monitoring' | 'image_analysis' | 'video_review' | 'analytics' | 'workers' | 'task_recognition';
 
+export interface TemporalRiskPattern {
+  sustained_risk_seconds: number;
+  sustained_high_seconds: number;
+  trajectory: 'improving' | 'stable' | 'worsening';
+  trajectory_confidence: number;
+  trajectory_slope: number;
+  predicted_risk_30s: number;
+  predicted_risk_60s: number;
+  is_burst: boolean;
+  burst_magnitude: number;
+  mean_risk_10s: number;
+  mean_risk_30s: number;
+  max_risk_30s: number;
+  risk_volatility: number;
+}
+
 export interface SessionInfo {
   id: string;
   workerName: string;
@@ -422,6 +438,7 @@ export interface ContextSnapshot {
   calibrated_confidence?: number | null;
   calibrated_agrees?: boolean | null;
   confidence_band?: string;
+  temporal_risk?: TemporalRiskPattern;
   unavailable_features?: string[];
   approximate_features?: string[];
   lower_body_confidence?: number;

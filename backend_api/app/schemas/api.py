@@ -467,6 +467,7 @@ class ContextSnapshotResponse(BaseModel):
     calibrated_confidence: Optional[float] = None
     calibrated_agrees: Optional[bool] = None
     confidence_band: str = "medium"
+    temporal_risk: dict = Field(default_factory=dict)
     unavailable_features: List[str] = []
     approximate_features: List[str] = []
     lower_body_confidence: float = 0.0

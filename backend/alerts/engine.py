@@ -374,6 +374,14 @@ class AlertEngine:
                 should_fire, confidence = self._eval_recovery(rule, risk_level, final_risk)
             elif rule.name == "rapid_movement":
                 should_fire, confidence = self._eval_rapid_movement(rule, risk_level, snapshot.movement_velocity)
+            elif rule.name == "sustained_risk":
+                should_fire, confidence = self._eval_sustained_risk(rule, snapshot)
+            elif rule.name == "sustained_high":
+                should_fire, confidence = self._eval_sustained_high(rule, snapshot)
+            elif rule.name == "worsening_trajectory":
+                should_fire, confidence = self._eval_worsening_trajectory(rule, snapshot)
+            elif rule.name == "risk_burst":
+                should_fire, confidence = self._eval_risk_burst(rule, snapshot)
 
             if should_fire:
                 self._fire_alert(rule, snapshot, confidence)
@@ -420,6 +428,53 @@ class AlertEngine:
         confidence = min(movement_velocity / 100.0, 1.0)
         return True, confidence
 
+    def _eval_sustained_risk(self, rule: AlertRule, snapshot) -> tuple[bool, float]:
+        """Evaluate sustained risk rule: fire when elevated risk > 15 seconds."""
+        temporal = snapshot.temporal_risk if hasattr(snapshot, 'temporal_risk') else {}
+        sustained_seconds = temporal.get('sustained_risk_seconds', 0)
+        if sustained_seconds < 15:
+            return False, 0.0
+        if self._is_on_cooldown(rule.name):
+            return False, 0.0
+        confidence = min(sustained_seconds / 60.0, 1.0)
+        return True, confidence
+
+    def _eval_sustained_high(self, rule: AlertRule, snapshot) -> tuple[bool, float]:
+        """Evaluate sustained high rule: fire when HIGH risk > 10 seconds."""
+        temporal = snapshot.temporal_risk if hasattr(snapshot, 'temporal_risk') else {}
+        sustained_high = temporal.get('sustained_high_seconds', 0)
+        if sustained_high < 10:
+            return False, 0.0
+        if self._is_on_cooldown(rule.name):
+            return False, 0.0
+        confidence = min(sustained_high / 30.0, 1.0)
+        return True, confidence
+
+    def _eval_worsening_trajectory(self, rule: AlertRule, snapshot) -> tuple[bool, float]:
+        """Evaluate worsening trajectory rule: fire when risk is worsening with high confidence."""
+        temporal = snapshot.temporal_risk if hasattr(snapshot, 'temporal_risk') else {}
+        trajectory = temporal.get('trajectory', 'stable')
+        confidence_pct = temporal.get('trajectory_confidence', 0)
+        slope = temporal.get('trajectory_slope', 0)
+        if trajectory != 'worsening' or confidence_pct < 60:
+            return False, 0.0
+        if self._is_on_cooldown(rule.name):
+            return False, 0.0
+        confidence = min(confidence_pct / 100.0, 1.0)
+        return True, confidence
+
+    def _eval_risk_burst(self, rule: AlertRule, snapshot) -> tuple[bool, float]:
+        """Evaluate risk burst rule: fire when sudden spike detected."""
+        temporal = snapshot.temporal_risk if hasattr(snapshot, 'temporal_risk') else {}
+        is_burst = temporal.get('is_burst', False)
+        burst_magnitude = temporal.get('burst_magnitude', 0)
+        if not is_burst or burst_magnitude < 15:
+            return False, 0.0
+        if self._is_on_cooldown(rule.name):
+            return False, 0.0
+        confidence = min(burst_magnitude / 50.0, 1.0)
+        return True, confidence
+
     def _is_on_cooldown(self, rule_name: str) -> bool:
         """Check if a rule is on cooldown."""
         return self._cooldowns.get(rule_name, 0) > 0
@@ -445,12 +500,20 @@ class AlertEngine:
         alert_id = f"ALT-{uuid.uuid4().hex[:8].upper()}"
 
         title = rule.title_template
-        message = rule.message_template.format(
-            final_risk=snapshot.final_risk,
-            consecutive_high=self._consecutive_high,
-            velocity=snapshot.movement_velocity,
-            risk_level=snapshot.risk_level,
-        )
+        # Build template variables including temporal risk data
+        temporal = snapshot.temporal_risk if hasattr(snapshot, 'temporal_risk') else {}
+        template_vars = {
+            'final_risk': snapshot.final_risk,
+            'consecutive_high': self._consecutive_high,
+            'velocity': snapshot.movement_velocity,
+            'risk_level': snapshot.risk_level,
+            'sustained_seconds': temporal.get('sustained_risk_seconds', 0),
+            'slope': temporal.get('trajectory_slope', 0),
+            'current_risk': snapshot.final_risk,
+            'predicted_30s': temporal.get('predicted_risk_30s', 0),
+            'burst_magnitude': temporal.get('burst_magnitude', 0),
+        }
+        message = rule.message_template.format(**template_vars)
 
         # ── Priority scoring ──────────────────────────────────────
         # Track how many times this rule has fired in the current active set

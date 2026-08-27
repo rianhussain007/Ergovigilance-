@@ -1027,6 +1027,7 @@ class LiveRepository(DashboardRepository):
             calibrated_confidence=calibrated_confidence,
             calibrated_agrees=calibrated_agrees,
             confidence_band=snapshot.confidence_band,
+            temporal_risk=dict(snapshot.temporal_risk) if snapshot.temporal_risk else {},
             unavailable_features=list(snapshot.unavailable_features),
             approximate_features=list(snapshot.approximate_features),
             lower_body_confidence=snapshot.lower_body_confidence,

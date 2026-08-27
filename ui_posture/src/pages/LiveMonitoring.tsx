@@ -384,6 +384,9 @@ function TelemetrySidebar({
       {/* ── System Confidence — trust signal for the EHS manager ── */}
       <SystemConfidenceTile contextSnapshot={contextSnapshot} liveStatus={liveStatus} active={active} />
 
+      {/* ── Risk Trajectory — temporal risk patterns ── */}
+      <RiskTrajectoryTile contextSnapshot={contextSnapshot} active={active} />
+
       {/* ── Current Task (trained 7-class model) ── */}
       {(() => {
         const conf = liveStatus.taskConfidence ?? liveStatus.confidence ?? 0;
@@ -797,6 +800,88 @@ function SystemConfidenceTile({ contextSnapshot, liveStatus, active }: { context
       <p className="text-sm text-on-surface-variant/80 mt-0.5">{cfg.detail}</p>
       {nUnavailable > 0 && (
         <p className="text-[11px] text-on-surface-variant/60 mt-1">{nUnavailable} feature{nUnavailable === 1 ? '' : 's'} unavailable</p>
+      )}
+    </div>
+  );
+}
+
+function RiskTrajectoryTile({ contextSnapshot, active }: { contextSnapshot: ContextSnapshot | null; active: boolean }) {
+  const temporal = contextSnapshot?.temporal_risk;
+  
+  if (!active || !temporal) {
+    return (
+      <div className="rounded border border-white/10 bg-white/[0.03] p-sm">
+        <p className="font-label-caps text-xs text-on-surface-variant uppercase tracking-widest">Risk Trajectory</p>
+        <p className="text-sm text-on-surface-variant mt-0.5">Start monitoring to see risk trends.</p>
+      </div>
+    );
+  }
+
+  const trajectory = temporal.trajectory || 'stable';
+  const trajectoryConfig: Record<string, { icon: string; color: string; bg: string; border: string; label: string }> = {
+    improving: { icon: '↓', color: 'text-emerald-300', bg: 'bg-emerald-500/10', border: 'border-emerald-400/30', label: 'Improving' },
+    stable: { icon: '→', color: 'text-amber-300', bg: 'bg-amber-500/10', border: 'border-amber-400/30', label: 'Stable' },
+    worsening: { icon: '↑', color: 'text-red-300', bg: 'bg-red-500/10', border: 'border-red-400/30', label: 'Worsening' },
+  };
+  const cfg = trajectoryConfig[trajectory] || trajectoryConfig.stable;
+  
+  const sustainedRisk = temporal.sustained_risk_seconds ?? 0;
+  const sustainedHigh = temporal.sustained_high_seconds ?? 0;
+  const predicted30s = temporal.predicted_risk_30s ?? 0;
+  const isBurst = temporal.is_burst ?? false;
+
+  return (
+    <div className={`rounded border ${cfg.border} ${cfg.bg} p-sm`}>
+      <p className="font-label-caps text-xs text-on-surface-variant uppercase tracking-widest">Risk Trajectory</p>
+      
+      {/* Trajectory direction */}
+      <div className="flex items-center justify-between mt-1">
+        <div className="flex items-center gap-1">
+          <span className={`text-lg ${cfg.color}`}>{cfg.icon}</span>
+          <p className={`text-title-sm font-bold ${cfg.color}`}>{cfg.label}</p>
+        </div>
+        {temporal.trajectory_confidence > 0 && (
+          <span className="font-label-mono text-xs text-on-surface-variant">
+            {Math.round(temporal.trajectory_confidence)}% conf
+          </span>
+        )}
+      </div>
+      
+      {/* Sustained risk */}
+      {sustainedRisk > 0 && (
+        <div className="mt-2 space-y-1">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-on-surface-variant">Elevated risk</span>
+            <span className="font-label-mono text-amber-300">{Math.round(sustainedRisk)}s</span>
+          </div>
+          {sustainedHigh > 0 && (
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-on-surface-variant">HIGH risk</span>
+              <span className="font-label-mono text-red-300">{Math.round(sustainedHigh)}s</span>
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Prediction */}
+      {predicted30s > 0 && (
+        <div className="mt-2 p-1.5 rounded bg-black/20">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-on-surface-variant">Predicted in 30s</span>
+            <span className={`font-label-mono font-bold ${
+              predicted30s >= 70 ? 'text-red-300' : 
+              predicted30s >= 40 ? 'text-amber-300' : 
+              'text-emerald-300'
+            }`}>{Math.round(predicted30s)}</span>
+          </div>
+        </div>
+      )}
+      
+      {/* Burst warning */}
+      {isBurst && (
+        <div className="mt-2 p-1.5 rounded bg-red-500/20 border border-red-400/30">
+          <p className="text-xs text-red-300 font-bold">⚠ Sudden spike detected</p>
+        </div>
       )}
     </div>
   );
