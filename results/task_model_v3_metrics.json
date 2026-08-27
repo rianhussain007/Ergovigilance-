@@ -1,0 +1,59 @@
+{
+  "model_version": "v3",
+  "accuracy_cv": 0.999,
+  "accuracy_holdout": 0.999,
+  "f1_macro_cv": 0.999,
+  "precision_macro_cv": 0.999,
+  "recall_macro_cv": 0.999,
+  "n_features": 34,
+  "n_features_base": 19,
+  "n_features_temporal": 15,
+  "n_classes": 7,
+  "n_samples_per_class": 2000,
+  "total_samples": 14000,
+  "cross_validation_folds": 5,
+  "labels": [
+    "Neutral Standing",
+    "Assembly Work",
+    "Reaching",
+    "Lifting / Picking",
+    "Inspection",
+    "Seated Work",
+    "Walking / Moving"
+  ],
+  "per_class_performance": {
+    "Neutral Standing": {"precision": 0.999, "recall": 1.000, "f1": 0.999},
+    "Assembly Work": {"precision": 1.000, "recall": 1.000, "f1": 1.000},
+    "Reaching": {"precision": 1.000, "recall": 1.000, "f1": 1.000},
+    "Lifting / Picking": {"precision": 1.000, "recall": 1.000, "f1": 1.000},
+    "Inspection": {"precision": 0.999, "recall": 0.998, "f1": 0.998},
+    "Seated Work": {"precision": 1.000, "recall": 1.000, "f1": 1.000},
+    "Walking / Moving": {"precision": 1.000, "recall": 1.000, "f1": 1.000}
+  },
+  "improvements_over_v2": {
+    "v2_accuracy": 0.769,
+    "v3_accuracy_cv": 0.999,
+    "v3_accuracy_holdout": 0.999,
+    "new_features": [
+      "neck_flexion_mean_5", "neck_flexion_mean_10",
+      "trunk_flexion_mean_5", "trunk_flexion_mean_10",
+      "knee_angle_mean_5", "knee_angle_mean_10",
+      "left_shoulder_elev_mean_5", "left_shoulder_elev_mean_10",
+      "movement_velocity_mean_5", "movement_velocity_mean_10",
+      "neck_flexion_delta", "trunk_flexion_delta",
+      "knee_angle_delta", "shoulder_elev_delta",
+      "velocity_acceleration"
+    ],
+    "data_augmentations": [
+      "body_type_variation (4 types)",
+      "camera_angle_variation (5 angles)",
+      "occlusion_simulation (10% samples)",
+      "noise_injection"
+    ],
+    "validation_method": "5-fold stratified cross-validation"
+  },
+  "caveat": "This accuracy is on SYNTHETIC data with realistic augmentations. Real-world accuracy on factory footage is pending ground-truth labeling.",
+  "trained_on": "improved synthetic poses (v3: body-type + camera + occlusion variation)",
+  "model_file": "models/task_model_v3.pkl",
+  "timestamp": "2026-08-27"
+}

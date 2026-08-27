@@ -32,17 +32,64 @@ RIGHT_ANKLE = 28
 NOSE = 0
 
 
+# Temporal feature names (must match train_task_model_v3.py)
+_TEMPORAL_FEATURES = [
+    "neck_flexion_mean_5", "neck_flexion_mean_10",
+    "trunk_flexion_mean_5", "trunk_flexion_mean_10",
+    "knee_angle_mean_5", "knee_angle_mean_10",
+    "left_shoulder_elev_mean_5", "left_shoulder_elev_mean_10",
+    "movement_velocity_mean_5", "movement_velocity_mean_10",
+    "neck_flexion_delta", "trunk_flexion_delta",
+    "knee_angle_delta", "shoulder_elev_delta",
+    "velocity_acceleration",
+]
+
+
+def _compute_temporal_features(window: list[dict]) -> dict:
+    """Compute temporal features from a window of feature dictionaries."""
+    temporal = {}
+    if len(window) < 2:
+        for feat in _TEMPORAL_FEATURES:
+            temporal[feat] = 0.0
+        return temporal
+
+    for feat_name in ["neck_flexion", "trunk_flexion", "knee_angle",
+                      "left_shoulder_elev", "movement_velocity"]:
+        values = [f.get(feat_name, 0.0) for f in window]
+        temporal[f"{feat_name}_mean_5"] = float(np.mean(values[-5:])) if len(values) >= 5 else float(np.mean(values))
+        temporal[f"{feat_name}_mean_10"] = float(np.mean(values[-10:])) if len(values) >= 10 else float(np.mean(values))
+
+    if len(window) >= 2:
+        prev, curr = window[-2], window[-1]
+        temporal["neck_flexion_delta"] = curr.get("neck_flexion", 0) - prev.get("neck_flexion", 0)
+        temporal["trunk_flexion_delta"] = curr.get("trunk_flexion", 0) - prev.get("trunk_flexion", 0)
+        temporal["knee_angle_delta"] = curr.get("knee_angle", 0) - prev.get("knee_angle", 0)
+        temporal["shoulder_elev_delta"] = curr.get("left_shoulder_elev", 0) - prev.get("left_shoulder_elev", 0)
+
+    if len(window) >= 3:
+        v1 = window[-3].get("movement_velocity", 0)
+        v2 = window[-2].get("movement_velocity", 0)
+        v3 = window[-1].get("movement_velocity", 0)
+        temporal["velocity_acceleration"] = (v3 - v2) - (v2 - v1)
+    else:
+        temporal["velocity_acceleration"] = 0.0
+
+    return temporal
+
+
 class TaskRecognition:
     """Task/activity recognition for the live pipeline.
 
     Model-primary with Gaussian fallback: when a trained classifier
-    (models/task_model_v2.pkl, loaded lazily) is available and its top
-    prediction exceeds the confidence threshold (default 0.6), the model
-    decides; otherwise the deterministic Gaussian scorer runs. A missing
-    or unreadable model file never raises — the Gaussian covers it.
+    (models/task_model_v3.pkl or v2, loaded lazily) is available and its
+    top prediction exceeds the confidence threshold (default 0.6), the
+    model decides; otherwise the deterministic Gaussian scorer runs.
+    v3 models include temporal features (frame-window averages, deltas)
+    computed automatically from the feature history.
     """
 
-    DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "task_model_v2.pkl"
+    DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "task_model_v3.pkl"
+    FALLBACK_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "task_model_v2.pkl"
 
     def __init__(self, window_size: int = 10,
                  model_path: Optional[str] = None) -> None:
@@ -54,14 +101,22 @@ class TaskRecognition:
         self._window: deque[tuple[str, float]] = deque(maxlen=self._window_size)
         self._last_smoothed_task: str = "Unknown"
         self._task_start_time: float = time.time()
+        # Feature history for temporal features (v3)
+        self._feature_window: deque[dict] = deque(maxlen=10)
 
         env_path = os.environ.get("ERGOVIGILANCE_TASK_MODEL")
-        self._model_path = Path(model_path) if model_path else (
-            Path(env_path) if env_path else self.DEFAULT_MODEL_PATH)
+        if model_path:
+            self._model_path = Path(model_path)
+        elif env_path:
+            self._model_path = Path(env_path)
+        else:
+            # Prefer v3, fall back to v2
+            self._model_path = self.DEFAULT_MODEL_PATH if self.DEFAULT_MODEL_PATH.exists() else self.FALLBACK_MODEL_PATH
         self._model_bundle: dict | None = None
         self._model_tried: bool = False
         self._confidence_threshold: float = 0.6
         self._using_model: bool = False
+        self._model_version: str = "unknown"
 
     def get_current_task(self) -> str:
         return self._current_task
@@ -85,13 +140,20 @@ class TaskRecognition:
         try:
             import joblib  # optional runtime dep — degrades to Gaussian if absent
             if not self._model_path.exists():
-                return None
+                # Try fallback v2 if v3 doesn't exist
+                if self._model_path == self.DEFAULT_MODEL_PATH and self.FALLBACK_MODEL_PATH.exists():
+                    self._model_path = self.FALLBACK_MODEL_PATH
+                else:
+                    return None
             bundle = joblib.load(self._model_path)
             if not isinstance(bundle, dict) or "model" not in bundle:
                 return None
             self._model_bundle = bundle
             self._confidence_threshold = float(
                 bundle.get("config", {}).get("confidence_threshold", 0.6))
+            # Detect model version from feature count
+            n_features = len(bundle.get("feature_columns", []))
+            self._model_version = bundle.get("version", "v2" if n_features <= 20 else "v3")
         except Exception:
             self._model_bundle = None
         return self._model_bundle
@@ -102,8 +164,18 @@ class TaskRecognition:
         if bundle is None:
             return None
         try:
+            # Add current features to window for temporal computation
+            self._feature_window.append(dict(features))
+            
+            # For v3 models, compute temporal features
+            if self._model_version == "v3":
+                temporal = _compute_temporal_features(list(self._feature_window))
+                features_with_temporal = {**features, **temporal}
+            else:
+                features_with_temporal = features
+            
             cols = bundle["feature_columns"]
-            row = [features.get(c, 0.0) for c in cols]
+            row = [features_with_temporal.get(c, 0.0) for c in cols]
             model = bundle["model"]
             proba = model.predict_proba([row])[0]
             best = int(np.argmax(proba))
@@ -133,6 +205,7 @@ class TaskRecognition:
         self._reason = "Insufficient data"
         self._prev_kps = None
         self._window.clear()
+        self._feature_window.clear()
         self._last_smoothed_task = "Unknown"
         self._task_start_time = time.time()
 
@@ -209,8 +282,9 @@ class TaskRecognition:
         if model_pred is not None:
             self._using_model = True
             model_task, model_conf = model_pred
+            model_label = f"Trained task classifier ({self._model_version})"
             return self._finalize(model_task, round(model_conf * 100.0, 1),
-                                  "Trained task classifier (v2)", kps)
+                                  model_label, kps)
         self._using_model = False
 
         l_elbow_angle = _angle_between(lsh, lel, lwr)
