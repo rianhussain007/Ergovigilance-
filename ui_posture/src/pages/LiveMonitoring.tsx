@@ -381,6 +381,9 @@ function TelemetrySidebar({
     <aside className="rounded border border-outline-variant bg-surface-container-low p-md space-y-md">
       <RiskGauge liveStatus={liveStatus} active={active} />
 
+      {/* ── System Confidence — trust signal for the EHS manager ── */}
+      <SystemConfidenceTile contextSnapshot={contextSnapshot} liveStatus={liveStatus} active={active} />
+
       {/* ── Current Task (trained 7-class model) ── */}
       {(() => {
         const conf = liveStatus.taskConfidence ?? liveStatus.confidence ?? 0;
@@ -741,6 +744,61 @@ function CameraFramingNote({ snapshot, unavailableFeatures, active }: { snapshot
     <div className="rounded border border-amber-400/30 bg-amber-500/10 px-sm py-xs">
       <p className="text-sm font-bold text-amber-300 uppercase tracking-widest">⚠ Camera Framing</p>
       <p className="text-sm text-amber-300/80 mt-0.5">Lower body out of frame — reposition camera to mid-thigh.</p>
+    </div>
+  );
+}
+
+function SystemConfidenceTile({ contextSnapshot, liveStatus, active }: { contextSnapshot: ContextSnapshot | null; liveStatus: LiveStatus; active: boolean }) {
+  const band = contextSnapshot?.confidence_band ?? 'medium';
+  const cameraConf = liveStatus.confidence ?? null;
+  const nUnavailable = contextSnapshot?.unavailable_features?.length ?? 0;
+  const bandConfig: Record<string, { color: string; bg: string; border: string; label: string; detail: string }> = {
+    high: {
+      color: 'text-emerald-300',
+      bg: 'bg-emerald-500/10',
+      border: 'border-emerald-400/30',
+      label: 'High Certainty',
+      detail: 'System is confident in this assessment.',
+    },
+    medium: {
+      color: 'text-amber-300',
+      bg: 'bg-amber-500/10',
+      border: 'border-amber-400/30',
+      label: 'Medium Certainty',
+      detail: 'Some features unavailable — results may be less precise.',
+    },
+    low: {
+      color: 'text-red-300',
+      bg: 'bg-red-500/10',
+      border: 'border-red-400/30',
+      label: 'Low Certainty',
+      detail: 'Camera quality or visibility issues — interpret results carefully.',
+    },
+  };
+  const cfg = bandConfig[band] || bandConfig.medium;
+
+  if (!active) {
+    return (
+      <div className="rounded border border-white/10 bg-white/[0.03] p-sm">
+        <p className="font-label-caps text-xs text-on-surface-variant uppercase tracking-widest">System Confidence</p>
+        <p className="text-sm text-on-surface-variant mt-0.5">Start monitoring to see confidence level.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`rounded border ${cfg.border} ${cfg.bg} p-sm`}>
+      <p className="font-label-caps text-xs text-on-surface-variant uppercase tracking-widest">System Confidence</p>
+      <div className="flex items-center justify-between mt-1">
+        <p className={`text-title-md font-bold ${cfg.color}`}>{cfg.label}</p>
+        {cameraConf != null && (
+          <span className="font-label-mono text-sm text-on-surface-variant">{Math.round(cameraConf)}%</span>
+        )}
+      </div>
+      <p className="text-sm text-on-surface-variant/80 mt-0.5">{cfg.detail}</p>
+      {nUnavailable > 0 && (
+        <p className="text-[11px] text-on-surface-variant/60 mt-1">{nUnavailable} feature{nUnavailable === 1 ? '' : 's'} unavailable</p>
+      )}
     </div>
   );
 }

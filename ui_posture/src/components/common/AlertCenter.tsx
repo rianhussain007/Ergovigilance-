@@ -22,6 +22,7 @@ interface Notification {
   severity: string;
   state: string;
   confidence: number;
+  confidence_band: string;
 }
 
 // Theme-aware severity colors
@@ -97,6 +98,7 @@ function alertToNotification(alert: AlertData, read: boolean): Notification {
     severity: alert.severity,
     state: alert.state,
     confidence: alert.confidence,
+    confidence_band: alert.confidence_band || 'medium',
   };
 }
 
@@ -196,6 +198,15 @@ function AlertItem({
                 <span className="flex items-center gap-1">
                   <BarChart3 className="w-3 h-3" />
                   {alert.confidence.toFixed(0)}% confidence
+                </span>
+                <span className={`px-1.5 py-0.5 rounded font-medium ${
+                  alert.confidence_band === 'high' ? 'bg-green-500/15 text-green-400' :
+                  alert.confidence_band === 'low' ? 'bg-red-500/15 text-red-400' :
+                  'bg-yellow-500/15 text-yellow-400'
+                }`}>
+                  {alert.confidence_band === 'high' ? '● High certainty' :
+                   alert.confidence_band === 'low' ? '● Low certainty' :
+                   '● Medium certainty'}
                 </span>
                 <span className="flex items-center gap-1">
                   <Clock className="w-3 h-3" />

@@ -1026,6 +1026,7 @@ class LiveRepository(DashboardRepository):
             calibrated_band=calibrated_band,
             calibrated_confidence=calibrated_confidence,
             calibrated_agrees=calibrated_agrees,
+            confidence_band=snapshot.confidence_band,
             unavailable_features=list(snapshot.unavailable_features),
             approximate_features=list(snapshot.approximate_features),
             lower_body_confidence=snapshot.lower_body_confidence,

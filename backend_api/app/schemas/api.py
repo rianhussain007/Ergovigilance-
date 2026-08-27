@@ -338,6 +338,7 @@ class AlertResponse(BaseModel):
     message: str
     trigger_rule: str
     confidence: float
+    confidence_band: str = "medium"
     requires_ack: bool
     expires_at: str
 
@@ -462,6 +463,7 @@ class ContextSnapshotResponse(BaseModel):
     calibrated_band: Optional[str] = None
     calibrated_confidence: Optional[float] = None
     calibrated_agrees: Optional[bool] = None
+    confidence_band: str = "medium"
     unavailable_features: List[str] = []
     approximate_features: List[str] = []
     lower_body_confidence: float = 0.0

@@ -378,6 +378,7 @@ class AlertEngine:
             message=message,
             trigger_rule=rule.name,
             confidence=confidence,
+            confidence_band=snapshot.confidence_band,
             requires_ack=rule.requires_ack,
         )
 

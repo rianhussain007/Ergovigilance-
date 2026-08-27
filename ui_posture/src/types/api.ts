@@ -421,6 +421,7 @@ export interface ContextSnapshot {
   calibrated_band?: string | null;
   calibrated_confidence?: number | null;
   calibrated_agrees?: boolean | null;
+  confidence_band?: string;
   unavailable_features?: string[];
   approximate_features?: string[];
   lower_body_confidence?: number;
@@ -473,6 +474,7 @@ export interface AlertData {
   message: string;
   trigger_rule: string;
   confidence: number;
+  confidence_band: string;
   requires_ack: boolean;
   expires_at: string;
 }

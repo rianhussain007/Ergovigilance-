@@ -133,6 +133,13 @@ class ContextSnapshot:
     active_rules: tuple[str, ...] = ()
     feature_scores: dict[str, float] = field(default_factory=dict)
 
+    # Confidence band — human-readable trust signal derived from camera
+    # confidence, feature completeness, and dwell stability.  One of:
+    #   "high"   (camera >= 90%, all features available, stable dwell)
+    #   "medium" (camera >= 70% OR some features unavailable)
+    #   "low"    (camera < 70% OR many features unavailable)
+    confidence_band: str = "medium"
+
     # Ollama-generated plain-language explanation (populated post-scoring,
     # never in the critical path — a slow or failed LLM call never blocks
     # or corrupts the actual risk computation).
@@ -161,6 +168,7 @@ class ContextSnapshot:
             "feature_scores": dict(self.feature_scores),
             "approximate_features": list(self.approximate_features),
             "standard_assessment": dict(self.standard_assessment),
+            "confidence_band": self.confidence_band,
             "ai_explanation": self.ai_explanation,
         }
 
@@ -192,6 +200,7 @@ class ContextSnapshot:
             feature_scores=data.get("feature_scores", {}),
             approximate_features=tuple(data.get("approximate_features", [])),
             standard_assessment=data.get("standard_assessment", {}),
+            confidence_band=data.get("confidence_band", "medium"),
             ai_explanation=data.get("ai_explanation", ""),
         )
 
@@ -474,7 +483,23 @@ class ContextIntelligenceEngine:
         # ── Step 8: Determine safety state ─────────────────────────
         safety_state = self._determine_state(final_risk, risk_level)
 
-        # ── Step 9: Build explanation ──────────────────────────────
+        # ── Step 9: Build confidence band ─────────────────────────
+        # Derives a human-readable trust signal from camera quality,
+        # feature completeness, and dwell stability.  This is what the
+        # UI shows as "System Confidence: High / Medium / Low".
+        n_unavailable = len(all_unavailable)
+        n_total = len(active_feature_rules)
+        feature_completeness = 1.0 - (n_unavailable / n_total) if n_total > 0 else 0.0
+        dwell_stability = len(self._level_history) / max(self._level_dwell, 1)
+        if camera_confidence >= 90 and feature_completeness >= 0.8 and dwell_stability >= 0.5:
+            confidence_band = "high"
+        elif camera_confidence >= 70 and feature_completeness >= 0.5:
+            confidence_band = "medium"
+        else:
+            confidence_band = "low"
+        active_rules.append(f"confidence_band: {confidence_band} (camera={camera_confidence:.0f}%, features={feature_completeness:.0%}, dwell={dwell_stability:.0%})")
+
+        # ── Step 10: Build explanation ─────────────────────────────
         reason = self._build_reason(
             base_risk, context_modifier, fatigue_modifier,
             duration_penalty, task_modifier, confidence_modifier,
@@ -504,6 +529,7 @@ class ContextIntelligenceEngine:
             active_rules=tuple(active_rules),
             feature_scores=feature_scores,
             standard_assessment=dict(std) if std_valid else {},
+            confidence_band=confidence_band,
         )
 
     def reset(self) -> None:

@@ -46,6 +46,7 @@ class Alert:
     message: str = ""
     trigger_rule: str = ""
     confidence: float = 0.0
+    confidence_band: str = "medium"
     requires_ack: bool = False
     expires_at: str = ""
 
@@ -62,6 +63,7 @@ class Alert:
             "message": self.message,
             "trigger_rule": self.trigger_rule,
             "confidence": self.confidence,
+            "confidence_band": self.confidence_band,
             "requires_ack": self.requires_ack,
             "expires_at": self.expires_at,
         }
