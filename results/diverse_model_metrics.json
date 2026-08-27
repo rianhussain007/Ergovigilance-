@@ -1,0 +1,36 @@
+{
+  "model_version": "diverse_v1",
+  "cv_accuracy": 0.7078014184397163,
+  "cv_std": 0.02668778400315856,
+  "train_accuracy": 0.902127659574468,
+  "n_samples": 705,
+  "n_classes": 3,
+  "classes": [
+    "Assembly Work",
+    "Lifting / Picking",
+    "Neutral Standing"
+  ],
+  "class_distribution": {
+    "Assembly Work": 299,
+    "Lifting / Picking": 152,
+    "Neutral Standing": 254
+  },
+  "feature_cols": [
+    "neck_flexion",
+    "trunk_flexion",
+    "left_shoulder_elev",
+    "right_shoulder_elev",
+    "shoulder_symmetry",
+    "alignment_deviation",
+    "knee_angle",
+    "forward_head_posture",
+    "head_tilt_angle",
+    "wrist_deviation_angle",
+    "stance_stability",
+    "weight_shift_offset",
+    "body_visibility"
+  ],
+  "evaluation_type": "CROSS_VALIDATION (honest, no data leakage)",
+  "data_source": "Web-sourced factory videos (YouTube, HuggingFace)",
+  "caveat": "Labels inferred from video content, not human-labeled"
+}

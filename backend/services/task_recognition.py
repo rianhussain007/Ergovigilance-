@@ -89,6 +89,7 @@ class TaskRecognition:
     """
 
     DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "task_model_v3.pkl"
+    DIVERSE_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "diverse_task_model.pkl"
     FALLBACK_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "task_model_v2.pkl"
     UPPER_BODY_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "upper_body_task_model.pkl"
 
@@ -177,8 +178,10 @@ class TaskRecognition:
         has_upper = any(features.get(f, 0) != 0 and features.get(f, 0) == features.get(f, 0)
                        for f in upper_body_features)
         
-        # Select model based on available features
-        if has_lower and self.DEFAULT_MODEL_PATH.exists():
+        # Select model: prefer diverse (web-trained) > full v3 > upper-body > fallback
+        if self.DIVERSE_MODEL_PATH.exists():
+            model_path = self.DIVERSE_MODEL_PATH
+        elif has_lower and self.DEFAULT_MODEL_PATH.exists():
             model_path = self.DEFAULT_MODEL_PATH
         elif has_upper and self.UPPER_BODY_MODEL_PATH.exists():
             model_path = self.UPPER_BODY_MODEL_PATH
@@ -208,7 +211,10 @@ class TaskRecognition:
             else:
                 features_with_temporal = features
             
-            cols = bundle["feature_columns"]
+            # Support both 'feature_columns' (v2/v3) and 'feature_cols' (diverse model)
+            cols = bundle.get("feature_columns") or bundle.get("feature_cols", [])
+            if not cols:
+                return None
             row = [features_with_temporal.get(c, 0.0) for c in cols]
             model = bundle["model"]
             proba = model.predict_proba([row])[0]
@@ -221,7 +227,16 @@ class TaskRecognition:
             classes = list(classes)
             if not classes or best >= len(classes):
                 return None
-            task = str(classes[best])
+            
+            # Handle LabelEncoder classes (integer indices -> string names)
+            le = bundle.get("label_encoder")
+            if le is not None and hasattr(le, "inverse_transform"):
+                try:
+                    task = str(le.inverse_transform([best])[0])
+                except Exception:
+                    task = str(classes[best])
+            else:
+                task = str(classes[best])
         except Exception:
             return None
         
