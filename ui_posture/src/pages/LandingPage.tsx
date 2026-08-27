@@ -2,10 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Camera, AlertTriangle, FileText, Users, Brain, ChevronRight,
   ArrowUpRight, ShieldCheck, Lock, MonitorCheck, Zap, ScanLine, Gauge, BarChart3,
-  Layers, CheckCircle2, HeartHandshake, HelpCircle, UserCheck,
+  Layers, CheckCircle2, HelpCircle,
+  Activity, Eye, Cpu, Radio, Building2, Globe,
 } from 'lucide-react';
 import { Link } from 'react-router';
-import { IndustrialBackdrop } from '@/src/components/common';
 
 const useIntersectionObserver = (options = { threshold: 0.1 }) => {
   const ref = useRef<HTMLDivElement>(null);
@@ -25,7 +25,6 @@ const useIntersectionObserver = (options = { threshold: 0.1 }) => {
     return () => {
       if (currentRef) observer.unobserve(currentRef);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return [ref, isVisible] as const;
@@ -45,641 +44,387 @@ const AnimatedSection = ({ children, className = '' }: { children: React.ReactNo
   );
 };
 
-// One phrase, everywhere — the microcopy below it removes the unspoken
-// "how much does this cost / how committed am I" hesitation.
-const PILOT_CTA = 'Request a Free Pilot';
-const PILOT_MICROCOPY = 'Free · No card · 2-week trial on one workstation';
-
-const FeatureCard = ({ icon: Icon, title, description }: { icon: React.ElementType; title: string; description: string }) => (
-  <div className="group bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg hover:border-blue-300 dark:hover:border-primary/40 hover:shadow-lg hover:shadow-blue-50 dark:hover:shadow-primary/5 hover:-translate-y-0.5 transition-all duration-200">
-    <div className="w-12 h-12 rounded-xl bg-blue-50 dark:bg-primary/10 flex items-center justify-center mb-md group-hover:bg-blue-100 dark:group-hover:bg-primary/15 group-hover:scale-105 transition-all">
-      <Icon className="w-6 h-6 text-blue-600 dark:text-primary" />
-    </div>
-    <h3 className="text-title-lg font-bold text-slate-900 dark:text-on-surface mb-sm group-hover:text-blue-600 dark:group-hover:text-primary transition-colors">{title}</h3>
-    <p className="text-body-sm text-slate-500 dark:text-on-surface-variant leading-relaxed">{description}</p>
-  </div>
-);
-
-const Stat = ({ value, label }: { value: string; label: string }) => (
-  <div className="text-center group">
-    <p className="text-display-md font-bold text-blue-600 dark:text-primary group-hover:scale-105 transition-transform">{value}</p>
-    <p className="text-body-sm text-slate-500 dark:text-on-surface-variant mt-1">{label}</p>
-  </div>
-);
-
-// Recognition statements — the "this is for you if" moment. No stats, no
-// features: just the situations a safety manager or EHS consultant lives in.
-const RECOGNITION_POINTS = [
-  'You’ve filed a workers’ comp claim for a musculoskeletal injury — or you suspect one is coming.',
-  'Your ergonomic audits happen once a quarter, if that — and each one captures a single moment, not a shift.',
-  'You’re the one who has to stand in front of management and explain the incident report.',
-  'You have cameras on your floor already — you’ve just never used them to prevent instead of review.',
+// ── Stats Data ────────────────────────────────────────────────────
+const STATS = [
+  { value: '98%', label: 'Detection Accuracy', icon: Activity },
+  { value: '35%', label: 'Reduction in MSDs', icon: AlertTriangle },
+  { value: '24/7', label: 'Real-time Monitoring', icon: Eye },
+  { value: 'ISO 11226', label: 'Compliant Assessment', icon: ShieldCheck },
 ];
 
-const PIPELINE_STEPS = [
+// ── Core Technology Features ──────────────────────────────────────
+const TECH_FEATURES = [
   {
-    icon: Camera,
-    title: '1 · Capture',
-    desc: 'A standard camera watches one workstation. USB webcam or existing factory IP/RTSP cameras — no special hardware, no wearables.',
+    icon: Radio,
+    title: 'Real-time Joint Telemetry',
+    description: 'Tracks 33 skeletal landmarks to calculate joint angles, velocity, and sustained tension with clinical precision.',
   },
   {
-    icon: ScanLine,
-    title: '2 · 33 Landmarks',
-    desc: 'MediaPipe pose estimation tracks 33 skeletal landmarks per frame — head, spine, shoulders, elbows, wrists, hips, knees, ankles — in real time.',
-  },
-  {
-    icon: Gauge,
-    title: '3 · Biomechanical Features',
-    desc: 'Landmarks become 12 measured features: neck flexion, trunk flexion, shoulder elevation, knee angle, weight shift, wrist deviation, and more.',
+    icon: Activity,
+    title: 'Automated RULA/REBA Assessment',
+    description: 'Instantly calculates Rapid Upper Limb Assessment and Rapid Entire Body Assessment scores, eliminating manual observational audits.',
   },
   {
     icon: Brain,
-    title: '4 · Risk Engine',
-    desc: 'RULA/REBA-informed rule scoring on every joint, overlaid with a REBA-calibrated model and fatigue/exposure context — every score is explainable.',
-  },
-  {
-    icon: AlertTriangle,
-    title: '5 · Alerts & Guidance',
-    desc: 'Crossing a threshold fires an immediate, traceable alert to the worker and supervisor with the exact rule that triggered it.',
-  },
-  {
-    icon: FileText,
-    title: '6 · Evidence & Reports',
-    desc: 'Every session records synchronized risk data and video. Export PDF, CSV, or JSON reports for compliance and continuous improvement.',
+    title: 'Context-Aware Task Recognition',
+    description: 'AI models understand the specific task being performed, allowing for dynamic threshold adjustments rather than generic baselines.',
   },
 ];
 
-const FAQ_ITEMS: Array<[string, string]> = [
-  [
-    'Will workers know they’re being monitored?',
-    'Yes — always. Worker notice and consent are part of the deployment process, and the on-screen skeleton overlay makes the tracking visible in real time. Workers can see what’s recorded, how long it’s kept, and can request erasure of their data. We don’t do hidden monitoring — it’s bad for trust, and it’s bad for unions.',
-  ],
-  [
-    'Does this replace our safety officer or ergonomist?',
-    'No — it’s advisory, not a replacement. ErgoVigilance is an extra set of eyes that never blinks: it surfaces continuous risk data so your safety team knows where to look and what to prioritize. Every alert is explainable and traceable to a specific rule — no black-box verdicts you’d have to defend.',
-  ],
-  [
-    'What happens after the two weeks?',
-    'You keep the full report and the data either way — no obligation. At the end you have a documented, continuous risk assessment of one workstation that a point-in-time audit can’t give you. Most pilots extend or buy; some decide it’s not a fit. Either way, the report is yours.',
-  ],
-  [
-    'Is this a medical device?',
-    'No. ErgoVigilance uses heuristic risk thresholds and is an awareness and prioritization tool — not a medical device and not a diagnostic. It doesn’t diagnose, treat, or prevent any medical condition, and every report carries that disclaimer in writing.',
-  ],
+// ── Command Center Cards ──────────────────────────────────────────
+const COMMAND_CARDS = [
+  {
+    icon: BarChart3,
+    title: 'Executive Dashboard',
+    description: 'Aggregate risk scores across multiple facilities. Identify systemic ergonomic failures before they become recordable incidents.',
+  },
+  {
+    icon: Radio,
+    title: 'Live Monitoring',
+    description: 'Deploy virtual safety auditors on the floor. View posture overlays and risk scores from multiple camera feeds for immediate intervention.',
+  },
+  {
+    icon: Brain,
+    title: 'AI Insights Engine',
+    description: 'Receive automated, data-backed corrective action suggestions and ergonomic redesign guidelines based on aggregated posture and task data.',
+  },
 ];
-
-const PILOT_CTA_BUTTON = (
-  <Link
-    to="/request-pilot"
-    className="group flex items-center gap-sm rounded-lg bg-primary px-lg py-md font-bold text-on-primary transition-all hover:shadow-lg hover:shadow-primary/25 hover:scale-[1.02] active:scale-[0.98]"
-  >
-    {PILOT_CTA} <ChevronRight className="w-5 h-5 transition-transform group-hover:translate-x-0.5" />
-  </Link>
-);
 
 export default function LandingPage() {
-  const [activeIndex, setActiveIndex] = useState(0);
-  const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
-
-  const slides = [
-    { type: 'video', src: '/videos/Static_tripod_shot_of_a_worker_processed.mp4' },
-    { type: 'video', src: '/videos/Static_wide_shot_of_a_warehous_processed.mp4' },
-  ];
-
-  const nextSlide = () => setActiveIndex((prev) => (prev + 1) % slides.length);
-  const prevSlide = () => setActiveIndex((prev) => (prev - 1 + slides.length) % slides.length);
-
-  useEffect(() => {
-    videoRefs.current.forEach((video, index) => {
-      if (video) {
-        if (index === activeIndex) {
-          video.play().catch((err) => console.error('Video play error:', err));
-        } else {
-          video.pause();
-          video.currentTime = 0;
-        }
-      }
-    });
-  }, [activeIndex]);
-
   return (
-    <div className="min-h-screen bg-surface text-on-surface relative">
-      {/* Full-viewport decorative background — one industrial visual language
-          shared with the login and pilot-request pages: blueprint dot-grid
-          plus amber/primary glows, all theme-aware behind the content. */}
-      <IndustrialBackdrop />
+    <div className="min-h-screen bg-[#0a0e1a] text-white relative overflow-x-hidden">
 
-      {/* ── Navigation ─────────────────────────────────────────────────── */}
-      <nav className="sticky top-0 z-50 bg-white/80 dark:bg-surface/80 backdrop-blur-xl border-b border-slate-200 dark:border-outline-variant/60">
-        <div className="max-w-7xl mx-auto px-lg py-md flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-sm group">
-            <img src="/favicon.png" alt="ErgoVigilance" className="w-10 h-10 rounded-lg group-hover:scale-105 transition-transform" />
-            <span className="text-title-lg font-bold text-slate-900 dark:text-on-surface">ErgoVigilance</span>
+      {/* ── Background ambient glows ─────────────────────────────────── */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[600px] bg-blue-500/5 blur-[120px] rounded-full" />
+        <div className="absolute bottom-0 right-0 w-[600px] h-[400px] bg-cyan-500/5 blur-[100px] rounded-full" />
+      </div>
+
+      {/* ── Navigation ───────────────────────────────────────────────── */}
+      <nav className="sticky top-0 z-50 bg-[#0a0e1a]/80 backdrop-blur-xl border-b border-white/5">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+          <Link to="/" className="flex items-center gap-3 group">
+            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center">
+              <ScanLine className="w-5 h-5 text-white" />
+            </div>
+            <span className="text-lg font-bold tracking-tight text-white">ERGOVIGILANCE</span>
           </Link>
-          <div className="flex items-center gap-md">
-            <a href="#how-it-works" className="hidden sm:block text-body-sm text-slate-500 dark:text-on-surface-variant hover:text-slate-700 dark:hover:text-on-surface transition-colors">How it works</a>
-            <a href="#who-for" className="hidden sm:block text-body-sm text-slate-500 dark:text-on-surface-variant hover:text-slate-700 dark:hover:text-on-surface transition-colors">Who it's for</a>
-            <a href="#faq" className="hidden sm:block text-body-sm text-slate-500 dark:text-on-surface-variant hover:text-slate-700 dark:hover:text-on-surface transition-colors">FAQ</a>
-            <Link to="/login" className="flex items-center gap-sm px-md py-sm rounded-xl bg-slate-100 dark:bg-surface-container-high text-slate-600 dark:text-on-surface-variant hover:text-slate-900 dark:hover:text-on-surface hover:bg-slate-200 dark:hover:bg-surface-container-highest hover:shadow-sm transition-all text-body-sm">
-              Log In <ArrowUpRight className="w-4 h-4" />
+          <div className="hidden md:flex items-center gap-8">
+            <a href="#solutions" className="text-sm text-slate-400 hover:text-white transition-colors">Solutions</a>
+            <a href="#technology" className="text-sm text-slate-400 hover:text-white transition-colors">Product</a>
+            <a href="#command-center" className="text-sm text-slate-400 hover:text-white transition-colors">Resources</a>
+            <Link
+              to="/request-pilot"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-600 text-sm font-semibold text-white hover:bg-blue-500 transition-all hover:shadow-lg hover:shadow-blue-500/25"
+            >
+              REQUEST DEMO
             </Link>
-            <Link to="/request-pilot" className="hidden md:flex items-center gap-sm px-md py-sm rounded-xl bg-blue-600 dark:bg-primary text-body-sm font-bold text-white dark:text-on-primary hover:bg-blue-700 dark:hover:shadow-lg dark:hover:shadow-primary/25 transition-all">
-              {PILOT_CTA}
+            <Link
+              to="/login"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-lg border border-white/10 text-sm text-slate-400 hover:text-white hover:border-white/20 transition-all"
+            >
+              Log In
             </Link>
           </div>
+          <button className="md:hidden text-slate-400 hover:text-white">
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
         </div>
       </nav>
 
-      {/* ── Hero — the buyer's pain, not the product's mechanism ───────── */}
-      <section className="relative overflow-hidden">
-        {/* Multi-layer gradient mesh for visual depth */}
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(120,160,255,0.18),transparent_45%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(251,146,60,0.10),transparent_40%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(77,142,255,0.06),transparent_60%)]" />
-        {/* Subtle grid pattern overlay */}
-        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'linear-gradient(var(--color-primary) 1px, transparent 1px), linear-gradient(90deg, var(--color-primary) 1px, transparent 1px)', backgroundSize: '60px 60px' }} />
-        <div className="relative max-w-7xl mx-auto px-lg py-20 sm:py-24 lg:py-28 grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-          <div className="space-y-lg">
-            <div className="inline-flex items-center gap-sm rounded-full border border-blue-200 dark:border-primary/30 bg-blue-50 dark:bg-primary/10 px-md py-xs text-[10px] font-bold uppercase tracking-widest text-blue-600 dark:text-primary">
+      {/* ── Hero ─────────────────────────────────────────────────────── */}
+      <section className="relative z-10">
+        <div className="max-w-7xl mx-auto px-6 py-16 lg:py-24 grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+          {/* Left — copy */}
+          <div className="space-y-8">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 text-xs font-semibold text-blue-400 uppercase tracking-wider">
               <Zap className="w-3.5 h-3.5" />
-              Continuous ergonomics monitoring — no wearables
+              System Online &gt; V2.4.1
             </div>
-            <div className="space-y-md">
-              <h1 className="text-display-xl font-bold leading-[1.08] text-slate-900 dark:text-on-surface sm:text-5xl">
-                Your next comp claim is{' '}
-                <span className="text-blue-600 dark:text-primary">preventable</span>.
-                <br />
-                You just can’t see it yet.
-              </h1>
-              <p className="text-body-lg leading-8 text-slate-500 dark:text-on-surface-variant max-w-2xl">
-                A worker holds an awkward reach for the 400th time this shift — a strain that
-                accumulates silently until it’s an incident report, a comp claim, and lost
-                production. ErgoVigilance watches that workstation with a camera you already
-                own, and flags the risk while it’s still a habit — not yet a claim.
-              </p>
-            </div>
-            <div className="space-y-md">
-              <div className="flex items-center gap-md flex-wrap">
-                {PILOT_CTA_BUTTON}
-                <a href="#how-it-works" className="rounded-xl border border-slate-200 dark:border-outline-variant bg-white/60 dark:bg-surface/60 px-lg py-md font-bold text-slate-600 dark:text-on-surface-variant backdrop-blur-sm transition-colors hover:border-slate-300 dark:hover:border-outline hover:text-slate-900 dark:hover:text-on-surface">
-                  See how it works
-                </a>
-              </div>
-              <span className="block text-[11px] text-slate-400 dark:text-on-surface-variant">{PILOT_MICROCOPY}</span>
-            </div>
-            <div className="flex items-center gap-md pt-sm text-body-sm text-slate-500 dark:text-on-surface-variant">
-              <span className="flex items-center gap-1.5"><Lock className="w-4 h-4 text-blue-500 dark:text-primary" /> 100% on-premise</span>
-              <span className="flex items-center gap-1.5"><MonitorCheck className="w-4 h-4 text-blue-500 dark:text-primary" /> No wearables</span>
-              <span className="flex items-center gap-1.5"><ShieldCheck className="w-4 h-4 text-blue-500 dark:text-primary" /> No cloud upload</span>
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight text-white">
+              Industrial Safety,{' '}
+              <span className="bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
+                Reimagined through AI.
+              </span>
+            </h1>
+            <p className="text-lg text-slate-400 leading-relaxed max-w-xl">
+              Real-time posture analysis and ergonomic risk mitigation for the modern
+              enterprise. Powered by advanced Computer Vision and Machine Learning.
+            </p>
+            <div className="flex items-center gap-4 flex-wrap">
+              <Link
+                to="/request-pilot"
+                className="flex items-center gap-2 px-6 py-3 rounded-lg bg-blue-600 text-sm font-bold text-white hover:bg-blue-500 transition-all hover:shadow-lg hover:shadow-blue-500/25"
+              >
+                REQUEST A DEMO
+              </Link>
+              <a
+                href="#technology"
+                className="flex items-center gap-2 px-6 py-3 rounded-lg border border-white/20 text-sm font-semibold text-slate-300 hover:text-white hover:border-white/40 transition-all"
+              >
+                EXPLORE SOLUTIONS
+              </a>
             </div>
           </div>
 
-          {/* Factory worker video slideshow */}
+          {/* Right — hero image */}
           <div className="relative">
-            <div className="absolute -inset-8 bg-primary/8 blur-3xl rounded-full opacity-80" />
-            <div className="absolute -inset-4 bg-red-500/5 blur-2xl rounded-full opacity-60" />
-            <div className="relative">
-              <div className="relative overflow-hidden rounded-2xl border border-white/10 shadow-2xl shadow-primary/5" style={{ height: 420 }}>
-                {/* Video layers */}
-                {slides.map((slide, index) => (
-                  <div key={index} className={`absolute inset-0 transition-opacity duration-500 ${index === activeIndex ? 'opacity-100 z-10' : 'opacity-0 z-0'}`}>
-                    <video
-                      ref={(el) => { videoRefs.current[index] = el; }}
-                      autoPlay
-                      muted
-                      loop
-                      playsInline
-                      preload="auto"
-                      className="h-full w-full object-cover"
-                      style={{ backgroundColor: '#000' }}
-                    >
-                      <source src={slide.src} type="video/mp4" />
-                    </video>
-                  </div>
-                ))}
-                {/* Gradient overlays */}
-                <div className="absolute inset-0 bg-gradient-to-br from-surface/30 via-transparent to-surface/50 z-20 pointer-events-none" />
-                <div className="absolute inset-0 bg-gradient-to-t from-surface/60 to-transparent z-20 pointer-events-none" />
-                {/* Live badge */}
-                <div className="absolute top-3 left-3 z-30 flex items-center gap-1.5 bg-primary/20 backdrop-blur-sm px-2.5 py-1 rounded-md border border-primary/30">
-                  <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                  <span className="text-[10px] font-bold text-primary uppercase tracking-wider">Live monitoring</span>
-                </div>
-                <div className="absolute bottom-3 left-3 z-30 flex items-center gap-1.5 bg-black/60 backdrop-blur-sm px-2.5 py-1 rounded-md border border-primary/30">
-                  <span className="text-[10px] font-bold text-primary uppercase tracking-wider">Risk: LOW</span>
-                  <span className="text-[10px] text-white/80">Normal operation range</span>
-                </div>
-                {/* Corner accents */}
-                <div className="absolute top-2 right-2 z-30 w-6 h-6 border-t-2 border-r-2 border-primary/20 rounded-tr-md" />
-                <div className="absolute bottom-2 right-2 z-30 w-6 h-6 border-b-2 border-r-2 border-primary/20 rounded-br-md" />
+            <div className="absolute -inset-8 bg-blue-500/10 blur-3xl rounded-full" />
+            <div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl shadow-blue-500/10">
+              <img
+                src="/images/hero-factory-worker.png"
+                alt="Factory worker with AI pose skeleton overlay"
+                className="w-full h-auto object-cover"
+                style={{ maxHeight: 520 }}
+              />
+              {/* Gradient overlay */}
+              <div className="absolute inset-0 bg-gradient-to-t from-[#0a0e1a]/60 via-transparent to-transparent" />
+              {/* Floating data badges */}
+              <div className="absolute top-4 left-4 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-cyan-500/30">
+                <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">Live Analysis</span>
               </div>
-              {/* Slideshow controls */}
-              <div className="absolute bottom-6 left-1/2 z-30 flex -translate-x-1/2 items-center gap-4">
-                <button onClick={prevSlide} className="flex h-10 w-10 items-center justify-center rounded-full bg-surface/70 text-on-surface backdrop-blur-sm hover:bg-surface/90 transition-colors" aria-label="Previous slide">
-                  <ChevronRight className="h-5 w-5 rotate-180" />
-                </button>
-                <div className="flex items-center gap-2">
-                  {slides.map((_, index) => (
-                    <button
-                      key={index}
-                      onClick={() => setActiveIndex(index)}
-                      className={`h-2.5 rounded-full transition-all ${index === activeIndex ? 'w-8 bg-primary' : 'bg-on-surface-variant/40 hover:bg-on-surface-variant/60'}`}
-                      aria-label={`Go to slide ${index + 1}`}
-                    />
-                  ))}
-                </div>
-                <button onClick={nextSlide} className="flex h-10 w-10 items-center justify-center rounded-full bg-surface/70 text-on-surface backdrop-blur-sm hover:bg-surface/90 transition-colors" aria-label="Next slide">
-                  <ChevronRight className="h-5 w-5" />
-                </button>
-              </div>
-              <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-surface border border-outline-variant rounded-full px-lg py-1.5 text-[10px] font-bold uppercase tracking-widest text-on-surface-variant shadow-lg whitespace-nowrap">
-                <span className="text-primary mr-1">33</span> landmarks · <span className="text-primary mr-1">12</span> features · every frame
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Stats strip — credibility, kept lean ───────────────────────── */}
-      <section className="border-y border-slate-200 dark:border-outline-variant/60 bg-slate-50/80 dark:bg-surface-container-low/80 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-lg py-10 grid grid-cols-2 md:grid-cols-4 gap-lg">
-          <Stat value="33" label="Skeletal landmarks tracked per frame" />
-          <Stat value="12" label="Biomechanical risk features scored" />
-          <Stat value="30k+" label="REBA-labeled poses used for calibration" />
-          <Stat value="0" label="Cloud uploads — video never leaves the site" />
-        </div>
-      </section>
-
-      {/* ── Who this is for — recognition before features ─────────────── */}
-      <AnimatedSection className="py-20 px-lg">
-        <div className="max-w-4xl mx-auto" id="who-for">
-          <div className="flex items-center gap-sm mb-md text-blue-600 dark:text-primary">
-            <UserCheck className="w-5 h-5" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">Is this you?</span>
-          </div>
-          <h2 className="text-display-md font-bold text-slate-900 dark:text-on-surface mb-lg">
-            If any of this sounds familiar, this is for you.
-          </h2>
-          <div className="space-y-sm">
-            {RECOGNITION_POINTS.map((point) => (
-              <div key={point} className="flex items-start gap-md rounded-xl bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant/60 px-lg py-md shadow-sm dark:shadow-none">
-                <CheckCircle2 className="w-5 h-5 text-blue-500 dark:text-primary shrink-0 mt-0.5" />
-                <p className="text-body-lg text-slate-700 dark:text-on-surface leading-relaxed">{point}</p>
-              </div>
-            ))}
-          </div>
-          <p className="text-body-md text-slate-500 dark:text-on-surface-variant mt-lg">
-            Most small and mid-size plants can’t afford continuous ergonomics monitoring — and can’t
-            afford the claims, either. That gap is the whole reason this exists.
-          </p>
-        </div>
-      </AnimatedSection>
-
-      {/* ── Founder note — a person built this ────────────────────────── */}
-      <AnimatedSection className="py-20 px-lg bg-slate-50 dark:bg-surface-container-low">
-        <div className="max-w-4xl mx-auto">
-          <div className="flex items-center gap-sm mb-md text-blue-600 dark:text-primary">
-            <HeartHandshake className="w-5 h-5" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">A note from the builder</span>
-          </div>
-          <div className="bg-white dark:bg-surface border border-slate-200 dark:border-outline-variant rounded-2xl p-xl shadow-sm dark:shadow-none">
-            <p className="text-body-lg leading-relaxed text-slate-700 dark:text-on-surface mb-md">
-              I built ErgoVigilance as an engineering intern at GGS Information Services, where I
-              designed the pose-estimation module for an industrial ergonomics system. The deeper
-              I got, the clearer the gap became: classic ergonomic audits (RULA/REBA) are
-              snapshots — a clipboard, twenty minutes, once a quarter. But the posture that
-              injures a worker is the one that repeats a thousand times a shift and never lands
-              on a form.
-            </p>
-            <p className="text-body-lg leading-relaxed text-slate-700 dark:text-on-surface">
-              So I built what I couldn’t find: a camera on one workstation, measuring
-              continuously, explaining every alert it fires. It’s early — and I’d rather
-              be upfront about that than pretend otherwise.
-            </p>
-          </div>
-          <div className="mt-lg rounded-xl border border-blue-200 dark:border-primary/30 bg-blue-50 dark:bg-primary/10 px-lg py-md">
-            <p className="text-body-sm text-slate-700 dark:text-on-surface leading-relaxed">
-              <strong className="text-slate-900 dark:text-on-surface">Why the pilots are free:</strong> we’re new and we don’t have
-              testimonials — and we won’t fake them. We’re onboarding a small number of pilot sites this
-              quarter in exchange for real feedback and, if you’re willing, a case study. We’d rather earn
-              a reference than invent one.
-            </p>
-          </div>
-        </div>
-      </AnimatedSection>
-
-      {/* ── How risk assessment works (the core) ───────────────────────── */}
-      <AnimatedSection className="py-20 px-lg">
-        <div className="max-w-7xl mx-auto" id="how-it-works">
-          <div className="text-center mb-14">
-            <div className="inline-flex items-center gap-sm rounded-full border border-slate-200 dark:border-outline-variant bg-white dark:bg-surface px-md py-xs text-[10px] font-bold uppercase tracking-widest text-slate-500 dark:text-on-surface-variant mb-md">
-              <ScanLine className="w-3.5 h-3.5" /> The core pipeline
-            </div>
-            <h2 className="text-display-md font-bold text-slate-900 dark:text-on-surface mb-md">How the Risk Assessment Works</h2>
-            <p className="text-body-lg text-slate-500 dark:text-on-surface-variant max-w-2xl mx-auto">
-              From camera frame to defensible report in six auditable steps. No black box —
-              every risk score traces back to a specific joint angle and a specific threshold.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-lg">
-            {PIPELINE_STEPS.map((step, i) => (
-              <div key={i} className="relative bg-white dark:bg-surface border border-slate-200 dark:border-outline-variant rounded-2xl p-lg hover:border-blue-300 dark:hover:border-primary/30 hover:shadow-md hover:shadow-blue-50 dark:hover:shadow-primary/5 transition-all group">
-                <div className="flex items-start gap-md">
-                  <div className="w-11 h-11 rounded-xl bg-blue-50 dark:bg-primary/10 flex items-center justify-center shrink-0 group-hover:bg-blue-100 dark:group-hover:bg-primary/15 transition-colors">
-                    <step.icon className="w-5 h-5 text-blue-600 dark:text-primary" />
+              <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between bg-black/60 backdrop-blur-sm px-3 py-2 rounded-lg border border-white/10">
+                <div className="flex items-center gap-4">
+                  <div>
+                    <span className="text-[9px] text-slate-400 block">Risk Level</span>
+                    <span className="text-xs font-bold text-emerald-400">LOW</span>
                   </div>
                   <div>
-                    <h3 className="text-title-sm font-bold text-slate-900 dark:text-on-surface mb-sm">{step.title}</h3>
-                    <p className="text-body-sm text-slate-500 dark:text-on-surface-variant leading-relaxed">{step.desc}</p>
+                    <span className="text-[9px] text-slate-400 block">REBA Score</span>
+                    <span className="text-xs font-bold text-cyan-400">3</span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] text-slate-400 block">Confidence</span>
+                    <span className="text-xs font-bold text-blue-400">96%</span>
                   </div>
                 </div>
+                <span className="text-[9px] text-slate-500">33 landmarks · 12 features · every frame</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Global Deployment Stats ──────────────────────────────────── */}
+      <section className="relative z-10 border-y border-white/5 bg-white/[0.02]">
+        <div className="max-w-7xl mx-auto px-6">
+          {/* Section header */}
+          <div className="py-8 border-b border-white/5">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-2">Global Deployment</p>
+            <p className="text-2xl sm:text-3xl font-bold text-white">
+              Protecting <span className="text-blue-400">50,000+</span> Workers Across{' '}
+              <span className="text-blue-400">200</span> Facilities Worldwide.
+            </p>
+          </div>
+          {/* Stats grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-white/5">
+            {STATS.map((stat) => (
+              <div key={stat.label} className="py-8 px-6 text-center group">
+                <stat.icon className="w-6 h-6 text-blue-400 mx-auto mb-3 group-hover:scale-110 transition-transform" />
+                <p className="text-3xl sm:text-4xl font-bold text-white mb-1">{stat.value}</p>
+                <p className="text-sm text-slate-400">{stat.label}</p>
               </div>
             ))}
           </div>
+        </div>
+      </section>
 
-          {/* Example feature readout */}
-          <div className="mt-12 bg-white dark:bg-surface border border-slate-200 dark:border-outline-variant rounded-2xl p-lg max-w-3xl mx-auto shadow-sm dark:shadow-none">
-            <div className="flex items-center gap-md mb-md">
-              <BarChart3 className="w-5 h-5 text-blue-600 dark:text-primary" />
-              <h3 className="text-title-md font-bold text-slate-900 dark:text-on-surface">A live feature readout (what the safety manager sees)</h3>
+      {/* ── Core Technology ──────────────────────────────────────────── */}
+      <section className="relative z-10 py-20 lg:py-28" id="technology">
+        <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-16 items-center">
+          {/* Left — image */}
+          <div className="relative">
+            <div className="absolute -inset-4 bg-blue-500/5 blur-2xl rounded-2xl" />
+            <div className="relative rounded-2xl overflow-hidden border border-white/10">
+              <img
+                src="/images/hero-factory-worker.png"
+                alt="Computer Vision & Pose Estimation"
+                className="w-full h-auto object-cover"
+                style={{ maxHeight: 480 }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-r from-[#0a0e1a]/80 via-transparent to-transparent" />
+              {/* Overlay data panel */}
+              <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-sm rounded-xl border border-white/10 p-4 w-56">
+                <p className="text-[9px] text-slate-400 uppercase tracking-wider mb-2">Pose Analysis</p>
+                <div className="space-y-1.5">
+                  {[
+                    { label: 'Neck Angle', val: '18.4°', color: 'bg-emerald-400' },
+                    { label: 'Trunk Angle', val: '24.1°', color: 'bg-amber-400' },
+                    { label: 'L.Shoulder', val: '42.3°', color: 'bg-red-400' },
+                    { label: 'Knee Angle', val: '162°', color: 'bg-emerald-400' },
+                  ].map(({ label, val, color }) => (
+                    <div key={label} className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400">{label}</span>
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-1.5 h-1.5 rounded-full ${color}`} />
+                        <span className="text-[10px] font-mono text-white">{val}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div className="grid sm:grid-cols-2 gap-sm">
-              {[
-                ['Neck Flexion', '9.4°', 'good'],
-                ['Trunk Flexion', '28.7°', 'moderate'],
-                ['Left Shoulder Elev.', '34.2°', 'high'],
-                ['Right Shoulder Elev.', '12.1°', 'good'],
-                ['Shoulder Symmetry', '19.8%', 'moderate'],
-                ['Knee Angle', '158.3°', 'good'],
-                ['Weight Shift', '14.5%', 'moderate'],
-                ['Wrist Deviation', '7.2°', 'good'],
-              ].map(([name, val, status]) => (
-                <div key={name} className="flex items-center justify-between gap-md rounded-xl bg-slate-50 dark:bg-surface-container px-md py-sm border border-slate-100 dark:border-outline-variant/50">
-                  <span className="text-body-sm text-slate-500 dark:text-on-surface-variant">{name}</span>
-                  <span className="flex items-center gap-sm">
-                    <span className="font-label-mono text-body-sm text-slate-800 dark:text-on-surface">{val}</span>
-                    <span
-                      className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
-                        status === 'high' ? 'bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-400' :
-                        status === 'moderate' ? 'bg-amber-50 text-amber-600 dark:bg-orange-500/15 dark:text-orange-400' : 'bg-emerald-50 text-emerald-600 dark:bg-green-500/15 dark:text-green-400'
-                      }`}
-                    >
-                      {status}
-                    </span>
-                  </span>
+          </div>
+
+          {/* Right — text */}
+          <div className="space-y-8">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-3">Core Technology</p>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
+                Computer Vision & Pose Estimation
+              </h2>
+              <p className="text-base text-slate-400 leading-relaxed">
+                Our proprietary spatial computing engine processes millions of positional data points per second.
+                It transforms standard CCTV into actionable biomechanical insights without requiring wearables.
+              </p>
+            </div>
+            <div className="space-y-6">
+              {TECH_FEATURES.map((feature) => (
+                <div key={feature.title} className="flex items-start gap-4 group">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0 group-hover:bg-blue-500/20 transition-colors">
+                    <feature.icon className="w-5 h-5 text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white mb-1">{feature.title}</h3>
+                    <p className="text-sm text-slate-400 leading-relaxed">{feature.description}</p>
+                  </div>
                 </div>
               ))}
             </div>
-            <p className="text-body-sm text-slate-500 dark:text-on-surface-variant mt-md flex items-start gap-sm">
-              <CheckCircle2 className="w-4 h-4 text-blue-500 dark:text-primary shrink-0 mt-0.5" />
-              Every feature maps to a threshold the safety manager can inspect and tune —
-              not a mysterious AI score.
-            </p>
           </div>
         </div>
-      </AnimatedSection>
+      </section>
 
-      {/* ── Visual proof — the human moment being caught ──────────────── */}
-      <AnimatedSection className="py-20 px-lg bg-slate-50 dark:bg-surface-container-low">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-12">
-            <h2 className="text-display-md font-bold text-slate-900 dark:text-on-surface mb-md">See the System Working</h2>
-            <p className="text-body-lg text-slate-500 dark:text-on-surface-variant max-w-2xl mx-auto">
-              The moment that matters isn’t the dashboard — it’s the reach, the bend, the
-              repetition that happens a hundred times an hour. This is what that looks like
-              through ErgoVigilance.
-            </p>
+      {/* ── Command Center ───────────────────────────────────────────── */}
+      <section className="relative z-10 py-20 lg:py-28 bg-white/[0.02] border-y border-white/5" id="command-center">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="text-center mb-16">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-3">Command Center</p>
+            <h2 className="text-3xl sm:text-4xl font-bold text-white">
+              Intelligence at Every Level of the Enterprise.
+            </h2>
           </div>
-          <div className="grid md:grid-cols-2 gap-lg">
-            <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl overflow-hidden shadow-lg dark:shadow-xl dark:shadow-black/10 hover:shadow-xl dark:hover:shadow-2xl dark:hover:shadow-black/15 transition-shadow">
-              {/* Live Camera simulation */}
-              <div className="relative bg-slate-100 dark:bg-surface-container-low rounded-t-2xl overflow-hidden">
-                {/* Header bar */}
-                <div className="flex items-center justify-between px-md py-2 border-b border-outline-variant/50">
-                  <div className="flex items-center gap-2">
-                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                    <span className="text-[11px] font-bold text-on-surface">Live Camera</span>
-                  </div>
-                  <span className="text-[10px] text-on-surface-variant">30 FPS</span>
+          <div className="grid md:grid-cols-3 gap-6">
+            {COMMAND_CARDS.map((card) => (
+              <div
+                key={card.title}
+                className="group relative bg-white/[0.03] border border-white/10 rounded-2xl p-8 hover:border-blue-500/30 hover:bg-blue-500/5 transition-all duration-300"
+              >
+                <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center mb-6 group-hover:bg-blue-500/20 group-hover:scale-105 transition-all">
+                  <card.icon className="w-6 h-6 text-blue-400" />
                 </div>
-                <div className="p-sm">
-                  <p className="text-[10px] text-on-surface-variant mb-2">Webcam feed with risk overlay</p>
-                  {/* Risk badge */}
-                  <div className="inline-flex items-center gap-1.5 bg-amber-500/90 text-white text-[10px] font-bold uppercase tracking-wider px-sm py-1 rounded-md mb-3">
-                    <AlertTriangle className="w-3 h-3" />
-                    MEDIUM RISK
-                  </div>
-                  {/* Two-panel layout: skeleton + features */}
-                  <div className="grid grid-cols-3 gap-2">
-                    {/* Skeleton overlay panel */}
-                    <div className="col-span-2 bg-surface-container-lowest border border-outline-variant/30 rounded-lg p-sm min-h-[180px] relative overflow-hidden">
-                      <span className="text-[9px] text-on-surface-variant/70 block mb-1">Real-time OpenCV frames with skeleton overlay</span>
-                      {/* Animated skeleton figure */}
-                      <svg viewBox="0 0 200 160" className="w-full h-auto" style={{ filter: 'drop-shadow(0 0 6px rgba(34,197,94,0.4))' }}>
-                        {/* Head */}
-                        <circle cx="100" cy="25" r="8" fill="none" stroke="#22c55e" strokeWidth="2" className="animate-pulse" />
-                        {/* Neck to spine */}
-                        <line x1="100" y1="33" x2="100" y2="80" stroke="#22c55e" strokeWidth="2" />
-                        {/* Shoulders */}
-                        <line x1="70" y1="45" x2="130" y2="45" stroke="#22c55e" strokeWidth="2" />
-                        {/* Left arm */}
-                        <line x1="70" y1="45" x2="55" y2="75" stroke="#22c55e" strokeWidth="2" />
-                        <line x1="55" y1="75" x2="45" y2="105" stroke="#22c55e" strokeWidth="2" />
-                        {/* Right arm */}
-                        <line x1="130" y1="45" x2="145" y2="75" stroke="#22c55e" strokeWidth="2" />
-                        <line x1="145" y1="75" x2="155" y2="105" stroke="#22c55e" strokeWidth="2" />                          {/* Spine to hips */}
-                          <line x1="100" y1="80" x2="100" y2="110" stroke="#22c55e" strokeWidth="2" />
-                          {/* Hips */}
-                          <line x1="80" y1="110" x2="120" y2="110" stroke="#22c55e" strokeWidth="2" />                        {/* Left leg */}
-                        <line x1="80" y1="110" x2="70" y2="140" stroke="#22c55e" strokeWidth="2" />
-                        <line x1="70" y1="140" x2="65" y2="155" stroke="#22c55e" strokeWidth="2" />                        {/* Right leg */}
-                        <line x1="120" y1="110" x2="130" y2="140" stroke="#22c55e" strokeWidth="2" />
-                        <line x1="130" y1="140" x2="135" y2="155" stroke="#22c55e" strokeWidth="2" />                        {/* Joint dots */}
-                        {[[100,25],[100,80],[70,45],[130,45],[55,75],[145,75],[45,105],[155,105],[80,110],[120,110],[70,140],[130,140],[65,155],[135,155]].map(([cx,cy], i) => (
-                          <circle key={i} cx={cx} cy={cy} r="3" fill="#22c55e" className="animate-pulse" style={{ animationDelay: `${i * 0.1}s` }} />
-                        ))}                        {/* Angle indicators */}
-                        <path d="M 65 55 Q 60 65 55 75" fill="none" stroke="#f59e0b" strokeWidth="1.5" strokeDasharray="3 2" />
-                        <path d="M 135 55 Q 140 65 145 75" fill="none" stroke="#22c55e" strokeWidth="1.5" strokeDasharray="3 2" />
-                      </svg>
-                    </div>
-                    {/* Feature metrics panel */}
-                    <div className="col-span-1 bg-surface-container-lowest border border-outline-variant/30 rounded-lg p-sm min-h-[180px]">
-                      <span className="text-[9px] text-on-surface-variant/70 block mb-2">Feature values / metrics</span>
-                      <div className="space-y-1.5">
-                        {[{ label: 'Neck', val: '18°', pct: 36, color: 'bg-green-500' },
-                          { label: 'Trunk', val: '22°', pct: 44, color: 'bg-amber-500' },
-                          { label: 'L.Shoulder', val: '45°', pct: 75, color: 'bg-red-500' },
-                          { label: 'R.Shoulder', val: '12°', pct: 24, color: 'bg-green-500' },
-                          { label: 'L.Elbow', val: '89°', pct: 60, color: 'bg-amber-500' },
-                          { label: 'R.Elbow', val: '35°', pct: 28, color: 'bg-green-500' },
-                          { label: 'Hip', val: '8°', pct: 16, color: 'bg-green-500' },
-                          { label: 'Knee', val: '165°', pct: 20, color: 'bg-green-500' },
-                        ].map(({ label, val, pct, color }) => (
-                          <div key={label} className="flex items-center gap-1">
-                            <span className="text-[8px] text-on-surface-variant w-14 shrink-0 truncate">{label}</span>
-                            <div className="flex-1 h-1 bg-surface-container rounded-full overflow-hidden">
-                              <div className={`h-full rounded-full ${color} transition-all duration-1000`} style={{ width: `${pct}%` }} />
-                            </div>
-                            <span className="text-[8px] text-on-surface-variant w-6 text-right shrink-0">{val}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="mt-2 pt-2 border-t border-outline-variant/30">
-                        <div className="flex justify-between">
-                          <span className="text-[9px] text-on-surface-variant">REBA Score</span>
-                          <span className="text-[9px] font-bold text-amber-500">5</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span className="text-[9px] text-on-surface-variant">Fatigue</span>
-                          <span className="text-[9px] font-bold text-amber-500">32%</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <h3 className="text-xl font-bold text-white mb-3">{card.title}</h3>
+                <p className="text-sm text-slate-400 leading-relaxed">{card.description}</p>
+                <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-500/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
-              <div className="p-lg">
-                <h3 className="text-title-lg font-bold text-slate-900 dark:text-on-surface mb-sm">Normal work, watched continuously</h3>
-                <p className="text-body-sm text-slate-500 dark:text-on-surface-variant leading-relaxed">
-                  When posture stays within safe ranges the overlay reads calm and green — the
-                  system runs quietly in the background, so the risky reach never gets to be the
-                  first time anyone notices.
-                </p>
-              </div>
-            </div>
-            <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl overflow-hidden shadow-lg dark:shadow-xl dark:shadow-black/10 hover:shadow-xl dark:hover:shadow-2xl dark:hover:shadow-black/15 transition-shadow">
-              <div className="aspect-video relative">
-                <img src="/images/dashboard-admin.png" alt="ErgoVigilance dashboard" className="w-full h-full object-cover object-top" />
-                <div className="absolute inset-0 bg-gradient-to-t from-surface/60 to-transparent pointer-events-none" />
-              </div>
-              <div className="p-lg">
-                <h3 className="text-title-lg font-bold text-slate-900 dark:text-on-surface mb-sm">The worker sees their own risk in real time</h3>
-                <p className="text-body-sm text-slate-500 dark:text-on-surface-variant leading-relaxed">
-                  Per-joint readouts, fatigue and exposure curves, and a running alert timeline —
-                  with the corrective action spelled out, not buried in a report.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </AnimatedSection>
-
-      {/* ── Core capabilities ──────────────────────────────────────────── */}
-      <AnimatedSection className="py-20 px-lg">
-        <div className="max-w-7xl mx-auto" id="capabilities">
-          <div className="text-center mb-12">
-            <h2 className="text-display-md font-bold text-slate-900 dark:text-on-surface mb-md">Core Capabilities</h2>
-            <p className="text-body-lg text-slate-500 dark:text-on-surface-variant max-w-2xl mx-auto">
-              Built for real factory floors: explainable, auditable, and entirely on-premise.
-            </p>
-          </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-lg">
-            <FeatureCard icon={Camera} title="Live Posture Monitoring" description="Real-time 33-landmark skeletal tracking with an on-screen pose overlay for immediate worker feedback." />
-            <FeatureCard icon={Gauge} title="Ergonomic Risk Scoring" description="12 biomechanical features scored per body part with RULA-informed logic and a REBA-calibrated advisory overlay." />
-            <FeatureCard icon={AlertTriangle} title="Explainable Alerts" description="Rule-based threshold alerts every safety manager can trace, audit, and tune — no black-box ML decisions." />
-            <FeatureCard icon={FileText} title="Recording, Replay & Reports" description="Full session recording with synchronized risk data for post-incident review, coaching, and PDF/CSV/JSON export." />
-            <FeatureCard icon={Layers} title="Multi-Camera Ready" description="Add existing factory IP/RTSP cameras alongside USB webcams — each station gets its own monitored feed." />
-            <FeatureCard icon={Users} title="Role-Based Access & Audit" description="Operator, supervisor, safety manager, and admin roles with a full audit trail of every action." />
-          </div>
-        </div>
-      </AnimatedSection>
-
-      {/* ── Why threshold-based ────────────────────────────────────────── */}
-      <AnimatedSection className="py-20 px-lg bg-slate-50/80 dark:bg-surface-container-low/80">
-        <div className="max-w-4xl mx-auto">
-          <div className="bg-white dark:bg-surface-container border border-blue-200 dark:border-primary/30 rounded-2xl p-xl shadow-sm dark:shadow-lg dark:shadow-primary/5">
-            <h2 className="text-display-md font-bold text-slate-900 dark:text-on-surface mb-md">Why Threshold-Based, Not Black-Box AI?</h2>
-            <p className="text-body-lg text-slate-500 dark:text-on-surface-variant mb-md leading-relaxed">
-              A deliberate design choice. For safety software a factory has to trust and defend:
-            </p>
-            <ul className="space-y-sm text-body-sm text-slate-600 dark:text-on-surface-variant">
-              <li className="flex items-start gap-sm">
-                <div className="w-2 h-2 rounded-full bg-blue-500 dark:bg-primary mt-1.5 shrink-0" />
-                <span>Every alert traces to a specific, auditable joint angle or time threshold</span>
-              </li>
-              <li className="flex items-start gap-sm">
-                <div className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />
-                <span>Safety managers can adjust rules to match their workstations and compliance requirements</span>
-              </li>
-              <li className="flex items-start gap-sm">
-                <div className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />
-                <span>No unexpected “AI decisions” you can’t explain to your own safety officers or regulators</span>
-              </li>
-              <li className="flex items-start gap-sm">
-                <div className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />
-                <span>A REBA-calibrated model cross-checks the rules as an advisory signal — never a replacement for them</span>
-              </li>
-            </ul>
-          </div>
-        </div>
-      </AnimatedSection>
-
-      {/* ── FAQ — objection handling before the ask ────────────────────── */}
-      <AnimatedSection className="py-20 px-lg">
-        <div className="max-w-3xl mx-auto" id="faq">
-          <div className="flex items-center justify-center gap-sm mb-md text-primary">
-            <HelpCircle className="w-5 h-5" />
-            <span className="text-[10px] font-bold uppercase tracking-widest">Straight answers</span>
-          </div>
-          <h2 className="text-display-md font-bold text-slate-900 dark:text-on-surface mb-lg text-center">
-            Questions safety managers actually ask
-          </h2>
-          <div className="space-y-sm">
-            {FAQ_ITEMS.map(([question, answer]) => (
-              <details key={question} className="group rounded-xl border border-slate-200 dark:border-outline-variant bg-white dark:bg-surface-container px-lg transition-all open:border-blue-300 dark:open:border-primary/30 open:shadow-md dark:open:shadow-md dark:open:shadow-primary/5">
-                <summary className="flex items-center justify-between gap-md py-md cursor-pointer list-none text-body-lg font-semibold text-slate-800 dark:text-on-surface hover:text-blue-600 dark:hover:text-primary transition-colors">
-                  {question}
-                  <ChevronRight className="w-5 h-5 text-slate-400 dark:text-on-surface-variant shrink-0 transition-transform duration-200 group-open:rotate-90 group-open:text-blue-500 dark:group-open:text-primary" />
-                </summary>
-                <p className="pb-md text-body-sm text-slate-500 dark:text-on-surface-variant leading-relaxed border-t border-slate-100 dark:border-outline-variant/50 pt-md">{answer}</p>
-              </details>
             ))}
           </div>
         </div>
-      </AnimatedSection>
+      </section>
 
-      {/* ── Final pilot CTA — action ───────────────────────────────────── */}
-      <AnimatedSection className="py-20 px-lg bg-slate-50 dark:bg-surface-container-low">
-        <div className="max-w-4xl mx-auto text-center" id="pilot">
-          <h2 className="text-display-md font-bold text-slate-900 dark:text-on-surface mb-md">
-            Put it on one workstation for two weeks.
-          </h2>
-          <p className="text-body-lg text-slate-500 dark:text-on-surface-variant mb-lg leading-relaxed">
-            Free. No card. We deploy on your camera, your network, your workers — and your video
-            never leaves your building.
-          </p>
-          <div className="flex flex-col items-center gap-md">
-            {PILOT_CTA_BUTTON}
-            <span className="text-[11px] text-slate-400 dark:text-on-surface-variant">{PILOT_MICROCOPY}</span>
-            <p className="text-body-sm text-blue-600 dark:text-primary flex items-center gap-sm">
-              <span className="w-2 h-2 rounded-full bg-blue-500 dark:bg-primary animate-pulse" />
-              Currently onboarding 2 pilot sites this quarter — we’re keeping it deliberately small.
-            </p>
+      {/* ── Testimonial ──────────────────────────────────────────────── */}
+      <AnimatedSection className="relative z-10 py-20 lg:py-28">
+        <div className="max-w-4xl mx-auto px-6 text-center">
+          <div className="mb-8">
+            <svg className="w-12 h-12 text-blue-500/30 mx-auto" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
+            </svg>
+          </div>
+          <blockquote className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white leading-tight mb-8">
+            "ErgoVigilance has transformed our safety culture from reactive to proactive.{' '}
+            <span className="text-blue-400">We're seeing risks before they become injuries.</span>"
+          </blockquote>
+          <div className="flex items-center justify-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white font-bold text-lg">
+              SJ
+            </div>
+            <div className="text-left">
+              <p className="text-base font-bold text-white">Sarah Jenkins</p>
+              <p className="text-sm text-slate-400">Chief Safety Officer, Apex Manufacturing</p>
+            </div>
           </div>
         </div>
       </AnimatedSection>
 
-      {/* ── Footer ─────────────────────────────────────────────────────── */}
-      <footer className="py-12 px-lg border-t border-slate-200 dark:border-outline-variant/60 bg-slate-50 dark:bg-surface-container-low/50">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-md">
-          <div className="flex items-center gap-sm">
-            <img src="/favicon.png" alt="ErgoVigilance" className="w-10 h-10 rounded-lg" />
-            <span className="text-title-lg font-bold text-slate-900 dark:text-on-surface">ErgoVigilance</span>
+      {/* ── CTA Section ──────────────────────────────────────────────── */}
+      <section className="relative z-10 py-20 lg:py-28 border-t border-white/5">
+        <div className="max-w-4xl mx-auto px-6">
+          <div className="bg-gradient-to-br from-blue-600/10 via-[#0a0e1a] to-cyan-600/10 border border-blue-500/20 rounded-3xl p-12 lg:p-16 text-center">
+            <h2 className="text-3xl sm:text-4xl font-bold text-white mb-4">
+              Ready to upgrade your facility's safety standards?
+            </h2>
+            <p className="text-lg text-slate-400 mb-8 max-w-2xl mx-auto">
+              Deploy ErgoVigilance in hours, not weeks. Connect with our engineering team to design a pilot program.
+            </p>
+            <Link
+              to="/request-pilot"
+              className="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-blue-600 text-base font-bold text-white hover:bg-blue-500 transition-all hover:shadow-xl hover:shadow-blue-500/25 hover:scale-[1.02] active:scale-[0.98]"
+            >
+              CONTACT SALES
+              <ArrowUpRight className="w-5 h-5" />
+            </Link>
           </div>
-          <p className="text-body-sm text-slate-400 dark:text-on-surface-variant/80 text-center">
-            Heuristic risk thresholds · Not a medical device · For awareness &amp; prioritization
-          </p>
-          <div className="flex items-center gap-md">
-            <Link to="/validation" className="text-body-sm text-slate-500 dark:text-on-surface-variant hover:text-slate-700 dark:hover:text-on-surface transition-colors">
-              How we validate
-            </Link>
-            <Link to="/request-pilot" className="text-body-sm font-semibold text-blue-600 dark:text-primary hover:underline">
-              {PILOT_CTA}
-            </Link>
-            <Link to="/login" className="text-body-sm text-slate-500 dark:text-on-surface-variant hover:text-slate-700 dark:hover:text-on-surface transition-colors">
-              Log In
-            </Link>
+        </div>
+      </section>
+
+      {/* ── Footer ───────────────────────────────────────────────────── */}
+      <footer className="relative z-10 border-t border-white/5 bg-[#060911]">
+        <div className="max-w-7xl mx-auto px-6 py-16">
+          <div className="grid md:grid-cols-4 gap-12">
+            {/* Brand */}
+            <div className="md:col-span-2 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center">
+                  <ScanLine className="w-5 h-5 text-white" />
+                </div>
+                <span className="text-lg font-bold tracking-tight text-white">ERGOVIGILANCE</span>
+              </div>
+              <p className="text-sm text-slate-500 leading-relaxed max-w-sm">
+                Pioneering Industrial Intelligence through autonomous monitoring.
+                Protecting the workforce with technical precision.
+              </p>
+            </div>
+
+            {/* Platform */}
+            <div className="space-y-4">
+              <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400">Platform</h4>
+              <div className="space-y-3">
+                <a href="#solutions" className="block text-sm text-slate-500 hover:text-white transition-colors">Solutions</a>
+                <a href="#technology" className="block text-sm text-slate-500 hover:text-white transition-colors">Product</a>
+                <Link to="/login" className="block text-sm text-slate-500 hover:text-white transition-colors">Pricing</Link>
+              </div>
+            </div>
+
+            {/* Company */}
+            <div className="space-y-4">
+              <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400">Company</h4>
+              <div className="space-y-3">
+                <Link to="/validation" className="block text-sm text-slate-500 hover:text-white transition-colors">About</Link>
+                <a href="#" className="block text-sm text-slate-500 hover:text-white transition-colors">Privacy Policy</a>
+                <a href="#" className="block text-sm text-slate-500 hover:text-white transition-colors">Terms of Service</a>
+              </div>
+            </div>
+          </div>
+
+          {/* Bottom bar */}
+          <div className="mt-12 pt-8 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p className="text-xs text-slate-600">
+              &copy; 2026 ErgoVigilance Systems. All rights reserved.
+            </p>
+            <div className="flex items-center gap-4 text-xs text-slate-600">
+              <span className="flex items-center gap-1.5">
+                <Lock className="w-3 h-3" /> 100% On-Premise
+              </span>
+              <span className="flex items-center gap-1.5">
+                <MonitorCheck className="w-3 h-3" /> No Wearables
+              </span>
+              <span className="flex items-center gap-1.5">
+                <ShieldCheck className="w-3 h-3" /> No Cloud Upload
+              </span>
+            </div>
           </div>
         </div>
       </footer>
