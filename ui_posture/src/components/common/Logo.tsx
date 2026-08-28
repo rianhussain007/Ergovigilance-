@@ -13,16 +13,14 @@ interface LogoProps {
 }
 
 export default function Logo({ className = 'h-10 w-auto', variant = 'auto' }: LogoProps) {
-  // The brand PNG has a transparent background and works on both
-  // light and dark surfaces. Add a subtle filter for dark-bg variant
-  // to ensure the shield+spine details pop against dark backgrounds.
-  const filter = variant === 'light' ? 'brightness(1.1) contrast(1.05)' : undefined;
+  // Use the darker logo variant on dark backgrounds for better contrast
+  const src = variant === 'light' ? '/images/logo-dark.png' : '/images/logo.png';
   return (
     <img
-      src="/images/logo.png"
+      src={src}
       alt="ErgoVigilance"
       className={className}
-      style={{ objectFit: 'contain', filter }}
+      style={{ objectFit: 'contain' }}
     />
   );
 }
