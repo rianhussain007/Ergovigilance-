@@ -1,12 +1,41 @@
-import React, { useState, useEffect } from 'react';
-import { Camera, Eye, EyeOff, Monitor, VideoOff } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Camera, Eye, EyeOff, Monitor, VideoOff, AlertTriangle, ChevronRight, Users, Shield } from 'lucide-react';
+import { useNavigate } from 'react-router';
 import { SectionHeader, LoadingCard, ErrorCard, EmptyState } from '@/src/components/common';
 import { getCameras } from '@/src/services/dashboardService';
+import { apiFetch } from '@/src/services/apiClient';
 import { getStoredToken } from '@/src/auth/AuthContext';
 import type { CameraInfo } from '@/src/types/api';
 
 const riskColors: Record<string, string> = { low: 'text-green-400', moderate: 'text-orange-400', high: 'text-red-400' };
 const riskDots: Record<string, string> = { low: 'bg-green-500', moderate: 'bg-orange-500', high: 'bg-red-500' };
+const riskBadge: Record<string, string> = {
+  low: 'bg-green-500/15 text-green-700 dark:text-green-400 border-green-500/30',
+  moderate: 'bg-orange-500/15 text-orange-700 dark:text-orange-400 border-orange-500/30',
+  high: 'bg-red-500/15 text-red-700 dark:text-red-400 border-red-500/30',
+};
+
+interface Alert {
+  id: string;
+  title: string;
+  severity: string;
+  state: string;
+  message: string;
+  created_at: string;
+  session_id: string;
+}
+
+interface StationRisk {
+  camera_id: string;
+  camera_name: string;
+  risk_level: string;
+  risk_score: number;
+  task: string;
+  worker: string;
+  person_detected: boolean;
+  fps: number;
+  status: string;
+}
 
 function CameraTile({ cam }: { cam: CameraInfo }) {
   const [feedError, setFeedError] = useState(false);
@@ -97,11 +126,15 @@ function CameraTile({ cam }: { cam: CameraInfo }) {
 }
 
 export default function MultiCameraView() {
+  const navigate = useNavigate();
   const [cameras, setCameras] = useState<CameraInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [gridSize, setGridSize] = useState<'2x2' | '3x3'>('3x3');
+  const [stationRisks, setStationRisks] = useState<StationRisk[]>([]);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
 
+  // Fetch cameras
   useEffect(() => {
     let cancelled = false;
     const fetchCameras = async () => {
@@ -118,6 +151,68 @@ export default function MultiCameraView() {
     const interval = setInterval(fetchCameras, 30000);
     return () => { cancelled = true; clearInterval(interval); };
   }, []);
+
+  // Fetch live status for each camera (risk ranking)
+  useEffect(() => {
+    let cancelled = false;
+    const fetchRisks = async () => {
+      try {
+        const risks: StationRisk[] = [];
+        for (const cam of cameras) {
+          if (cam.status !== 'streaming') continue;
+          try {
+            const res = await apiFetch(`/api/live/status?camera_id=${cam.id}`);
+            if (res.ok) {
+              const data = await res.json();
+              risks.push({
+                camera_id: cam.id,
+                camera_name: cam.name,
+                risk_level: data.risk_level || 'low',
+                risk_score: data.risk_score || 0,
+                task: data.task || 'Unknown',
+                worker: cam.worker || 'Unassigned',
+                person_detected: data.person_detected || false,
+                fps: data.fps || 0,
+                status: cam.status,
+              });
+            }
+          } catch { /* camera might not have live endpoint */ }
+        }
+        if (!cancelled) setStationRisks(risks);
+      } catch { /* ignore */ }
+    };
+    if (cameras.length > 0) fetchRisks();
+    const interval = setInterval(fetchRisks, 10000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, [cameras]);
+
+  // Fetch active alerts
+  useEffect(() => {
+    let cancelled = false;
+    const fetchAlerts = async () => {
+      try {
+        const res = await apiFetch('/api/alerts?state=ACTIVE');
+        if (res.ok) {
+          const data = await res.json();
+          if (!cancelled) setAlerts(data.alerts || data || []);
+        }
+      } catch { /* ignore */ }
+    };
+    fetchAlerts();
+    const interval = setInterval(fetchAlerts, 15000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  // Sort cameras by risk level (HIGH first)
+  const sortedByRisk = useMemo(() => {
+    const riskOrder: Record<string, number> = { high: 0, moderate: 1, low: 2 };
+    return [...stationRisks].sort((a, b) =>
+      (riskOrder[a.risk_level] ?? 3) - (riskOrder[b.risk_level] ?? 3)
+    );
+  }, [stationRisks]);
+
+  const highRiskCount = stationRisks.filter(r => r.risk_level === 'high').length;
+  const moderateRiskCount = stationRisks.filter(r => r.risk_level === 'moderate').length;
 
   if (error) return <div className="flex items-center justify-center h-full p-lg"><ErrorCard message={error} onRetry={() => { setLoading(true); setError(null); }} /></div>;
 
@@ -186,8 +281,90 @@ export default function MultiCameraView() {
         </div>
       )}
 
+      {/* Station Risk Ranking */}
+      {sortedByRisk.length > 0 && (
+        <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-xl p-lg">
+          <div className="flex items-center justify-between mb-md">
+            <SectionHeader title="Station Risk Ranking" />
+            <div className="flex items-center gap-sm">
+              {highRiskCount > 0 && (
+                <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-red-500/10 border border-red-500/30 text-xs font-bold text-red-600 dark:text-red-400">
+                  <AlertTriangle className="w-3 h-3" /> {highRiskCount} HIGH
+                </span>
+              )}
+              {moderateRiskCount > 0 && (
+                <span className="flex items-center gap-1 px-2 py-1 rounded-full bg-orange-500/10 border border-orange-500/30 text-xs font-bold text-orange-600 dark:text-orange-400">
+                  {moderateRiskCount} MEDIUM
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="space-y-2">
+            {sortedByRisk.map((station) => (
+              <div
+                key={station.camera_id}
+                className="flex items-center gap-md p-3 rounded-lg border border-slate-100 dark:border-outline-variant/50 bg-slate-50/50 dark:bg-surface-container-low hover:bg-slate-100 dark:hover:bg-surface-container-higher transition-colors cursor-pointer"
+                onClick={() => navigate('/monitoring')}
+              >
+                <div className={`w-2.5 h-10 rounded-full shrink-0 ${
+                  station.risk_level === 'high' ? 'bg-red-500' :
+                  station.risk_level === 'moderate' ? 'bg-orange-500' : 'bg-green-500'
+                }`} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-bold text-slate-900 dark:text-white truncate">{station.camera_name}</p>
+                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold border ${riskBadge[station.risk_level] || riskBadge.low}`}>
+                      {station.risk_level.toUpperCase()}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    {station.worker} · {station.task} · {station.risk_score.toFixed(0)}%
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-xs font-mono text-slate-600 dark:text-slate-300">{station.fps.toFixed(0)} FPS</p>
+                  <p className="text-[9px] text-slate-400 dark:text-slate-500">{station.person_detected ? 'Person detected' : 'No person'}</p>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-400 dark:text-slate-500 shrink-0" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Unified Alerts Panel */}
+      {alerts.length > 0 && (
+        <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-xl p-lg">
+          <SectionHeader title="Active Alerts Across All Stations" />
+          <div className="space-y-2 mt-md">
+            {alerts.slice(0, 8).map((alert) => {
+              const isHigh = alert.severity === 'HIGH' || alert.severity === 'CRITICAL';
+              return (
+                <div
+                  key={alert.id}
+                  className="flex items-start gap-md p-3 rounded-lg border border-slate-100 dark:border-outline-variant/50 bg-slate-50/50 dark:bg-surface-container-low"
+                >
+                  <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${
+                    isHigh ? 'text-red-500 dark:text-red-400' : 'text-orange-500 dark:text-orange-400'
+                  }`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-800 dark:text-white">{alert.title}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 line-clamp-1">{alert.message}</p>
+                  </div>
+                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0 ${
+                    isHigh ? 'bg-red-500/15 text-red-600 dark:text-red-400' : 'bg-orange-500/15 text-orange-600 dark:text-orange-400'
+                  }`}>
+                    {alert.severity}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {sourceCams.length > 0 && (
-        <div className="bg-surface-container border border-outline-variant rounded-xl p-lg">
+        <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-xl p-lg">
           <SectionHeader title="Camera Summary" />
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-md mt-md">
             {(() => {
