@@ -482,45 +482,78 @@ export default function LandingPage() {
       </section>
 
       {/* ══════════════════════════════════════════════════════════════
-          TESTIMONIAL — with tablet skeleton assessment image
+          INDUSTRY INSIGHT — real EHS perspectives on CV-based ergonomics
          ══════════════════════════════════════════════════════════════ */}
-      <AnimatedSection className="relative z-10 py-20 lg:py-28">
-        <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-12 items-center">
-          {/* Left — image */}
-          <div className="relative order-2 lg:order-1">
-            <div className="absolute -inset-4 bg-blue-500/[0.04] blur-2xl rounded-2xl" />
-            <div className="relative rounded-2xl overflow-hidden border border-white/10">
-              <img
-                src="/images/tablet-skeleton-assessment.png"
-                alt="Worker viewing real-time skeletal risk assessment on tablet"
-                className="w-full h-auto object-cover"
-                style={{ maxHeight: 400 }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-l from-[#10131a]/60 via-transparent to-transparent" />
+      <AnimatedSection className="relative z-10 py-20 lg:py-28 bg-white/[0.015] border-y border-white/5">
+        <div className="max-w-7xl mx-auto px-6">
+          <AnimatedSection>
+            <div className="text-center mb-16">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-3">Industry Insight</p>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white">
+                What EHS Managers Say About CV-Based Ergonomics.
+              </h2>
+              <p className="text-base text-slate-400 mt-4 max-w-2xl mx-auto">
+                Real perspectives from safety professionals using computer vision to transform ergonomic assessment.
+              </p>
             </div>
-          </div>
+          </AnimatedSection>
+          <div className="grid md:grid-cols-3 gap-6">
+            {/* Quote 1 — Latham Pools */}
+            <AnimatedSection delay={0}>
+              <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-8 h-full flex flex-col">
+                <svg className="w-8 h-8 text-blue-500/30 mb-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
+                </svg>
+                <blockquote className="text-base text-slate-300 leading-relaxed flex-1">
+                  "It's not just a tool for validation — it's a way to ensure our employees stay safe and healthy, which ultimately improves our bottom line."
+                </blockquote>
+                <div className="mt-6 pt-4 border-t border-white/5">
+                  <p className="text-sm font-bold text-white">Angelica Daniels</p>
+                  <p className="text-xs text-slate-400">Regional EHS Manager, Latham Pools</p>
+                  <p className="text-[10px] text-blue-400/60 mt-1">91% reduction in sprains & strains with CV monitoring</p>
+                </div>
+              </div>
+            </AnimatedSection>
 
-          {/* Right — quote */}
-          <div className="space-y-8 order-1 lg:order-2">
-            <div>
-              <svg className="w-12 h-12 text-blue-500/20 mb-6" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
-              </svg>
-              <blockquote className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white leading-tight">
-                "ErgoVigilance has transformed our safety culture from reactive to proactive.{' '}
-                <span className="text-blue-400">We're seeing risks before they become injuries.</span>"
-              </blockquote>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-blue-500/20">
-                SJ
+            {/* Quote 2 — Pacific Southwest Container */}
+            <AnimatedSection delay={100}>
+              <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-8 h-full flex flex-col">
+                <svg className="w-8 h-8 text-blue-500/30 mb-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
+                </svg>
+                <blockquote className="text-base text-slate-300 leading-relaxed flex-1">
+                  "The software generates skeleton models, color-coded risk scores, and highlights critical angles — all in a matter of seconds. Without it, I'd only be a quarter of the way through my evaluations."
+                </blockquote>
+                <div className="mt-6 pt-4 border-t border-white/5">
+                  <p className="text-sm font-bold text-white">Nicole Maxwell</p>
+                  <p className="text-xs text-slate-400">Safety Specialist, Pacific Southwest Container</p>
+                  <p className="text-[10px] text-blue-400/60 mt-1">300+ evaluations completed in months</p>
+                </div>
               </div>
-              <div>
-                <p className="text-base font-bold text-white">Sarah Jenkins</p>
-                <p className="text-sm text-slate-400">Chief Safety Officer, Apex Manufacturing</p>
+            </AnimatedSection>
+
+            {/* Quote 3 — Koppers */}
+            <AnimatedSection delay={200}>
+              <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-8 h-full flex flex-col">
+                <svg className="w-8 h-8 text-blue-500/30 mb-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
+                </svg>
+                <blockquote className="text-base text-slate-300 leading-relaxed flex-1">
+                  "People really like seeing the risk scores and where they can improve. It's sparked healthy competition between sites and made ergonomics approachable."
+                </blockquote>
+                <div className="mt-6 pt-4 border-t border-white/5">
+                  <p className="text-sm font-bold text-white">Blayne Darnell</p>
+                  <p className="text-xs text-slate-400">Corporate Safety & Health Manager, Koppers</p>
+                  <p className="text-[10px] text-blue-400/60 mt-1">Expanded CV monitoring across 12 global sites</p>
+                </div>
               </div>
-            </div>
+            </AnimatedSection>
           </div>
+          <AnimatedSection delay={300}>
+            <p className="text-center text-xs text-slate-500 mt-8">
+              Quotes from EHS professionals using computer vision-based ergonomic monitoring systems. Source: TuMeke case studies.
+            </p>
+          </AnimatedSection>
         </div>
       </AnimatedSection>
 
