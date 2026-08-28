@@ -5,8 +5,9 @@ import {
   Layers, CheckCircle2, HelpCircle,
   Activity, Eye, Cpu, Radio, Building2, Globe, ArrowRight, Play,
 } from 'lucide-react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import Logo from '../components/common/Logo';
+import { useAuth } from '../auth/AuthContext';
 
 /* ── Intersection Observer for scroll-reveal ───────────────────── */
 const useIntersectionObserver = (options = { threshold: 0.1 }) => {
@@ -117,6 +118,18 @@ const FEATURE_HIGHLIGHTS = [
 
 /* ── Page ──────────────────────────────────────────────────────── */
 export default function LandingPage() {
+  const { demoLogin } = useAuth();
+  const navigate = useNavigate();
+
+  const handleTryDemo = async () => {
+    try {
+      await demoLogin();
+      navigate('/dashboard');
+    } catch (err) {
+      console.error('Demo login failed:', err);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#10131a] text-white relative overflow-x-hidden">
 
@@ -235,6 +248,13 @@ export default function LandingPage() {
             </AnimatedSection>
             <AnimatedSection delay={400}>
               <div className="flex items-center justify-center gap-4 flex-wrap">
+                <button
+                  onClick={handleTryDemo}
+                  className="flex items-center gap-2.5 px-7 py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-sm font-bold text-white hover:from-blue-500 hover:to-cyan-400 transition-all hover:shadow-xl hover:shadow-blue-500/25 active:scale-[0.97]"
+                >
+                  <Play className="w-4 h-4" fill="currentColor" />
+                  Try Demo
+                </button>
                 <Link
                   to="/request-pilot"
                   className="flex items-center gap-2.5 px-7 py-3.5 rounded-xl bg-blue-600 text-sm font-bold text-white hover:bg-blue-500 transition-all hover:shadow-xl hover:shadow-blue-500/25 active:scale-[0.97]"
@@ -242,13 +262,6 @@ export default function LandingPage() {
                   Request a Pilot
                   <ArrowRight className="w-4 h-4" />
                 </Link>
-                <a
-                  href="#technology"
-                  className="flex items-center gap-2 px-6 py-3.5 rounded-xl border border-white/15 text-sm font-semibold text-slate-300 hover:text-white hover:border-white/30 transition-all"
-                >
-                  Explore Solutions
-                  <ChevronRight className="w-4 h-4" />
-                </a>
               </div>
             </AnimatedSection>
             <AnimatedSection delay={500}>
@@ -575,18 +588,18 @@ export default function LandingPage() {
                   Start a free pilot and see real posture data from your own floor.
                 </p>
                 <div className="flex items-center justify-center gap-4 flex-wrap">
+                  <button
+                    onClick={handleTryDemo}
+                    className="inline-flex items-center gap-2.5 px-8 py-4 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-base font-bold text-white hover:from-blue-500 hover:to-cyan-400 transition-all hover:shadow-xl hover:shadow-blue-500/25 hover:scale-[1.02] active:scale-[0.98]"
+                  >
+                    <Play className="w-5 h-5" fill="currentColor" />
+                    Try Demo — No Setup Required
+                  </button>
                   <Link
                     to="/request-pilot"
-                    className="inline-flex items-center gap-2.5 px-8 py-4 rounded-xl bg-blue-600 text-base font-bold text-white hover:bg-blue-500 transition-all hover:shadow-xl hover:shadow-blue-500/25 hover:scale-[1.02] active:scale-[0.98]"
-                  >
-                    Request a Pilot
-                    <ArrowRight className="w-5 h-5" />
-                  </Link>
-                  <Link
-                    to="/login"
                     className="inline-flex items-center gap-2 px-6 py-4 rounded-xl border border-white/15 text-base font-semibold text-slate-300 hover:text-white hover:border-white/30 transition-all"
                   >
-                    Log In to Dashboard
+                    Request a Pilot
                   </Link>
                 </div>
                 <div className="flex items-center justify-center gap-6 mt-8 text-xs text-slate-500">

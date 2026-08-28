@@ -23,6 +23,8 @@ from app.core.security import (
 )
 from app.core.config import settings
 
+import os
+
 router = APIRouter()
 
 # Brute-force protection thresholds
@@ -128,6 +130,47 @@ async def login(request: Request, body: LoginRequest):
         target_id=None,
         timestamp=datetime.now(timezone.utc).isoformat(),
         details=None,
+    )
+
+    now = int(time.time())
+    return LoginResponse(
+        token=create_access_token(user),
+        expires_in=JWT_TTL_SECONDS,
+        expires_at=datetime.fromtimestamp(now + JWT_TTL_SECONDS, tz=timezone.utc).isoformat(),
+        user=LoginUser(id=user.id, email=user.email, role=user.role),
+    )
+
+
+@router.post("/auth/demo", response_model=LoginResponse)
+async def demo_login():
+    """One-click demo login — returns a token for the built-in demo operator.
+
+    No credentials required. Enables DEMO_MODE so the dashboard shows
+    synthetic sessions, alerts, and recommendations.
+    """
+    # Activate demo mode so the repository layer serves synthetic data
+    os.environ["DEMO_MODE"] = "true"
+
+    # Use the seeded operator account
+    row = get_user_by_email("operator@example.local")
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Demo mode unavailable — seed data not initialized.",
+        )
+
+    user = AuthenticatedUser(id=row["id"], email=row["email"], role=row["role"])
+
+    insert_audit_log(
+        id=f"AUD-{uuid.uuid4().hex[:8].upper()}",
+        actor_id=user.id,
+        actor_email=user.email,
+        actor_role=user.role,
+        action_type="demo_login",
+        target_type=None,
+        target_id=None,
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        details="Demo mode activated",
     )
 
     now = int(time.time())

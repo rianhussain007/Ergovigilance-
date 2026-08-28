@@ -17,7 +17,9 @@ interface AuthContextValue {
   token: string | null;
   user: AuthUser | null;
   login: (email: string, password: string) => Promise<void>;
+  demoLogin: () => Promise<void>;
   logout: () => void;
+  isDemoMode: boolean;
 }
 
 const STORAGE_KEY = 'ergovigilance_auth';
@@ -78,6 +80,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener(AUTH_INVALID_EVENT, handleInvalidAuth);
   }, []);
 
+  const [isDemoMode, setIsDemoMode] = useState(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        return parsed?.demo === true;
+      }
+    } catch {}
+    return false;
+  });
+
   const login = async (email: string, password: string) => {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
@@ -91,6 +104,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const data = await res.json();
     const next = { token: data.token, user: data.user as AuthUser };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    setIsDemoMode(false);
+    setAuth(next);
+  };
+
+  const demoLogin = async () => {
+    const res = await fetch('/api/auth/demo', { method: 'POST' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ detail: 'Demo login failed' }));
+      throw new Error(body.detail || `Demo login failed (${res.status})`);
+    }
+    const data = await res.json();
+    const next = { token: data.token, user: data.user as AuthUser, demo: true };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    setIsDemoMode(true);
     setAuth(next);
   };
 
@@ -103,8 +130,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     token: auth?.token ?? null,
     user: auth?.user ?? null,
     login,
+    demoLogin,
     logout,
-  }), [auth]);
+    isDemoMode,
+  }), [auth, isDemoMode]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

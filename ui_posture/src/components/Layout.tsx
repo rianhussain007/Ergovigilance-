@@ -75,8 +75,19 @@ function UserMenu({ roleLabel, roleIcon: RoleIcon, email, onLogout }: { roleLabe
   );
 }
 
+function DemoModeBanner({ isDemoMode }: { isDemoMode: boolean }) {
+  if (!isDemoMode) return null;
+  return (
+    <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-center">
+      <p className="text-xs font-semibold text-amber-400">
+        DEMO MODE — Showing synthetic data. No real camera or workers are connected.
+      </p>
+    </div>
+  );
+}
+
 export default function Layout() {
-  const { user, logout } = useAuth();
+  const { user, logout, isDemoMode } = useAuth();
   const { dashboard } = useDashboard();
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -161,6 +172,7 @@ export default function Layout() {
               className="h-full w-full"
             >
               <ErrorBoundary>
+                {user && <DemoModeBanner isDemoMode={isDemoMode} />}
                 <Outlet context={{ setNotifOpen }} />
               </ErrorBoundary>
             </motion.div>
