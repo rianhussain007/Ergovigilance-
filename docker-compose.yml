@@ -49,7 +49,7 @@ services:
       - PG_TIMESCALEDB=${PG_TIMESCALEDB:-false}
     volumes:
       - ergovigilance-db:/data
-      - ./outputs/sessions:/data/sessions:ro
+      - ./outputs/sessions:/data/sessions
     depends_on:
       db:
         condition: service_healthy
