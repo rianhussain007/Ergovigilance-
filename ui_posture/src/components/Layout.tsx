@@ -134,7 +134,7 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-surface text-on-surface">
-      <Sidebar role={role} rolePaths={rolePaths} collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} />
+      <Sidebar role={role} rolePaths={rolePaths} collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} isMobile={isMobile} />
       <div className={`flex flex-col flex-1 min-w-0 transition-[margin] duration-300 ease-out ${sidebarCollapsed ? 'ml-16' : 'ml-64'}`}>
         <Header
           session={dashboard?.session || null}
@@ -147,6 +147,18 @@ export default function Layout() {
         )}
         <div className="px-lg pt-md pb-0 space-y-md">
           <div className="flex items-center gap-md flex-wrap">
+            {/* Mobile hamburger menu */}
+            {isMobile && (
+              <button
+                onClick={() => setSidebarCollapsed(false)}
+                className="flex items-center justify-center w-9 h-9 rounded-lg bg-surface-container border border-outline-variant text-on-surface-variant hover:bg-surface-container-higher transition-colors"
+                title="Open menu"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              </button>
+            )}
             {/* Primary action + session setup cluster */}
             <MonitoringControls />
 

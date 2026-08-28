@@ -46,9 +46,11 @@ interface SidebarProps {
   /** Controlled collapsed state (lifted to the layout so content reflows). */
   collapsed?: boolean;
   onCollapsedChange?: (collapsed: boolean) => void;
+  /** Mobile mode: overlay sidebar with backdrop */
+  isMobile?: boolean;
 }
 
-export default function Sidebar({ role = 'administrator', rolePaths, collapsed: collapsedProp, onCollapsedChange }: SidebarProps) {
+export default function Sidebar({ role = 'administrator', rolePaths, collapsed: collapsedProp, onCollapsedChange, isMobile }: SidebarProps) {
   // Internal fallback keeps Sidebar usable standalone; when `collapsed` is
   // provided by the parent, the parent owns the state.
   const [collapsedState, setCollapsedState] = useState(false);
@@ -69,7 +71,15 @@ export default function Sidebar({ role = 'administrator', rolePaths, collapsed: 
   }, [role]);
 
   return (
-    <aside className={`h-screen fixed left-0 top-0 flex flex-col py-md bg-white dark:bg-surface-container-low/95 border-r border-slate-200 dark:border-outline-variant/60 z-50 transition-all duration-300 ease-out ${collapsed ? 'w-16' : 'w-64'}`}>
+    <>
+      {/* Mobile backdrop overlay */}
+      {isMobile && !collapsed && (
+        <div
+          className="fixed inset-0 bg-black/40 z-40 lg:hidden"
+          onClick={() => onCollapsedChange?.(true)}
+        />
+      )}
+      <aside className={`h-screen fixed left-0 top-0 flex flex-col py-md bg-white dark:bg-surface-container-low/95 border-r border-slate-200 dark:border-outline-variant/60 z-50 transition-all duration-300 ease-out ${collapsed ? 'w-16' : 'w-64'} ${isMobile && !collapsed ? 'shadow-2xl' : ''}`}>
       <div className={`mb-xl transition-all duration-300 ${collapsed ? 'w-full flex justify-center' : 'px-lg'}`}>
         {collapsed ? (
           <Logo className="w-10 h-10" variant="light" />
@@ -124,6 +134,18 @@ export default function Sidebar({ role = 'administrator', rolePaths, collapsed: 
         ))}
       </nav>
 
+      {/* Mobile close button when expanded */}
+      {isMobile && !collapsed && (
+        <div className="px-sm pt-sm">
+          <button
+            onClick={() => onCollapsedChange?.(true)}
+            className="w-full flex items-center justify-center gap-sm px-md py-2 rounded-xl text-sm font-medium text-slate-500 dark:text-on-surface-variant hover:bg-slate-100 dark:hover:bg-surface-container-highest transition-colors border border-slate-200 dark:border-outline-variant/50"
+          >
+            Close Menu
+          </button>
+        </div>
+      )}
+
       <div className="px-sm pt-md border-t border-slate-200 dark:border-outline-variant mt-auto">
         <button
           onClick={toggleCollapsed}
@@ -134,5 +156,6 @@ export default function Sidebar({ role = 'administrator', rolePaths, collapsed: 
         </button>
       </div>
     </aside>
+    </>
   );
 }
