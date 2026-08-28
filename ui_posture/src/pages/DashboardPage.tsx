@@ -279,9 +279,9 @@ function OperatorDashboard({
         <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg space-y-lg shadow-sm dark:shadow-none">
           <SectionHeader title="My Health Context" />
           <div className="grid grid-cols-1 md:grid-cols-3 gap-md">
-            <ContextTile label="Fatigue" value={snapshot ? `${snapshot.fatigue_score.toFixed(1)}%` : 'Waiting for live context'} />
-            <ContextTile label="Exposure" value={snapshot ? `${snapshot.exposure_score.toFixed(1)}%` : 'Waiting for live context'} />
-            <ContextTile label="Context Risk" value={snapshot ? snapshot.final_risk.toFixed(1) : 'Waiting for live context'} />
+            <ContextTile label="Fatigue" value={snapshot?.fatigue_score != null ? `${Number(snapshot.fatigue_score).toFixed(1)}%` : 'Waiting for live context'} />
+            <ContextTile label="Exposure" value={snapshot?.exposure_score != null ? `${Number(snapshot.exposure_score).toFixed(1)}%` : 'Waiting for live context'} />
+            <ContextTile label="Context Risk" value={snapshot?.final_risk != null ? Number(snapshot.final_risk).toFixed(1) : 'Waiting for live context'} />
           </div>
           <div>
             <p className="font-label-caps text-[10px] text-slate-400 dark:text-on-surface-variant mb-sm">My Feature Averages</p>
@@ -388,7 +388,7 @@ function ElevatedDashboard({
         <div className="animate-stagger"><MetricCard icon={Users} label="Visible Workers" value={String(summary.worker_count)} detail="Workers currently tracked" onClick={() => navigate('/workers')} /></div>
         <div className="animate-stagger"><MetricCard icon={Clock3} label="Sessions Today" value={String(summary.sessions_today)} detail="Sessions run today" onClick={() => navigate('/sessions')} /></div>
         <div className="animate-stagger"><MetricCard icon={ShieldAlert} label="Open Alerts" value={String(summary.open_alerts)} detail="Alerts awaiting action" tone={summary.open_alerts > 0 ? 'warning' : 'good'} onClick={() => setNotifOpen(true)} isUrgent={true} /></div>
-        <div className="animate-stagger"><MetricCard icon={Gauge} label="Average Risk" value={summary.average_risk === null ? 'Not enough data' : summary.average_risk.toFixed(1)} detail="Average across visible sessions" onClick={() => navigate('/reports')} isUrgent={true} tone={(summary.average_risk && summary.average_risk >= 60) ? 'danger' : (summary.average_risk && summary.average_risk >= 30) ? 'warning' : 'good'} /></div>
+        <div className="animate-stagger"><MetricCard icon={Gauge} label="Average Risk" value={formatMaybeNumber(summary.average_risk, 1)} detail="Average across visible sessions" onClick={() => navigate('/reports')} isUrgent={true} tone={(summary.average_risk != null && summary.average_risk >= 60) ? 'danger' : (summary.average_risk != null && summary.average_risk >= 30) ? 'warning' : 'good'} /></div>
       </section>
 
       {isAdmin && adminSummary && (
@@ -510,13 +510,14 @@ function ContextTile({ label, value }: { label: string; value: string }) {
   );
 }
 
-function FeatureAverageBar({ label, value, unit }: { label: string; value: number; unit: string }) {
-  const width = Math.max(4, Math.min(100, unit === '%' ? value : value / 1.8));
+function FeatureAverageBar({ label, value, unit }: { label: string; value: number | null | undefined; unit: string }) {
+  const safeValue = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  const width = Math.max(4, Math.min(100, unit === '%' ? safeValue : safeValue / 1.8));
   return (
     <div className="group">
       <div className="flex justify-between text-body-sm mb-xs gap-md">
         <span className="text-slate-500 dark:text-on-surface-variant group-hover:text-slate-700 dark:group-hover:text-on-surface transition-colors">{label}</span>
-        <span className="font-label-mono text-slate-700 dark:text-on-surface">{value.toFixed(1)} {unit}</span>
+        <span className="font-label-mono text-slate-700 dark:text-on-surface">{safeValue.toFixed(1)} {unit}</span>
       </div>
       <div className="h-2 rounded-full bg-slate-100 dark:bg-surface-container-highest overflow-hidden">
         <div className="h-full rounded-full bg-blue-500 dark:bg-primary transition-all duration-500 ease-out" style={{ width: `${width}%` }} />
@@ -769,16 +770,19 @@ function AIInsightsCard({ snapshot }: { snapshot: { fatigue_score: number; expos
   const insights: { icon: typeof AlertTriangle; color: string; bg: string; title: string; desc: string }[] = [];
 
   if (snapshot) {
-    if (snapshot.fatigue_score > 70) {
-      insights.push({ icon: AlertTriangle, color: 'text-red-500 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-500/10', title: 'Fatigue Risk Elevated', desc: `Fatigue at ${snapshot.fatigue_score.toFixed(1)}%. Consider a break.` });
-    } else if (snapshot.fatigue_score > 40) {
-      insights.push({ icon: TrendingUp, color: 'text-amber-500 dark:text-orange-400', bg: 'bg-amber-50 dark:bg-orange-500/10', title: 'Fatigue Building', desc: `Fatigue at ${snapshot.fatigue_score.toFixed(1)}%. Monitor closely.` });
+    const fatigueScore = snapshot.fatigue_score ?? 0;
+    const exposureScore = snapshot.exposure_score ?? 0;
+
+    if (fatigueScore > 70) {
+      insights.push({ icon: AlertTriangle, color: 'text-red-500 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-500/10', title: 'Fatigue Risk Elevated', desc: `Fatigue at ${Number(fatigueScore).toFixed(1)}%. Consider a break.` });
+    } else if (fatigueScore > 40) {
+      insights.push({ icon: TrendingUp, color: 'text-amber-500 dark:text-orange-400', bg: 'bg-amber-50 dark:bg-orange-500/10', title: 'Fatigue Building', desc: `Fatigue at ${Number(fatigueScore).toFixed(1)}%. Monitor closely.` });
     }
 
-    if (snapshot.exposure_score > 60) {
-      insights.push({ icon: Activity, color: 'text-red-500 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-500/10', title: 'High Exposure Duration', desc: `Exposure at ${snapshot.exposure_score.toFixed(1)}%. Extended session detected.` });
-    } else if (snapshot.exposure_score > 35) {
-      insights.push({ icon: Activity, color: 'text-amber-500 dark:text-orange-400', bg: 'bg-amber-50 dark:bg-orange-500/10', title: 'Moderate Exposure', desc: `Exposure at ${snapshot.exposure_score.toFixed(1)}%. Keep monitoring.` });
+    if (exposureScore > 60) {
+      insights.push({ icon: Activity, color: 'text-red-500 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-500/10', title: 'High Exposure Duration', desc: `Exposure at ${Number(exposureScore).toFixed(1)}%. Extended session detected.` });
+    } else if (exposureScore > 35) {
+      insights.push({ icon: Activity, color: 'text-amber-500 dark:text-orange-400', bg: 'bg-amber-50 dark:bg-orange-500/10', title: 'Moderate Exposure', desc: `Exposure at ${Number(exposureScore).toFixed(1)}%. Keep monitoring.` });
     }
 
     if (snapshot.rula_informed_score !== undefined) {

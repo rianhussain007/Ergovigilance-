@@ -120,13 +120,19 @@ const FEATURE_HIGHLIGHTS = [
 export default function LandingPage() {
   const { demoLogin } = useAuth();
   const navigate = useNavigate();
+  const [demoLoading, setDemoLoading] = useState(false);
 
   const handleTryDemo = async () => {
+    if (demoLoading) return;
+    setDemoLoading(true);
     try {
       await demoLogin();
       navigate('/dashboard');
     } catch (err) {
       console.error('Demo login failed:', err);
+      alert('Demo mode requires the backend server to be running. Please start the backend and try again.');
+    } finally {
+      setDemoLoading(false);
     }
   };
 
@@ -250,10 +256,15 @@ export default function LandingPage() {
               <div className="flex items-center justify-center gap-4 flex-wrap">
                 <button
                   onClick={handleTryDemo}
-                  className="flex items-center gap-2.5 px-7 py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-sm font-bold text-white hover:from-blue-500 hover:to-cyan-400 transition-all hover:shadow-xl hover:shadow-blue-500/25 active:scale-[0.97]"
+                  disabled={demoLoading}
+                  className="flex items-center gap-2.5 px-7 py-3.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-sm font-bold text-white hover:from-blue-500 hover:to-cyan-400 transition-all hover:shadow-xl hover:shadow-blue-500/25 active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Play className="w-4 h-4" fill="currentColor" />
-                  Try Demo
+                  {demoLoading ? (
+                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <Play className="w-4 h-4" fill="currentColor" />
+                  )}
+                  {demoLoading ? 'Starting...' : 'Try Demo'}
                 </button>
                 <Link
                   to="/request-pilot"
@@ -590,10 +601,15 @@ export default function LandingPage() {
                 <div className="flex items-center justify-center gap-4 flex-wrap">
                   <button
                     onClick={handleTryDemo}
-                    className="inline-flex items-center gap-2.5 px-8 py-4 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-base font-bold text-white hover:from-blue-500 hover:to-cyan-400 transition-all hover:shadow-xl hover:shadow-blue-500/25 hover:scale-[1.02] active:scale-[0.98]"
+                    disabled={demoLoading}
+                    className="inline-flex items-center gap-2.5 px-8 py-4 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-base font-bold text-white hover:from-blue-500 hover:to-cyan-400 transition-all hover:shadow-xl hover:shadow-blue-500/25 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    <Play className="w-5 h-5" fill="currentColor" />
-                    Try Demo — No Setup Required
+                    {demoLoading ? (
+                      <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <Play className="w-5 h-5" fill="currentColor" />
+                    )}
+                    {demoLoading ? 'Starting Demo...' : 'Try Demo — No Setup Required'}
                   </button>
                   <Link
                     to="/request-pilot"
@@ -620,12 +636,9 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-6 py-16">
           <div className="grid md:grid-cols-4 gap-12">
             <div className="md:col-span-2 space-y-4">
-              <div className="flex items-center gap-3">
-                <Logo className="h-10 w-auto" variant="light" />
-              </div>
-              <p className="text-sm text-slate-500 leading-relaxed max-w-sm">
-                Pioneering Industrial Intelligence through autonomous monitoring.
-                Protecting the workforce with technical precision.
+              <Logo className="h-10 w-auto" variant="light" />
+              <p className="text-sm text-slate-500 leading-relaxed">
+                Pioneering Industrial Intelligence through autonomous monitoring. Protecting the workforce with technical precision.
               </p>
             </div>
             <div className="space-y-4">
