@@ -1,0 +1,19 @@
+{
+  "total_frames": 0,
+  "total_videos": 10,
+  "video_sources": [
+    "cardboard_manipulation_station01_worker041.mp4",
+    "cardboard_manipulation_station04_worker026.mp4",
+    "defect_testing_station08_worker009.mp4",
+    "plastic_assembly_station05_worker032.mp4",
+    "plush_manipulation_station05_worker020.mp4",
+    "screw_assembly_station01_worker015.mp4",
+    "screw_assembly_station12_worker003.mp4",
+    "Ergonomic Risks in Automotive Assembly Lines.mp4",
+    "Ergonomic Risks in Manufacturing Assembly Lines.mp4",
+    "Ergonomic workplace analysis - Tutorial Video.mp4"
+  ],
+  "task_distribution": {},
+  "source_distribution": {},
+  "sample_rate": 2.0
+}
