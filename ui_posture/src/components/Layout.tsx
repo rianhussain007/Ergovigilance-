@@ -11,6 +11,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Brain, Bell, LogOut, UserCog, Shield, Users, HardHat, ChevronDown } from 'lucide-react';
 import { useAuth, type Role } from '@/src/auth/AuthContext';
 import { useAlertToasts } from '@/src/hooks/useAlertToasts';
+import OnboardingFlow from '@/src/components/common/OnboardingFlow';
 
 const roleConfig: Record<Role, { label: string; icon: React.ElementType }> = {
   operator: { label: 'Operator', icon: HardHat },
@@ -93,6 +94,10 @@ export default function Layout() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    // Show onboarding for new users (first login) unless they've completed it or are in demo mode
+    return !localStorage.getItem('ergovigilance_onboarded') && !isDemoMode;
+  });
   const location = useLocation();
 
   useEffect(() => {
@@ -122,6 +127,10 @@ export default function Layout() {
 
   const currentRole = roleConfig[role];
   const RoleIcon = currentRole.icon;
+
+  if (showOnboarding) {
+    return <OnboardingFlow onComplete={() => setShowOnboarding(false)} />;
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-surface text-on-surface">
