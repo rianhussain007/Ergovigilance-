@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { X, Brain, Send, Sparkles } from 'lucide-react';
+import { X, Brain, Send, Sparkles, AlertTriangle, TrendingUp, Shield, Activity, Clock } from 'lucide-react';
 import { getStoredToken } from '@/src/auth/AuthContext';
 import { authHeaders } from '@/src/services/apiClient';
 
@@ -12,6 +12,18 @@ interface Message {
   role: 'user' | 'assistant';
   text: string;
   sources?: string[];
+}
+
+interface LiveContext {
+  has_active_session: boolean;
+  session_id?: string;
+  risk_level?: string;
+  risk_score?: number;
+  current_task?: string;
+  task_confidence?: number;
+  session_duration?: number;
+  active_alerts?: Array<{ severity: string; title: string; message: string }>;
+  recent_issues?: Array<{ name: string; severity: string; detail: string }>;
 }
 
 interface SSESourcesEvent {
@@ -66,11 +78,21 @@ function ChatMessage({ msg }: { msg: Message }) {
   );
 }
 
+function ContextBadge({ label, value, color }: { label: string; value: string; color: string }) {
+  return (
+    <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-[11px] font-medium ${color}`}>
+      <span className="truncate">{label}</span>
+      <span className="font-bold">{value}</span>
+    </div>
+  );
+}
+
 export default function AIAssistantPanel({ open, onClose }: AIAssistantPanelProps) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [liveContext, setLiveContext] = useState<LiveContext | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -82,6 +104,8 @@ export default function AIAssistantPanel({ open, onClose }: AIAssistantPanelProp
   useEffect(() => {
     if (open) {
       setTimeout(() => inputRef.current?.focus(), 100);
+      // Fetch live context when panel opens
+      fetchLiveContext();
     }
   }, [open]);
 
@@ -89,8 +113,24 @@ export default function AIAssistantPanel({ open, onClose }: AIAssistantPanelProp
     scrollToBottom();
   }, [messages, loading, scrollToBottom]);
 
-  const handleSend = useCallback(async () => {
-    const text = input.trim();
+  const fetchLiveContext = async () => {
+    try {
+      const token = getStoredToken();
+      if (!token) return;
+      const res = await fetch('/api/assistant/context', {
+        headers: authHeaders({}),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setLiveContext(data);
+      }
+    } catch {
+      // Silently fail — context is optional
+    }
+  };
+
+  const handleSend = useCallback(async (overrideText?: string) => {
+    const text = (overrideText || input).trim();
     if (!text || loading) return;
 
     const token = getStoredToken();
@@ -200,7 +240,7 @@ export default function AIAssistantPanel({ open, onClose }: AIAssistantPanelProp
       }
 
       if (isRefusal) {
-        const refusalMsg = messages.findLast((m) => m.role === 'assistant')?.text || "I can answer questions about ergonomic thresholds, alerts, how the system works, and your session history. Try asking about your latest session, recent risk levels, or a specific worker.";
+        const refusalMsg = "I can answer questions about ergonomic thresholds, alerts, how the system works, and your session history. Try asking about your latest session, recent risk levels, or a specific worker.";
         setMessages((prev) => {
           const next = [...prev];
           next[next.length - 1] = { role: 'assistant', text: refusalMsg };
@@ -226,10 +266,31 @@ export default function AIAssistantPanel({ open, onClose }: AIAssistantPanelProp
 
   if (!open) return null;
 
+  const riskColor = (level?: string) => {
+    switch ((level || '').toLowerCase()) {
+      case 'high': case 'critical': return 'bg-red-500/15 text-red-400 border border-red-500/30';
+      case 'medium': return 'bg-amber-500/15 text-amber-400 border border-amber-500/30';
+      default: return 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
+    }
+  };
+
+  const quickActions = liveContext?.has_active_session ? [
+    { icon: Shield, label: 'Current Risk', question: 'What is the current risk level and why?', color: riskColor(liveContext.risk_level) },
+    { icon: Activity, label: 'Current Task', question: `What task is being performed right now? Is the posture safe for this task?`, color: 'bg-blue-500/15 text-blue-400 border border-blue-500/30' },
+    { icon: AlertTriangle, label: 'Active Alerts', question: 'What alerts are currently active? What should I do about them?', color: 'bg-orange-500/15 text-orange-400 border border-orange-500/30' },
+    { icon: TrendingUp, label: 'Risk Trend', question: 'Is the risk improving or worsening over this session?', color: 'bg-purple-500/15 text-purple-400 border border-purple-500/30' },
+  ] : [
+    { icon: Shield, label: 'RULA Scores', question: 'What do RULA scores mean? How are they calculated?', color: 'bg-blue-500/15 text-blue-400 border border-blue-500/30' },
+    { icon: Activity, label: 'Alert Thresholds', question: 'What are the alert thresholds? When does the system trigger an alert?', color: 'bg-amber-500/15 text-amber-400 border border-amber-500/30' },
+    { icon: AlertTriangle, label: 'System Features', question: 'What features does ErgoVigilance provide? How does it work?', color: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' },
+    { icon: TrendingUp, label: 'Best Practices', question: 'What are the best ergonomic practices for assembly line workers?', color: 'bg-purple-500/15 text-purple-400 border border-purple-500/30' },
+  ];
+
   return (
     <>
       <div className="fixed inset-0 z-50" onClick={onClose} />
       <div className="fixed top-0 right-0 bottom-0 z-50 w-96 bg-surface-container border-l border-outline-variant shadow-2xl flex flex-col">
+        {/* Header */}
         <div className="flex items-center justify-between p-lg border-b border-outline-variant">
           <div className="flex items-center gap-md">
             <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
@@ -237,7 +298,7 @@ export default function AIAssistantPanel({ open, onClose }: AIAssistantPanelProp
             </div>
             <div>
               <h3 className="text-title-md font-bold text-on-surface">AI Safety Assistant</h3>
-              <p className="text-[10px] text-on-surface-variant">Knowledge-base Q&A</p>
+              <p className="text-[10px] text-on-surface-variant">Context-aware ergonomics Q&A</p>
             </div>
           </div>
           <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-container-higher text-on-surface-variant transition-colors">
@@ -245,13 +306,45 @@ export default function AIAssistantPanel({ open, onClose }: AIAssistantPanelProp
           </button>
         </div>
 
+        {/* Live Context Bar */}
+        {liveContext?.has_active_session && (
+          <div className="px-lg py-2 border-b border-outline-variant bg-surface-container-low flex flex-wrap gap-1.5">
+            <ContextBadge label="Risk:" value={liveContext.risk_level || '—'} color={riskColor(liveContext.risk_level)} />
+            <ContextBadge label="Task:" value={liveContext.current_task || '—'} color="bg-slate-500/15 text-slate-400 border border-slate-500/30" />
+            {liveContext.session_duration != null && liveContext.session_duration > 0 && (
+              <ContextBadge label="Duration:" value={`${Math.round(liveContext.session_duration)}s`} color="bg-slate-500/15 text-slate-400 border border-slate-500/30" />
+            )}
+            {liveContext.active_alerts && liveContext.active_alerts.length > 0 && (
+              <ContextBadge label="Alerts:" value={`${liveContext.active_alerts.length}`} color="bg-red-500/15 text-red-400 border border-red-500/30" />
+            )}
+          </div>
+        )}
+
         {messages.length === 0 && !error ? (
           <div className="flex-1 overflow-y-auto p-lg flex flex-col items-center justify-center text-center text-on-surface-variant">
             <Sparkles className="w-10 h-10 mb-md opacity-20" />
-            <p className="text-body-sm font-medium text-on-surface mb-1">Ask me anything about ergonomics</p>
-            <p className="text-[11px] leading-relaxed text-center max-w-[220px]">
-              I'm grounded in the ErgoVigilance knowledge base — thresholds, alerts, recommendations, and product features.
+            <p className="text-body-sm font-medium text-on-surface mb-1">
+              {liveContext?.has_active_session ? 'Ask about the current session' : 'Ask me anything about ergonomics'}
             </p>
+            <p className="text-[11px] leading-relaxed text-center max-w-[240px] mb-lg">
+              {liveContext?.has_active_session
+                ? `Monitoring ${liveContext.current_task || 'a worker'} — I can explain the current risk, suggest corrections, or answer threshold questions.`
+                : "I'm grounded in the ErgoVigilance knowledge base — thresholds, alerts, recommendations, and product features."}
+            </p>
+
+            {/* Quick Action Buttons */}
+            <div className="grid grid-cols-2 gap-2 w-full max-w-[280px]">
+              {quickActions.map((action, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleSend(action.question)}
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-left transition-all hover:scale-[1.02] ${action.color}`}
+                >
+                  <action.icon className="w-3.5 h-3.5 shrink-0" />
+                  <span className="text-[11px] font-medium">{action.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto p-lg">
@@ -286,18 +379,31 @@ export default function AIAssistantPanel({ open, onClose }: AIAssistantPanelProp
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-              placeholder="Ask about ergonomics..."
+              placeholder={liveContext?.has_active_session ? "Ask about current risk, task, or alerts..." : "Ask about ergonomics..."}
               disabled={loading}
               className="flex-1 bg-surface-container-higher text-on-surface rounded-lg px-3 py-2 text-body-sm outline-none placeholder:text-on-surface-variant/50 disabled:opacity-50"
             />
             <button
-              onClick={handleSend}
+              onClick={() => handleSend()}
               disabled={loading || !input.trim()}
               className="p-2 rounded-lg bg-primary text-on-primary hover:bg-primary/90 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             >
               <Send className="w-4 h-4" />
             </button>
           </div>
+          {liveContext?.has_active_session && messages.length > 0 && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {quickActions.slice(0, 2).map((action, i) => (
+                <button
+                  key={i}
+                  onClick={() => handleSend(action.question)}
+                  className="text-[10px] px-2 py-1 rounded-full bg-surface-container-higher text-on-surface-variant hover:text-on-surface transition-colors"
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </>

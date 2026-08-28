@@ -51,6 +51,80 @@ def _event_stream(message: str):
         yield f"data: {json.dumps({'type': 'error', 'text': str(exc)})}\n\n"
 
 
+@router.get("/assistant/context")
+async def get_live_context(
+    _: AuthenticatedUser = Depends(get_current_user),
+):
+    """Return live session context for the AI assistant.
+
+    Provides the current risk level, task, active alerts, and session
+    duration so the assistant can give context-aware answers without
+    the user having to describe their current situation.
+    """
+    try:
+        # Import here to avoid circular imports at module level
+        from app.services.session_cache import SessionCache
+        from app.services.live_monitor import LiveMonitoringService
+
+        cache = SessionCache()
+        live = LiveMonitoringService()
+
+        context = {
+            "has_active_session": live.is_active,
+            "session_id": None,
+            "risk_level": None,
+            "risk_score": None,
+            "current_task": None,
+            "task_confidence": None,
+            "session_duration": None,
+            "active_alerts": [],
+            "recent_issues": [],
+        }
+
+        if live.is_active and live.current_session:
+            session = live.current_session
+            context["session_id"] = session.get("session_id")
+            context["risk_level"] = session.get("risk_level", "LOW")
+            context["risk_score"] = session.get("risk_score", 0)
+            context["current_task"] = session.get("current_task", "Unknown")
+            context["task_confidence"] = session.get("task_confidence", 0)
+            context["session_duration"] = session.get("duration_seconds", 0)
+
+            # Get active alerts
+            try:
+                alerts = cache.get_active_alerts()
+                context["active_alerts"] = [
+                    {
+                        "severity": a.get("severity", "LOW"),
+                        "title": a.get("title", ""),
+                        "message": a.get("message", ""),
+                    }
+                    for a in (alerts or [])[:5]
+                ]
+            except Exception:
+                pass
+
+            # Get recent issues
+            try:
+                issues = cache.get_recent_issues()
+                context["recent_issues"] = [
+                    {
+                        "name": i.get("name", ""),
+                        "severity": i.get("severity", "low"),
+                        "detail": i.get("detail", ""),
+                    }
+                    for i in (issues or [])[:5]
+                ]
+            except Exception:
+                pass
+
+        return context
+
+    except Exception as exc:
+        logger.warning("Failed to fetch live context: %s", exc)
+        return {"has_active_session": False}
+
+
 @router.post("/assistant/chat")
 async def chat(
     body: ChatRequest,
