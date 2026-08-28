@@ -44,4 +44,5 @@ config/retention.json
 !ui_posture/public/images/command-center-monitors.png
 !ui_posture/public/images/robotic-arm-strain.png
 !ui_posture/public/images/tablet-skeleton-assessment.png
+!ui_posture/public/images/logo.png
 !ui_posture/public/favicon.png

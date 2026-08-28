@@ -71,13 +71,10 @@ export default function Sidebar({ role = 'administrator', rolePaths, collapsed: 
     <aside className={`h-screen fixed left-0 top-0 flex flex-col py-md bg-white dark:bg-surface-container-low/95 border-r border-slate-200 dark:border-outline-variant/60 z-50 transition-all duration-300 ease-out ${collapsed ? 'w-16' : 'w-64'}`}>
       <div className={`mb-xl transition-all duration-300 ${collapsed ? 'w-full flex justify-center' : 'px-lg'}`}>
         {collapsed ? (
-          <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-primary/20 flex items-center justify-center hover:bg-blue-100 dark:hover:bg-primary/30 transition-colors">
-            <Activity className="w-5 h-5 text-blue-600 dark:text-primary" />
-          </div>
+          <img src="/images/logo.png" alt="ErgoVigilance" className="w-10 h-10 rounded-xl object-contain" />
         ) : (
           <div className="transition-all duration-300">
-            <h1 className="text-headline-md font-bold text-blue-600 dark:text-primary tracking-tight">ErgoVigilance</h1>
-            <p className="font-label-mono text-[10px] text-slate-400 dark:text-on-surface-variant uppercase tracking-widest mt-xs opacity-70">Industrial Ergonomics</p>
+            <img src="/images/logo.png" alt="ErgoVigilance" className="h-10 w-auto" />
           </div>
         )}
       </div>

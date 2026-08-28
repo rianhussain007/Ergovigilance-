@@ -132,10 +132,7 @@ export default function LandingPage() {
       <nav className="sticky top-0 z-50 bg-[#10131a]/80 backdrop-blur-xl border-b border-white/5">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-3 group">
-            <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/20">
-              <ScanLine className="w-5 h-5 text-white" />
-            </div>
-            <span className="text-lg font-bold tracking-tight text-white">ERGOVIGILANCE</span>
+            <img src="/images/logo.png" alt="ErgoVigilance" className="h-10 w-auto" />
           </Link>
           <div className="hidden md:flex items-center gap-8">
             <a href="#solutions" className="text-sm text-slate-400 hover:text-white transition-colors">Solutions</a>
@@ -577,10 +574,7 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-4 gap-12">
             <div className="md:col-span-2 space-y-4">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/10">
-                  <ScanLine className="w-5 h-5 text-white" />
-                </div>
-                <span className="text-lg font-bold tracking-tight text-white">ERGOVIGILANCE</span>
+                <img src="/images/logo.png" alt="ErgoVigilance" className="h-10 w-auto" />
               </div>
               <p className="text-sm text-slate-500 leading-relaxed max-w-sm">
                 Pioneering Industrial Intelligence through autonomous monitoring.
