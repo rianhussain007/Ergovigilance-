@@ -180,10 +180,10 @@ export default function DeploymentCenter() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-lg">
 
         {/* ── Panel 1: Multi-Cam Engine ──────────────────────────── */}
-        <div className="bg-white dark:bg-[#0a0e14] border border-slate-200 dark:border-emerald-500/20 rounded-xl overflow-hidden">
+        <div className="bg-white dark:bg-[#0a0e14] border border-slate-200 dark:border-emerald-500/30 rounded-xl overflow-hidden shadow-[0_0_30px_rgba(16,185,129,0.05)]">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200 dark:border-emerald-500/20 bg-slate-50 dark:bg-[#0d1117]">
-            <Camera className="w-4 h-4 text-blue-600 dark:text-cyan-400" />
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white">Multi-Cam Engine</h2>
+            <Camera className="w-4 h-4 text-blue-600 dark:text-emerald-400" />
+            <h2 className="text-sm font-bold text-slate-900 dark:text-emerald-300 tracking-wide">Multi-Cam Engine</h2>
           </div>
           <div className="p-4">
             <p className="text-xs text-slate-600 dark:text-slate-400 mb-3">
@@ -214,10 +214,10 @@ export default function DeploymentCenter() {
         </div>
 
         {/* ── Panel 2: Database & Inference ──────────────────────── */}
-        <div className="bg-white dark:bg-[#0a0e14] border border-slate-200 dark:border-cyan-500/20 rounded-xl overflow-hidden">
+        <div className="bg-white dark:bg-[#0a0e14] border border-slate-200 dark:border-cyan-500/30 rounded-xl overflow-hidden shadow-[0_0_30px_rgba(6,182,212,0.05)]">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200 dark:border-cyan-500/20 bg-slate-50 dark:bg-[#0d1117]">
             <Database className="w-4 h-4 text-purple-600 dark:text-cyan-400" />
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white">Database & Inference</h2>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-cyan-300 tracking-wide">Database & Inference</h2>
           </div>
           <div className="p-4">
             <p className="text-xs text-slate-600 dark:text-slate-400 mb-3">
@@ -235,10 +235,10 @@ export default function DeploymentCenter() {
         </div>
 
         {/* ── Panel 3: Audit Trail ──────────────────────────────── */}
-        <div className="bg-white dark:bg-[#0a0e14] border border-slate-200 dark:border-amber-500/20 rounded-xl overflow-hidden">
+        <div className="bg-white dark:bg-[#0a0e14] border border-slate-200 dark:border-amber-500/30 rounded-xl overflow-hidden shadow-[0_0_30px_rgba(245,158,11,0.05)]">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200 dark:border-amber-500/20 bg-slate-50 dark:bg-[#0d1117]">
             <Terminal className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white">Audit Trail</h2>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-amber-300 tracking-wide">Audit Trail</h2>
           </div>
           <div className="p-4">
             <p className="text-xs text-slate-600 dark:text-slate-400 mb-3">
@@ -264,10 +264,10 @@ export default function DeploymentCenter() {
         </div>
 
         {/* ── Panel 4: Settings & Config ────────────────────────── */}
-        <div className="bg-white dark:bg-[#0a0e14] border border-slate-200 dark:border-blue-500/20 rounded-xl overflow-hidden">
+        <div className="bg-white dark:bg-[#0a0e14] border border-slate-200 dark:border-blue-500/30 rounded-xl overflow-hidden shadow-[0_0_30px_rgba(59,130,246,0.05)]">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200 dark:border-blue-500/20 bg-slate-50 dark:bg-[#0d1117]">
             <Settings className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            <h2 className="text-sm font-bold text-slate-900 dark:text-white">Settings & Config</h2>
+            <h2 className="text-sm font-bold text-slate-900 dark:text-blue-300 tracking-wide">Settings & Config</h2>
           </div>
           <div className="p-4">
             <p className="text-xs text-slate-600 dark:text-slate-400 mb-3">

@@ -196,14 +196,21 @@ export default function LiveMonitoring() {
       )}
 
       {/* ── Live status: camera feed + session/task/status panel ── */}
-      <section className="rounded-lg border border-cyan-400/15 bg-[#080d13] p-md shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-        <div className="mb-md flex flex-wrap items-center justify-between gap-md">
+      <section className="relative rounded-2xl border border-cyan-400/20 bg-gradient-to-br from-[#080d13] via-[#0a1020] to-[#080d13] p-md shadow-[0_24px_80px_rgba(0,0,0,0.5)] overflow-hidden">
+        {/* Ambient glow */}
+        {isActive && (
+          <div className="absolute -top-20 -right-20 w-60 h-60 bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
+        )}
+        <div className="mb-md flex flex-wrap items-center justify-between gap-md relative z-10">
           <div className="flex items-center gap-sm min-w-0">
             {isActive ? (
               <>
-                <Radio className="h-4 w-4 text-red-400" />
+                <div className="relative">
+                  <Radio className="h-4 w-4 text-red-400" />
+                  <div className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-400 rounded-full animate-pulse" />
+                </div>
                 <span className="font-label-caps text-label-caps tracking-widest text-red-300 uppercase">Live Session</span>
-                {session.id && <span className="font-label-mono text-sm text-on-surface-variant truncate">{session.id}</span>}
+                {session.id && <span className="font-label-mono text-xs text-on-surface-variant/60 truncate">{session.id}</span>}
               </>
             ) : (
               <span className="font-label-caps text-label-caps tracking-widest text-on-surface-variant uppercase">Not monitoring</span>
@@ -890,37 +897,60 @@ function RiskTrajectoryTile({ contextSnapshot, active }: { contextSnapshot: Cont
 function RiskGauge({ liveStatus, active }: { liveStatus: LiveStatus; active: boolean }) {
   const score = Math.max(0, Math.min(100, liveStatus.riskScore || 0));
   const color = liveStatus.riskLevel === 'high' ? '#fb7185' : liveStatus.riskLevel === 'moderate' ? '#f59e0b' : '#22c55e';
-  const ring = `conic-gradient(${color} ${score * 3.6}deg, rgba(148,163,184,0.16) 0deg)`;
+  const glowColor = liveStatus.riskLevel === 'high' ? 'rgba(251,113,133,0.4)' : liveStatus.riskLevel === 'moderate' ? 'rgba(245,158,11,0.4)' : 'rgba(34,197,94,0.4)';
+  const ring = `conic-gradient(${color} ${score * 3.6}deg, rgba(148,163,184,0.08) 0deg)`;
+  const isHigh = liveStatus.riskLevel === 'high';
+  const isMedium = liveStatus.riskLevel === 'moderate';
 
   if (!active) {
     return (
-      <div className="rounded border border-white/10 bg-white/[0.03] p-md text-center">
-        <p className="font-label-caps text-sm text-on-surface-variant uppercase tracking-widest">Current Risk Index</p>
-        <div className="mx-auto mt-sm grid h-28 w-28 place-items-center rounded-full border border-white/10 bg-black/30">
-          <div className="grid h-20 w-20 place-items-center rounded-full bg-[#080d13] border border-white/10">
-            <div>
-              <p className="font-label-mono text-2xl font-bold text-on-surface-variant">—</p>
-              <p className="font-label-caps text-xs uppercase tracking-widest text-on-surface-variant">Not measuring</p>
-            </div>
+      <div className="rounded-xl border border-white/10 bg-gradient-to-br from-white/[0.03] to-white/[0.01] p-lg text-center">
+        <p className="font-label-caps text-xs text-on-surface-variant uppercase tracking-widest mb-md">Current Risk Index</p>
+        <div className="mx-auto grid h-32 w-32 place-items-center rounded-full border-2 border-dashed border-white/10 bg-black/20">
+          <div>
+            <p className="font-label-mono text-3xl font-bold text-on-surface-variant">—</p>
+            <p className="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Not measuring</p>
           </div>
         </div>
-        <p className="mt-sm text-sm italic text-on-surface-variant">Start monitoring to measure risk.</p>
+        <p className="mt-md text-xs italic text-on-surface-variant">Start monitoring to measure risk</p>
       </div>
     );
   }
 
   return (
-    <div className="rounded border border-cyan-400/15 bg-white/[0.03] p-md text-center">
-      <p className="font-label-caps text-sm text-on-surface-variant uppercase tracking-widest">Current Risk Index</p>
-      <div className="mx-auto mt-sm grid h-28 w-28 place-items-center rounded-full" style={{ background: ring, boxShadow: `0 0 24px ${color}33` }}>
-        <div className="grid h-20 w-20 place-items-center rounded-full bg-[#080d13] border border-white/10">
-          <div>
-            <p className="font-label-mono text-2xl font-bold text-on-surface">{score.toFixed(0)}</p>
-            <p className="font-label-caps text-xs uppercase tracking-widest" style={{ color }}>{liveStatus.riskLevel}</p>
+    <div className="rounded-xl border border-white/10 bg-gradient-to-br from-white/[0.03] to-white/[0.01] p-lg text-center relative overflow-hidden">
+      {/* Ambient glow behind gauge */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="w-40 h-40 rounded-full opacity-20 blur-3xl" style={{ background: color }} />
+      </div>
+      
+      <p className="font-label-caps text-xs text-on-surface-variant uppercase tracking-widest mb-md relative z-10">Current Risk Index</p>
+      
+      {/* Outer glow ring */}
+      <div className="mx-auto mt-sm grid h-36 w-36 place-items-center rounded-full relative z-10" style={{ background: ring, boxShadow: `0 0 40px ${glowColor}, 0 0 80px ${glowColor}` }}>
+        {/* Animated pulse for high risk */}
+        {isHigh && (
+          <div className="absolute inset-0 rounded-full animate-ping" style={{ background: `conic-gradient(${color} ${score * 3.6}deg, transparent 0deg)`, opacity: 0.15, animationDuration: '2s' }} />
+        )}
+        {/* Inner dark circle */}
+        <div className="grid h-28 w-28 place-items-center rounded-full bg-[#080d13]/90 border border-white/10 backdrop-blur-sm">
+          <div className="text-center">
+            <p className="font-label-mono text-4xl font-bold text-white" style={{ textShadow: `0 0 20px ${glowColor}` }}>{score.toFixed(0)}</p>
+            <p className="font-label-caps text-[10px] uppercase tracking-widest mt-0.5" style={{ color, textShadow: `0 0 10px ${glowColor}` }}>{liveStatus.riskLevel}</p>
           </div>
         </div>
       </div>
-      <p className="mt-sm text-sm italic text-on-surface-variant">Normal operation range maintained</p>
+      
+      {/* Status indicator bar */}
+      <div className="mt-md flex items-center justify-center gap-xs relative z-10">
+        <div className="h-1 w-8 rounded-full" style={{ background: '#22c55e', opacity: score < 33 ? 1 : 0.3 }} />
+        <div className="h-1 w-8 rounded-full" style={{ background: '#f59e0b', opacity: score >= 33 && score < 66 ? 1 : 0.3 }} />
+        <div className="h-1 w-8 rounded-full" style={{ background: '#fb7185', opacity: score >= 66 ? 1 : 0.3 }} />
+      </div>
+      
+      <p className="mt-sm text-[11px] text-on-surface-variant/60 relative z-10">
+        {isHigh ? '⚠ Correct posture immediately' : isMedium ? 'Watch your posture' : 'Normal operation range'}
+      </p>
     </div>
   );
 }

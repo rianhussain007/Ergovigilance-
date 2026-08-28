@@ -113,11 +113,12 @@ class PoseEngine:
         self._prev_timestamp: float = 0.0
         self._smoothed_features: dict | None = None
         # EMA weight for posture features (new sample share). Lower = smoother.
+        # 0.6 balances jitter removal with responsiveness on factory floors.
         # Configurable via env so deployments can tune jitter vs. responsiveness.
         try:
-            self._smooth_alpha = float(os.environ.get("ERGOVIGILANCE_FEATURE_SMOOTHING", "0.7"))
+            self._smooth_alpha = float(os.environ.get("ERGOVIGILANCE_FEATURE_SMOOTHING", "0.6"))
         except (TypeError, ValueError):
-            self._smooth_alpha = 0.7
+            self._smooth_alpha = 0.6
         self._smooth_alpha = min(1.0, max(0.1, self._smooth_alpha))
         # Landmark-level Kalman smoothing (Tier 0): removes per-frame jitter
         # at the source so features, risk, and the overlay skeleton all read a
@@ -140,12 +141,24 @@ class PoseEngine:
         except (TypeError, ValueError):
             num_poses = 1
         self._num_poses = min(num_poses, 4)
+        # Detection and tracking confidence thresholds. Lower values improve
+        # recall in poor lighting / occlusion (factory floor reality) at the
+        # cost of occasional false positives. Tunable via env vars so each
+        # deployment can dial in the sweet spot.
+        try:
+            det_conf = float(os.environ.get("ERGOVIGILANCE_DETECTION_CONFIDENCE", "0.3") or "0.3")
+        except (TypeError, ValueError):
+            det_conf = 0.3
+        try:
+            track_conf = float(os.environ.get("ERGOVIGILANCE_TRACKING_CONFIDENCE", "0.5") or "0.5")
+        except (TypeError, ValueError):
+            track_conf = 0.5
         options = vision.PoseLandmarkerOptions(
             base_options=BaseOptions(model_asset_path=self.model_path),
             running_mode=vision.RunningMode.VIDEO,
             num_poses=self._num_poses,
-            min_pose_detection_confidence=0.5,
-            min_tracking_confidence=0.5,
+            min_pose_detection_confidence=det_conf,
+            min_tracking_confidence=track_conf,
         )
         self.pose_landmarker = vision.PoseLandmarker.create_from_options(options)
         self._initialized = True

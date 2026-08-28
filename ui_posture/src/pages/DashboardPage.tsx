@@ -636,24 +636,78 @@ function TopIssuesCard({ analytics }: { analytics: AnalyticsResponse | null }) {
 
 function RiskDistributionCard({ analytics }: { analytics: AnalyticsResponse | null }) {
   const distData = analytics?.risk_distribution ?? [];
+  const total = distData.reduce((sum, d) => sum + (d.value || 0), 0);
+  const highPct = distData.find(d => d.name === 'HIGH' || d.name === 'High')?.value || 0;
+  const medPct = distData.find(d => d.name === 'MEDIUM' || d.name === 'Medium')?.value || 0;
+  const lowPct = distData.find(d => d.name === 'LOW' || d.name === 'Low')?.value || 0;
+  const highRatio = total > 0 ? Math.round((highPct / total) * 100) : 0;
+
   return (
-    <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg min-h-[180px] shadow-sm dark:shadow-none">
-      <div className="flex items-center gap-sm mb-md">
+    <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg min-h-[200px] shadow-sm dark:shadow-none relative overflow-hidden">
+      {/* Subtle gradient accent */}
+      <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl from-blue-500/5 to-transparent rounded-bl-full pointer-events-none" />
+      
+      <div className="flex items-center gap-sm mb-md relative z-10">
         <BarChart3 className="w-4 h-4 text-blue-600 dark:text-primary" />
         <SectionHeader title="Risk Distribution" />
       </div>
       {distData.length === 0 ? (
         <p className="text-body-sm text-on-surface-variant">No distribution data.</p>
       ) : (
-        <div className="h-40">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={distData} cx="50%" cy="50%" outerRadius={60} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
-                {distData.map((entry, i) => <Cell key={i} fill={riskLevelColor(entry.name)} />)}
-              </Pie>
-              <Tooltip contentStyle={chartTooltipStyle} />
-            </PieChart>
-          </ResponsiveContainer>
+        <div className="flex items-center gap-lg relative z-10">
+          {/* Donut Chart */}
+          <div className="relative" style={{ width: 160, height: 160 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={distData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={45}
+                  outerRadius={72}
+                  paddingAngle={3}
+                  dataKey="value"
+                  stroke="none"
+                >
+                  {distData.map((entry, i) => (
+                    <Cell key={i} fill={riskLevelColor(entry.name)} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={chartTooltipStyle} />
+              </PieChart>
+            </ResponsiveContainer>
+            {/* Center stat */}
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="text-center">
+                <p className="text-2xl font-bold text-on-surface">{total}</p>
+                <p className="text-[10px] text-on-surface-variant uppercase tracking-wider">Total</p>
+              </div>
+            </div>
+          </div>
+          
+          {/* Legend with bars */}
+          <div className="flex-1 space-y-2">
+            {[
+              { label: 'Low', value: lowPct, color: '#22c55e', bg: 'bg-emerald-500/10' },
+              { label: 'Medium', value: medPct, color: '#f59e0b', bg: 'bg-amber-500/10' },
+              { label: 'High', value: highPct, color: '#fb7185', bg: 'bg-red-500/10' },
+            ].map(item => (
+              <div key={item.label} className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full" style={{ background: item.color }} />
+                <span className="text-xs text-on-surface-variant w-12">{item.label}</span>
+                <div className="flex-1 h-1.5 rounded-full bg-surface-container-highest overflow-hidden">
+                  <div className="h-full rounded-full transition-all duration-500" style={{ width: `${total > 0 ? (item.value / total) * 100 : 0}%`, background: item.color }} />
+                </div>
+                <span className="text-xs font-mono text-on-surface w-8 text-right">{total > 0 ? Math.round((item.value / total) * 100) : 0}%</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      {highRatio > 30 && (
+        <div className="mt-3 p-2 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400 font-medium relative z-10">
+          ⚠ {highRatio}% high-risk sessions — review alerts
         </div>
       )}
     </div>
