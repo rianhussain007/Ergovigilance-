@@ -19,6 +19,7 @@ BACKEND_START_TIME = time.time()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.core.rate_limit import RateLimitMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.config import settings
@@ -269,6 +270,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- Rate limiting ---
+app.add_middleware(RateLimitMiddleware)
 
 # --- Routers ---
 app.include_router(api_router)

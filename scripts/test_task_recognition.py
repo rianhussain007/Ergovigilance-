@@ -72,9 +72,10 @@ def _make_features(
         "hand_reach_ratio": 0.5,
         "finger_spread_ratio": 0.4,
         "stance_width_ratio": 0.4,
-        # Motion
-        "movement_velocity": 5.0,
-        "wrist_movement_velocity": 15.0,
+        # Motion — defaults to zero (neutral standing = no motion)
+        # Tests that need Walking/Assembly/Reaching override these explicitly.
+        "movement_velocity": 0.0,
+        "wrist_movement_velocity": 0.0,
     }
     feats.update(extra)
     return feats
@@ -92,16 +93,28 @@ def check(label, got, expected):
         raise SystemExit(1)
 
 
+def _make_tr(*, use_model: bool = True) -> TaskRecognition:
+    """Create a TaskRecognition instance, optionally disabling the trained model.
+
+    When use_model=False the Gaussian fallback rules are tested directly,
+    bypassing the ML classifier (which may override geometric rules).
+    """
+    tr = TaskRecognition()
+    if not use_model:
+        tr._model_disabled = True
+    return tr
+
+
 def nearly_eq(a, b, tol=5.0):
     return abs(a - b) <= tol
 
 
 # ---------------------------------------------------------------------------
-# 1.  Neutral Standing
+# 1.  Neutral Standing (test geometric rules — bypass ML model)
 # ---------------------------------------------------------------------------
 kps = _make_kps()
 feats = _make_features(neck=3.0, trunk=4.0, knee=175.0)
-t = TaskRecognition()
+t = _make_tr(use_model=False)
 r = t.detect_task(kps, feats)
 check("neutral task", r["task"], "Neutral Standing")
 check("neutral confidence > 50", r["confidence"] > 50.0, True)
@@ -109,7 +122,7 @@ check("neutral reason not empty", len(r["reason"]) > 0, True)
 
 
 # ---------------------------------------------------------------------------
-# 2.  Assembly Work
+# 2.  Assembly Work (test geometric rules — bypass ML model)
 # ---------------------------------------------------------------------------
 kps = _make_kps(
     lel=(0.38, 0.38), rel=(0.62, 0.38),
@@ -119,8 +132,9 @@ feats = _make_features(
     neck=8.0, trunk=8.0, shoulder_l=15.0, shoulder_r=15.0,
     elbow_flexion_angle=110.0, upper_arm_angle_from_vertical=30.0,
     movement_velocity=18.0, wrist_movement_velocity=50.0,
+    hand_reach_ratio=0.6, finger_spread_ratio=0.5,
 )
-t = TaskRecognition()
+t = _make_tr(use_model=False)
 r = t.detect_task(kps, feats)
 check("assembly task", r["task"], "Assembly Work")
 check("assembly confidence > 50", r["confidence"] > 50.0, True)
@@ -148,7 +162,7 @@ feats = _make_features(
     stance_stability=0.76, knee=153.0,
     movement_velocity=64.0, wrist_movement_velocity=168.0,
 )
-t = TaskRecognition()
+t = _make_tr(use_model=False)
 r = t.detect_task(kps, feats)
 check("reaching task", r["task"], "Reaching")
 check("reaching confidence > 50", r["confidence"] > 50.0, True)
@@ -166,7 +180,7 @@ kps = _make_kps(
     lknee=(0.43, 0.88), rknee=(0.57, 0.88),
 )
 feats = _make_features(neck=8.0, trunk=35.0, knee=140.0)
-t = TaskRecognition()
+t = _make_tr(use_model=False)
 r = t.detect_task(kps, feats)
 check("lifting task", r["task"], "Lifting / Picking")
 check("lifting confidence > 50", r["confidence"] > 50.0, True)
@@ -180,11 +194,11 @@ kps = _make_kps(
     lel=(0.38, 0.28), rel=(0.62, 0.28),
     lwr=(0.42, 0.24), rwr=(0.58, 0.24),
 )
-# Inspection is hands-to-face with highly flexed elbows and wrists — mirror
-# the genuine generator distribution (elbow ~12°, upper arm ~151°, wrist
-# deviation ~51°) so the 7-class model classifies it as Inspection.
+# Inspection is hands-to-face with highly flexed elbows and wrists.
+# The Gaussian rule expects neck~25 (looking down at hands) and
+# wrist_height_ratio~-0.4 (hands raised above shoulder level).
 feats = _make_features(
-    neck=4.0, trunk=8.0, shoulder_l=3.0, shoulder_r=3.0,
+    neck=25.0, trunk=8.0, shoulder_l=3.0, shoulder_r=3.0,
     shoulder_sym=0.8, alignment=17.0, elbow_flexion_angle=13.0,
     upper_arm_angle_from_vertical=151.0, wrist_deviation_angle=51.0,
     forward_head_posture=13.0, weight_shift_offset=28.0,
@@ -192,7 +206,7 @@ feats = _make_features(
     stance_stability=0.77, knee=156.0,
     movement_velocity=11.0, wrist_movement_velocity=20.0,
 )
-t = TaskRecognition()
+t = _make_tr(use_model=False)
 r = t.detect_task(kps, feats)
 check("inspection task", r["task"], "Inspection")
 check("inspection confidence > 50", r["confidence"] > 50.0, True)
@@ -203,7 +217,7 @@ check("inspection confidence > 50", r["confidence"] > 50.0, True)
 # ---------------------------------------------------------------------------
 kps_bad = np.zeros((33, 2))
 feats_bad = _make_features(neck=0.0, trunk=0.0, knee=180.0)
-t = TaskRecognition()
+t = _make_tr(use_model=False)
 r = t.detect_task(kps_bad, feats_bad)
 check("unknown task", r["task"], "Unknown")
 
@@ -211,7 +225,7 @@ check("unknown task", r["task"], "Unknown")
 # ---------------------------------------------------------------------------
 # 7.  get_current_task / get_confidence / get_reason accessors
 # ---------------------------------------------------------------------------
-t = TaskRecognition()
+t = _make_tr(use_model=False)
 kps_n = _make_kps()
 feats_n = _make_features(neck=3.0, trunk=4.0)
 t.detect_task(kps_n, feats_n)

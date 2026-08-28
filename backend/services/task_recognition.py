@@ -117,6 +117,7 @@ class TaskRecognition:
             self._model_path = self.DEFAULT_MODEL_PATH if self.DEFAULT_MODEL_PATH.exists() else self.FALLBACK_MODEL_PATH
         self._model_bundle: dict | None = None
         self._model_tried: bool = False
+        self._model_disabled: bool = False  # set True to force Gaussian fallback (testing)
         self._confidence_threshold: float = 0.6
         self._using_model: bool = False
         self._model_version: str = "unknown"
@@ -168,6 +169,8 @@ class TaskRecognition:
         - If lower-body features are available: use full v3 model
         - If only upper-body features: use upper-body model
         """
+        if self._model_disabled:
+            return None
         # Check which features are available (non-NaN, non-zero)
         lower_body_features = ["knee_angle", "trunk_flexion", "left_shoulder_elev",
                                "stance_stability", "weight_shift_offset"]
@@ -179,15 +182,17 @@ class TaskRecognition:
         has_upper = any(features.get(f, 0) != 0 and features.get(f, 0) == features.get(f, 0)
                        for f in upper_body_features)
         
-        # Select model: prefer human-labeled > diverse > full v3 > upper-body > fallback
-        if self.HUMAN_LABELED_MODEL_PATH.exists():
-            model_path = self.HUMAN_LABELED_MODEL_PATH
-        elif self.DIVERSE_MODEL_PATH.exists():
-            model_path = self.DIVERSE_MODEL_PATH
-        elif has_lower and self.DEFAULT_MODEL_PATH.exists():
+        # Select model: prefer v3 (34 features, most accurate) > human-labeled > diverse > upper-body > fallback
+        # When full body features are available, always use the 34-feature v3 model
+        # because the 13-feature human-labeled model misclassifies without body_visibility.
+        if has_lower and self.DEFAULT_MODEL_PATH.exists():
             model_path = self.DEFAULT_MODEL_PATH
         elif has_upper and self.UPPER_BODY_MODEL_PATH.exists():
             model_path = self.UPPER_BODY_MODEL_PATH
+        elif self.HUMAN_LABELED_MODEL_PATH.exists():
+            model_path = self.HUMAN_LABELED_MODEL_PATH
+        elif self.DIVERSE_MODEL_PATH.exists():
+            model_path = self.DIVERSE_MODEL_PATH
         elif self._model_path.exists():
             model_path = self._model_path
         else:
