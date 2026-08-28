@@ -1,9 +1,19 @@
 import { useState, useEffect } from 'react';
-import { Users, AlertTriangle, TrendingUp, Activity } from 'lucide-react';
+import { Users, AlertTriangle, TrendingUp, Activity, BarChart3 } from 'lucide-react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 import { AnalyticCard } from '@/src/components/cards';
 import { SectionHeader, ErrorCard, LoadingCard, EmptyState } from '@/src/components/common';
 import { getManagerSummary } from '@/src/services/dashboardService';
+import { apiFetch } from '@/src/services/apiClient';
+import { chartTooltipStyle, chartTick } from '@/src/components/charts/chartTheme';
 import type { ManagerSummary, WorkerSummary } from '@/src/types/api';
+
+interface TrendPoint {
+  week: string;
+  avgRisk: number;
+  sessions: number;
+  highCount: number;
+}
 
 const colorMap = { low: 'bg-green-500', moderate: 'bg-orange-500', high: 'bg-red-500' };
 const pulseMap = { low: '', moderate: 'animate-pulse', high: 'animate-pulse' };
@@ -28,6 +38,29 @@ export default function ManagerDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<WorkerSummary | null>(null);
+  const [trendData, setTrendData] = useState<TrendPoint[]>([]);
+
+  // Fetch weekly trend data
+  useEffect(() => {
+    let cancelled = false;
+    const fetchTrend = async () => {
+      try {
+        const res = await apiFetch('/api/analytics');
+        if (res.ok) {
+          const data = await res.json();
+          const trend = (data.weekly_risk_trend || []).map((w: any) => ({
+            week: w.week || '',
+            avgRisk: w.averageRisk || 0,
+            sessions: w.sessions || 0,
+            highCount: w.highCount || 0,
+          }));
+          if (!cancelled) setTrendData(trend);
+        }
+      } catch { /* ignore */ }
+    };
+    fetchTrend();
+    return () => { cancelled = true; };
+  }, []);
 
   // ── fetch real data ───────────────────────────────────────────────
   useEffect(() => {
@@ -135,6 +168,30 @@ export default function ManagerDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Weekly Risk Trend Chart */}
+      {trendData.length > 0 && (
+        <div className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-xl p-lg">
+          <div className="flex items-center gap-2 mb-md">
+            <BarChart3 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+            <SectionHeader title="Weekly Risk Trend" />
+          </div>
+          <div className="h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={trendData}>
+                <XAxis dataKey="week" tick={chartTick} axisLine={false} tickLine={false} />
+                <YAxis tick={chartTick} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={chartTooltipStyle} cursor={{ fill: 'rgba(77, 142, 255, 0.12)' }} />
+                <Bar dataKey="avgRisk" name="Avg Risk" radius={[4, 4, 0, 0]}>
+                  {trendData.map((entry, i) => (
+                    <Cell key={i} fill={entry.avgRisk > 60 ? '#ef4444' : entry.avgRisk > 30 ? '#f59e0b' : '#10b981'} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
 
       {/* ── Stations Needing Attention — ranked by risk ── */}
       {data.workers.length > 0 && (
