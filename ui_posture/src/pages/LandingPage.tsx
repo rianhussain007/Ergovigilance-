@@ -6,6 +6,7 @@ import {
   Activity, Eye, Cpu, Radio, Building2, Globe, ArrowRight, Play,
 } from 'lucide-react';
 import { Link } from 'react-router';
+import Logo from '../components/common/Logo';
 
 /* ── Intersection Observer for scroll-reveal ───────────────────── */
 const useIntersectionObserver = (options = { threshold: 0.1 }) => {
@@ -132,7 +133,7 @@ export default function LandingPage() {
       <nav className="sticky top-0 z-50 bg-[#10131a]/80 backdrop-blur-xl border-b border-white/5">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-3 group">
-            <img src="/images/logo.png" alt="ErgoVigilance" className="h-10 w-auto" />
+            <Logo className="h-10 w-auto" variant="light" />
           </Link>
           <div className="hidden md:flex items-center gap-8">
             <a href="#solutions" className="text-sm text-slate-400 hover:text-white transition-colors">Solutions</a>
@@ -574,7 +575,7 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-4 gap-12">
             <div className="md:col-span-2 space-y-4">
               <div className="flex items-center gap-3">
-                <img src="/images/logo.png" alt="ErgoVigilance" className="h-10 w-auto" />
+                <Logo className="h-10 w-auto" variant="light" />
               </div>
               <p className="text-sm text-slate-500 leading-relaxed max-w-sm">
                 Pioneering Industrial Intelligence through autonomous monitoring.

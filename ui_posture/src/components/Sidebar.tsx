@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { NavLink } from 'react-router';
 import { LayoutDashboard, Radio, BarChart3, FileText, History, Settings, ChevronLeft, ChevronRight, Activity, Building2, Camera, ScrollText, Server, Clapperboard, Users, ClipboardList, UserCog, Heart } from 'lucide-react';
 import { motion } from 'motion/react';
+import Logo from '../components/common/Logo';
 
 // Navigation grouped into labeled sections. Each item keeps its own role gate
 // so operator/supervisor roles never see admin-only destinations (Manager,
@@ -71,10 +72,10 @@ export default function Sidebar({ role = 'administrator', rolePaths, collapsed: 
     <aside className={`h-screen fixed left-0 top-0 flex flex-col py-md bg-white dark:bg-surface-container-low/95 border-r border-slate-200 dark:border-outline-variant/60 z-50 transition-all duration-300 ease-out ${collapsed ? 'w-16' : 'w-64'}`}>
       <div className={`mb-xl transition-all duration-300 ${collapsed ? 'w-full flex justify-center' : 'px-lg'}`}>
         {collapsed ? (
-          <img src="/images/logo.png" alt="ErgoVigilance" className="w-10 h-10 rounded-xl object-contain" />
+          <Logo className="w-10 h-10" variant="light" />
         ) : (
           <div className="transition-all duration-300">
-            <img src="/images/logo.png" alt="ErgoVigilance" className="h-10 w-auto" />
+            <Logo className="h-10 w-auto" variant="auto" />
           </div>
         )}
       </div>

@@ -3,6 +3,7 @@ import { Link, Navigate, useNavigate } from 'react-router';
 import { Activity, Lock, Eye, EyeOff, Loader2, AlertTriangle, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/src/auth/AuthContext';
 import { IndustrialBackdrop } from '@/src/components/common';
+import Logo from '../components/common/Logo';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -63,10 +64,7 @@ export default function LoginPage() {
           {/* Brand header — wordmark links back to the marketing homepage */}
           <div className="px-xl pt-xl pb-md space-y-md">
             <Link to="/" className="flex items-center gap-sm group w-fit">
-              <div className="h-11 w-11 rounded-xl bg-blue-50 dark:bg-primary/15 text-blue-600 dark:text-primary grid place-items-center group-hover:bg-blue-100 dark:group-hover:bg-primary/25 transition-colors">
-                <Activity className="h-5 w-5" />
-              </div>
-              <span className="text-headline-md font-bold text-slate-900 dark:text-on-surface">ErgoVigilance</span>
+              <Logo className="h-11 w-auto" variant="auto" />
             </Link>
             <div>
               <h1 className="text-headline-md font-bold text-slate-900 dark:text-on-surface">Sign in</h1>
