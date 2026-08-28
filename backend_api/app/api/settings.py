@@ -12,6 +12,16 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+@router.get("/settings/notifications")
+async def get_notification_settings(user: AuthenticatedUser = Depends(get_current_user)):
+    """Get notification configuration (email, Slack)."""
+    try:
+        from app.services.notifications import get_notification_config
+    except ImportError:
+        from backend_api.app.services.notifications import get_notification_config
+    return get_notification_config()
+
+
 @router.get("/settings")
 async def get_settings(user: AuthenticatedUser = Depends(get_current_user)):
     """Get current user's settings."""

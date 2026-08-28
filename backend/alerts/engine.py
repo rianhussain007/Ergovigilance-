@@ -281,30 +281,45 @@ class AlertEngine:
         )
 
     def _persist_alert(self, alert: Alert, worker_id: str = "") -> None:
-        """Write a new alert to SQLite."""
-        if not self._db_enabled:
-            return
+        """Write a new alert to SQLite and send notifications."""
+        if self._db_enabled:
+            try:
+                try:
+                    from app.core.database import insert_alert
+                except ImportError:
+                    from backend_api.app.core.database import insert_alert
+                insert_alert(
+                    alert_id=alert.id,
+                    severity=alert.severity.value,
+                    title=alert.title,
+                    message=alert.message,
+                    trigger_rule=alert.trigger_rule,
+                    state=alert.state.value,
+                    session_id=alert.session_id,
+                    worker_id=worker_id,
+                    frame_number=alert.frame_number,
+                    confidence=alert.confidence,
+                    requires_ack=alert.requires_ack,
+                    created_at=alert.created_at,
+                )
+            except Exception as exc:
+                logger.error("Alert persistence: failed to persist alert %s: %s", alert.id, exc)
+
+        # Send email/Slack notifications (non-blocking)
         try:
             try:
-                from app.core.database import insert_alert
+                from app.services.notifications import send_alert_notification
             except ImportError:
-                from backend_api.app.core.database import insert_alert
-            insert_alert(
-                alert_id=alert.id,
-                severity=alert.severity.value,
+                from backend_api.app.services.notifications import send_alert_notification
+            send_alert_notification(
                 title=alert.title,
                 message=alert.message,
-                trigger_rule=alert.trigger_rule,
-                state=alert.state.value,
+                severity=alert.severity.value,
                 session_id=alert.session_id,
                 worker_id=worker_id,
-                frame_number=alert.frame_number,
-                confidence=alert.confidence,
-                requires_ack=alert.requires_ack,
-                created_at=alert.created_at,
             )
         except Exception as exc:
-            logger.error("Alert persistence: failed to persist alert %s: %s", alert.id, exc)
+            logger.debug("Notification send failed (non-fatal): %s", exc)
 
     def _persist_state_update(self, alert_id: str, state: str) -> None:
         """Update an alert's state in SQLite."""
