@@ -186,51 +186,7 @@ export default function LandingPage() {
          ══════════════════════════════════════════════════════════════ */}
       <section className="relative z-10">
         <div className="max-w-7xl mx-auto px-6 pt-12 pb-16 lg:pt-20 lg:pb-24">
-          {/* Top: Image */}
-          <AnimatedSection>
-            <div className="relative mb-12 lg:mb-16">
-              <div className="absolute -inset-4 bg-blue-500/[0.06] blur-3xl rounded-full" />
-              <div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl shadow-blue-500/10">
-                <img
-                  src="/images/command-center-monitors.png"
-                  alt="Multi-camera factory monitoring command center with AI pose detection overlays"
-                  className="w-full h-auto object-cover"
-                  style={{ maxHeight: 520 }}
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#10131a]/60 via-transparent to-[#10131a]/30" />
-                {/* Floating live badge */}
-                <div className="absolute top-4 left-4 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-cyan-500/30">
-                  <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-                  <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">Live Analysis</span>
-                </div>
-                {/* Floating telemetry badges */}
-                <div className="absolute top-4 right-4 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-emerald-500/30">
-                  <span className="text-[10px] font-bold text-emerald-400">SAFE ZONE: POSTURE OPTIMAL</span>
-                </div>
-                <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between bg-black/60 backdrop-blur-sm px-4 py-2.5 rounded-lg border border-white/10">
-                  <div className="flex items-center gap-5">
-                    <div>
-                      <span className="text-[9px] text-slate-400 block">Risk Level</span>
-                      <span className="text-xs font-bold text-emerald-400">LOW</span>
-                    </div>
-                    <div className="w-px h-6 bg-white/10" />
-                    <div>
-                      <span className="text-[9px] text-slate-400 block">Workers Tracked</span>
-                      <span className="text-xs font-bold text-cyan-400">4</span>
-                    </div>
-                    <div className="w-px h-6 bg-white/10" />
-                    <div>
-                      <span className="text-[9px] text-slate-400 block">Confidence</span>
-                      <span className="text-xs font-bold text-blue-400">96%</span>
-                    </div>
-                  </div>
-                  <span className="text-[9px] text-slate-500 hidden sm:block">33 landmarks · 12 features · every frame</span>
-                </div>
-              </div>
-            </div>
-          </AnimatedSection>
-
-          {/* Bottom: Copy + CTAs */}
+          {/* Top: Copy + CTAs */}
           <div className="max-w-4xl mx-auto text-center space-y-8">
             <AnimatedSection delay={100}>
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-blue-500/20 bg-blue-500/[0.08] text-xs font-semibold text-blue-400 uppercase tracking-wider">
@@ -290,6 +246,50 @@ export default function LandingPage() {
               </div>
             </AnimatedSection>
           </div>
+
+          {/* Bottom: Image (below text) */}
+          <AnimatedSection delay={600}>
+            <div className="relative mt-12 lg:mt-16 max-w-5xl mx-auto">
+              <div className="absolute -inset-4 bg-blue-500/[0.06] blur-3xl rounded-full" />
+              <div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl shadow-blue-500/10">
+                <img
+                  src="/images/command-center-monitors.png"
+                  alt="Multi-camera factory monitoring command center with AI pose detection overlays"
+                  className="w-full h-auto object-cover"
+                  style={{ maxHeight: 520 }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#10131a]/60 via-transparent to-[#10131a]/30" />
+                {/* Floating live badge */}
+                <div className="absolute top-4 left-4 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-cyan-500/30">
+                  <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                  <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">Live Analysis</span>
+                </div>
+                {/* Floating telemetry badges */}
+                <div className="absolute top-4 right-4 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-emerald-500/30">
+                  <span className="text-[10px] font-bold text-emerald-400">SAFE ZONE: POSTURE OPTIMAL</span>
+                </div>
+                <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between bg-black/60 backdrop-blur-sm px-4 py-2.5 rounded-lg border border-white/10">
+                  <div className="flex items-center gap-5">
+                    <div>
+                      <span className="text-[9px] text-slate-400 block">Risk Level</span>
+                      <span className="text-xs font-bold text-emerald-400">LOW</span>
+                    </div>
+                    <div className="w-px h-6 bg-white/10" />
+                    <div>
+                      <span className="text-[9px] text-slate-400 block">Workers Tracked</span>
+                      <span className="text-xs font-bold text-cyan-400">4</span>
+                    </div>
+                    <div className="w-px h-6 bg-white/10" />
+                    <div>
+                      <span className="text-[9px] text-slate-400 block">Confidence</span>
+                      <span className="text-xs font-bold text-blue-400">96%</span>
+                    </div>
+                  </div>
+                  <span className="text-[9px] text-slate-500 hidden sm:block">33 landmarks · 12 features · every frame</span>
+                </div>
+              </div>
+            </div>
+          </AnimatedSection>
         </div>
       </section>
 
