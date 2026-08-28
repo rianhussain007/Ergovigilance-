@@ -427,41 +427,19 @@ class LiveMonitoringService:
         created_by_user_id: int | None = None,
         camera_id: str | None = None,
     ) -> str:
+        """Start a monitoring session. Heavy init (camera open + model load)
+        runs in a background thread so the API returns instantly (<50ms).
+        The frontend polls /api/session/status for the first frame.
+        """
         now = datetime.now()
         session_id = f"SESH-{now.strftime('%Y-%m-%d_%H-%M-%S')}"
-        session_timestamp = now.strftime("%Y%m%d_%H%M%S_%f")[:-3]  # Include milliseconds
+        session_timestamp = now.strftime("%Y%m%d_%H%M%S_%f")[:-3]
 
-        # A camera_id that names a configured IP/RTSP source (or is itself an
-        # RTSP URL) overrides the numeric index. cv2.VideoCapture accepts both
-        # int indices and URL strings, so a single call handles USB + IP cams.
+        # Resolve camera source (fast - just string/int lookup)
         source = _resolve_camera_source(camera_index, camera_id)
         self._is_demo_source = isinstance(source, str) and os.path.isfile(source)
-        # Use DSHOW on Windows (0.4s) instead of MSMF (9.5s) — 23x faster camera open
-        import sys as _sys
-        _backend = cv2.CAP_DSHOW if _sys.platform == "win32" else 0
-        if isinstance(source, int):
-            self.cap = cv2.VideoCapture(source + _backend)
-        else:
-            self.cap = cv2.VideoCapture(source)
-        if not self.cap.isOpened():
-            raise RuntimeError(f"Cannot open camera at source {source}")
-        if self._is_demo_source:
-            self._demo_fps = float(self.cap.get(cv2.CAP_PROP_FPS) or 15.0) or 15.0
 
-        # Skip 1280x720 — it takes 6+ seconds on Windows MSMF and blocks session start.
-        # 640x480 is sufficient for MediaPipe and halves inference time.
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-
-        fw = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        fh = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
-        if not self.engine._initialized:
-            self.engine.initialize()
-        self.analytics.reset()
-        self.context_engine = ContextIntelligenceEngine(session_id=session_id)
-        self._session_duration = 0.0
-        self._last_frame_time = time.perf_counter()
+        # Pre-populate state so the API returns immediately with session info
         self.current_worker_id = worker_id
         self.current_created_by_user_id = created_by_user_id
         self.current_camera_index = source if isinstance(source, int) else camera_index
@@ -470,33 +448,10 @@ class LiveMonitoringService:
         self.current_session_timestamp = session_timestamp
         self.video_recording_metadata = {}
 
-        camera_fps = float(self.cap.get(cv2.CAP_PROP_FPS) or 0.0)
-        worker_dir = worker_id or "unknown"
-        rec_dir = os.path.join(RECORDINGS_DIR, worker_dir, f"{session_timestamp}_{session_id}")
-        os.makedirs(rec_dir, exist_ok=True)
-        video_path = os.path.join(rec_dir, "original.mp4")
-        # Recording at the camera's full native rate (1280x720 H.264 encode
-        # on every captured frame) is a significant GIL cost that competes
-        # with pose inference. Evidence review doesn't need 30 fps â€” cap the
-        # recorder at RECORD_FPS (default 15) so the encode work is halved.
-        rec_fps = camera_fps
-        try:
-            rec_fps = max(5.0, min(30.0, float(os.environ.get("RECORD_FPS", "15"))))
-        except (TypeError, ValueError):
-            rec_fps = 15.0
-        self._rec_target_fps = rec_fps
-        self._rec_camera_fps = camera_fps
-        self.video_recorder = _SessionVideoRecorder(video_path, fw, fh, rec_fps)
-        try:
-            self.video_recorder.start()
-        except Exception as exc:
-            self.video_recording_metadata = {
-                "video_path": None,
-                "video_recording_status": "failed",
-                "video_recording_error": str(exc),
-                "video_frame_count": 0,
-                "video_codec": None,
-            }
+        self.analytics.reset()
+        self.context_engine = ContextIntelligenceEngine(session_id=session_id)
+        self._session_duration = 0.0
+        self._last_frame_time = time.perf_counter()
         self._timeline.clear()
         self._frame_counter = 0
         self._capture_counter = 0
@@ -504,35 +459,98 @@ class LiveMonitoringService:
         self._checkpoint_last = 0.0
         self._frame_queue.clear()
 
+        # Mark session as active immediately (even before camera opens)
         self.state = LiveState(
             session_active=True,
             session_id=session_id,
             session_start=time.time(),
-            camera_status="active",
-            frame_width=fw,
-            frame_height=fh,
+            camera_status="starting",
             timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         )
         self._fps_start = time.perf_counter()
         self._fps_count = 0
-
         self._running = True
         self._read_failures = 0
         self._reconnect_delay = _CAPTURE_RECONNECT_BASE_S
         self.state.camera_reconnecting = False
-        # Capture runs on its own thread so the camera is drained continuously
-        # (raw recording + ring buffer) regardless of inference latency.
-        self._capture_thread = threading.Thread(
-            target=self._capture_loop, daemon=True, name="live-capture"
-        )
-        self._capture_thread.start()
-        self.thread = threading.Thread(target=self._process_loop, daemon=True)
-        self.thread.start()
 
-        self.event_bus.publish(SessionStartedEvent(
-            session_id=session_id,
-            camera_index=camera_index,
-        ))
+        # Heavy init in background thread - camera open + model load + threads
+        def _init_and_start():
+            try:
+                # Open camera (this is the slow part: 0.5-3s on Windows)
+                import sys as _sys
+                _backend = cv2.CAP_DSHOW if _sys.platform == "win32" else 0
+                if isinstance(source, int):
+                    self.cap = cv2.VideoCapture(source + _backend)
+                else:
+                    self.cap = cv2.VideoCapture(source)
+                if not self.cap.isOpened():
+                    logger.error("Cannot open camera at source %s", source)
+                    self.state.camera_status = "error"
+                    self.state.session_active = False
+                    return
+                if self._is_demo_source:
+                    self._demo_fps = float(self.cap.get(cv2.CAP_PROP_FPS) or 15.0) or 15.0
+
+                # 640x480 - fast inference, sufficient for MediaPipe
+                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                fw = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                fh = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+                # Ensure pose model is loaded (fast if pre-loaded at startup)
+                if not self.engine._initialized:
+                    self.engine.initialize()
+
+                # Set frame dimensions now that camera is open
+                self.state.frame_width = fw
+                self.state.frame_height = fh
+                self.state.camera_status = "active"
+
+                # Video recorder
+                camera_fps = float(self.cap.get(cv2.CAP_PROP_FPS) or 0.0)
+                worker_dir = worker_id or "unknown"
+                rec_dir = os.path.join(RECORDINGS_DIR, worker_dir, f"{session_timestamp}_{session_id}")
+                os.makedirs(rec_dir, exist_ok=True)
+                video_path = os.path.join(rec_dir, "original.mp4")
+                rec_fps = camera_fps
+                try:
+                    rec_fps = max(5.0, min(30.0, float(os.environ.get("RECORD_FPS", "15"))))
+                except (TypeError, ValueError):
+                    rec_fps = 15.0
+                self._rec_target_fps = rec_fps
+                self._rec_camera_fps = camera_fps
+                self.video_recorder = _SessionVideoRecorder(video_path, fw, fh, rec_fps)
+                try:
+                    self.video_recorder.start()
+                except Exception as exc:
+                    self.video_recording_metadata = {
+                        "video_path": None,
+                        "video_recording_status": "failed",
+                        "video_recording_error": str(exc),
+                        "video_frame_count": 0,
+                        "video_codec": None,
+                    }
+
+                # Start capture + processing threads
+                self._capture_thread = threading.Thread(
+                    target=self._capture_loop, daemon=True, name="live-capture"
+                )
+                self._capture_thread.start()
+                self.thread = threading.Thread(target=self._process_loop, daemon=True)
+                self.thread.start()
+
+                self.event_bus.publish(SessionStartedEvent(
+                    session_id=session_id,
+                    camera_index=camera_index,
+                ))
+                logger.info("Session %s fully initialized (camera open, threads started)", session_id)
+            except Exception as exc:
+                logger.error("Background session init failed: %s", exc, exc_info=True)
+                self.state.camera_status = "error"
+                self.state.session_active = False
+
+        threading.Thread(target=_init_and_start, daemon=True, name="session-init").start()
         return session_id
 
     def _save_recording_files(self, worker_id, session_timestamp, summary, video_metadata, session_id):
