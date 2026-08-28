@@ -45,27 +45,27 @@ const AnimatedSection = ({ children, className = '', delay = 0 }: { children: Re
 
 /* ── Data ──────────────────────────────────────────────────────── */
 const STATS = [
-  { value: '98%', label: 'Detection Accuracy', icon: Activity },
-  { value: '35%', label: 'Reduction in MSDs', icon: AlertTriangle },
+  { value: '33', label: 'Skeletal Landmarks Tracked', icon: Activity },
+  { value: '7', label: 'Task Classes Recognized', icon: AlertTriangle },
   { value: '24/7', label: 'Real-time Monitoring', icon: Eye },
-  { value: 'ISO 11226', label: 'Compliant Assessment', icon: ShieldCheck },
+  { value: 'RULA/REBA', label: 'Informed Risk Scoring', icon: ShieldCheck },
 ];
 
 const TECH_FEATURES = [
   {
     icon: Radio,
-    title: 'Real-time Joint Telemetry',
-    description: 'Tracks 33 skeletal landmarks to calculate joint angles, velocity, and sustained tension with clinical precision.',
+    title: '33-Point Pose Estimation',
+    description: 'MediaPipe-based skeletal tracking extracts 33 landmarks per frame, computing joint angles, velocity, and sustained tension in real time.',
   },
   {
     icon: Activity,
-    title: 'Automated RULA / REBA Assessment',
-    description: 'Instantly calculates Rapid Upper Limb Assessment and Rapid Entire Body Assessment scores, eliminating manual observational audits.',
+    title: 'RULA/REBA-Informed Scoring',
+    description: 'Risk assessment follows Rapid Upper Limb Assessment and Rapid Entire Body Assessment methods — validated ergonomic standards, not arbitrary thresholds.',
   },
   {
     icon: Brain,
-    title: 'Context-Aware Task Recognition',
-    description: 'AI models understand the specific task being performed, allowing for dynamic threshold adjustments rather than generic baselines.',
+    title: 'Task-Aware Risk Adjustment',
+    description: 'Classifies the current task (assembly, lifting, reaching, etc.) and adjusts risk thresholds accordingly — a lifting task has different limits than inspection.',
   },
 ];
 
@@ -73,19 +73,19 @@ const COMMAND_CARDS = [
   {
     icon: BarChart3,
     title: 'Executive Dashboard',
-    description: 'Aggregate risk scores across multiple facilities. Identify systemic ergonomic failures before they become recordable incidents.',
+    description: 'Factory-wide risk overview with worker status, department heatmaps, and cross-session trend analytics for safety managers.',
     image: '/images/command-center-monitors.png',
   },
   {
     icon: Radio,
     title: 'Live Monitoring',
-    description: 'Deploy virtual safety auditors on the floor. View posture overlays and risk scores from multiple camera feeds for immediate intervention.',
+    description: 'Real-time pose skeleton overlay on camera feeds with per-joint risk coloring, task recognition, and instant alert generation.',
     image: '/images/robotic-arm-strain.png',
   },
   {
     icon: Brain,
     title: 'AI Insights Engine',
-    description: 'Receive automated, data-backed corrective action suggestions and ergonomic redesign guidelines based on aggregated posture and task data.',
+    description: 'Context-aware corrective action suggestions based on RULA/REBA scoring, task type, fatigue level, and exposure duration.',
     image: '/images/tablet-skeleton-assessment.png',
   },
 ];
@@ -94,24 +94,24 @@ const HOW_IT_WORKS = [
   { step: '01', title: 'Camera Capture', description: 'Standard CCTV cameras capture worker posture at individual stations — no wearables, no special hardware.' },
   { step: '02', title: 'Pose Estimation', description: 'Our CV engine extracts 33 skeletal landmarks per frame, computing joint angles, velocity, and tension in real time.' },
   { step: '03', title: 'Risk Scoring', description: 'Context-aware RULA/REBA scoring classifies posture risk per task, adjusted for fatigue, duration, and task type.' },
-  { step: '04', title: 'Actionable Insights', description: 'EHS managers receive real-time alerts, trend analytics, and AI-generated corrective recommendations.' },
+  { step: '04', title: 'Alerts & Recommendations', description: 'Managers receive real-time alerts when risky posture is sustained, with corrective action suggestions for workers.' },
 ];
 
 const FEATURE_HIGHLIGHTS = [
   {
     icon: ShieldCheck,
-    title: '100% On-Premise Deployment',
-    description: 'Your data never leaves your facility. No cloud uploads, no third-party servers — full sovereignty over your safety data.',
+    title: 'No Wearables Required',
+    description: 'Workers are monitored through standard webcam or CCTV. No hardware to wear, no batteries to charge, no compliance burden.',
   },
   {
     icon: MonitorCheck,
-    title: 'Zero Wearables Required',
-    description: 'Workers are monitored through existing CCTV infrastructure. No compliance burden, no hardware cost, no battery management.',
+    title: 'RULA/REBA-Informed Scoring',
+    description: 'Risk assessment based on validated ergonomic methods — Rapid Upper Limb Assessment and Rapid Entire Body Assessment — not arbitrary thresholds.',
   },
   {
     icon: Eye,
-    title: 'Continuous Assessment',
-    description: 'Unlike quarterly RULA/REBA audits, ErgoVigilance monitors posture continuously — catching the transient risks that spot-checks miss.',
+    title: 'Real-Time Alerts & Recommendations',
+    description: 'Get instant alerts when risky posture is sustained, with corrective action suggestions for workers and supervisors.',
   },
 ];
 
@@ -254,9 +254,9 @@ export default function LandingPage() {
             <AnimatedSection delay={500}>
               <div className="flex items-center justify-center gap-6 pt-2">
                 {[
-                  { icon: Lock, label: '100% On-Premise' },
-                  { icon: MonitorCheck, label: 'No Wearables Required' },
-                  { icon: ShieldCheck, label: 'Zero Cloud Upload' },
+                  { icon: MonitorCheck, label: 'No Wearables' },
+                  { icon: ShieldCheck, label: 'RULA/REBA Based' },
+                  { icon: Eye, label: 'Real-time Alerts' },
                 ].map(({ icon: Icon, label }) => (
                   <div key={label} className="flex items-center gap-2 text-xs text-slate-500">
                     <Icon className="w-3.5 h-3.5 text-blue-400/60" />
@@ -275,10 +275,10 @@ export default function LandingPage() {
       <section className="relative z-10 border-y border-white/5 bg-white/[0.015]">
         <div className="max-w-7xl mx-auto px-6">
           <div className="py-8 border-b border-white/5">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-2">Global Deployment</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-2">System Capabilities</p>
             <p className="text-2xl sm:text-3xl font-bold text-white">
-              Protecting <span className="text-blue-400">50,000+</span> Workers Across{' '}
-              <span className="text-blue-400">200</span> Facilities Worldwide.
+              Computer Vision-Powered Ergonomic Assessment —{' '}
+              <span className="text-blue-400">Ready for Pilot Deployment.</span>
             </p>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-white/5">
@@ -417,7 +417,7 @@ export default function LandingPage() {
             <div className="text-center mb-16">
               <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-3">Why ErgoVigilance</p>
               <h2 className="text-3xl sm:text-4xl font-bold text-white">
-                Built for the Factory Floor.
+                Why ErgoVigilance.
               </h2>
             </div>
           </AnimatedSection>
@@ -538,8 +538,8 @@ export default function LandingPage() {
                   Ready to upgrade your facility's safety standards?
                 </h2>
                 <p className="text-lg text-slate-400 mb-8 max-w-2xl mx-auto">
-                  Deploy ErgoVigilance in hours, not weeks. No IT integration required — we handle setup personally.
-                  Start your zero-risk 14-day pilot today.
+                  Deploy with a standard webcam — no special hardware, no IT integration.
+                  Start a free pilot and see real posture data from your own floor.
                 </p>
                 <div className="flex items-center justify-center gap-4 flex-wrap">
                   <Link
@@ -557,9 +557,9 @@ export default function LandingPage() {
                   </Link>
                 </div>
                 <div className="flex items-center justify-center gap-6 mt-8 text-xs text-slate-500">
-                  <span className="flex items-center gap-1.5"><Lock className="w-3 h-3 text-blue-400/50" /> Zero Cost Pilot</span>
-                  <span className="flex items-center gap-1.5"><MonitorCheck className="w-3 h-3 text-blue-400/50" /> 30-Minute Setup</span>
-                  <span className="flex items-center gap-1.5"><ShieldCheck className="w-3 h-3 text-blue-400/50" /> No Lock-In Contract</span>
+                  <span className="flex items-center gap-1.5"><Lock className="w-3 h-3 text-blue-400/50" /> No Hardware Required</span>
+                  <span className="flex items-center gap-1.5"><MonitorCheck className="w-3 h-3 text-blue-400/50" /> Works with Existing Cameras</span>
+                  <span className="flex items-center gap-1.5"><ShieldCheck className="w-3 h-3 text-blue-400/50" /> RULA/REBA Informed</span>
                 </div>
               </div>
             </div>
@@ -604,9 +604,9 @@ export default function LandingPage() {
               &copy; 2026 ErgoVigilance Systems. All rights reserved.
             </p>
             <div className="flex items-center gap-4 text-xs text-slate-600">
-              <span className="flex items-center gap-1.5"><Lock className="w-3 h-3" /> 100% On-Premise</span>
               <span className="flex items-center gap-1.5"><MonitorCheck className="w-3 h-3" /> No Wearables</span>
-              <span className="flex items-center gap-1.5"><ShieldCheck className="w-3 h-3" /> No Cloud Upload</span>
+              <span className="flex items-center gap-1.5"><ShieldCheck className="w-3 h-3" /> RULA/REBA Based</span>
+              <span className="flex items-center gap-1.5"><Eye className="w-3 h-3" /> Real-time Alerts</span>
             </div>
           </div>
         </div>
