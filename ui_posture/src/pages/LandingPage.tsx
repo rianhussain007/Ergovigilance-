@@ -73,16 +73,19 @@ const COMMAND_CARDS = [
     icon: BarChart3,
     title: 'Executive Dashboard',
     description: 'Aggregate risk scores across multiple facilities. Identify systemic ergonomic failures before they become recordable incidents.',
+    image: '/images/command-center-monitors.png',
   },
   {
     icon: Radio,
     title: 'Live Monitoring',
     description: 'Deploy virtual safety auditors on the floor. View posture overlays and risk scores from multiple camera feeds for immediate intervention.',
+    image: '/images/robotic-arm-strain.png',
   },
   {
     icon: Brain,
     title: 'AI Insights Engine',
     description: 'Receive automated, data-backed corrective action suggestions and ergonomic redesign guidelines based on aggregated posture and task data.',
+    image: '/images/tablet-skeleton-assessment.png',
   },
 ];
 
@@ -91,6 +94,24 @@ const HOW_IT_WORKS = [
   { step: '02', title: 'Pose Estimation', description: 'Our CV engine extracts 33 skeletal landmarks per frame, computing joint angles, velocity, and tension in real time.' },
   { step: '03', title: 'Risk Scoring', description: 'Context-aware RULA/REBA scoring classifies posture risk per task, adjusted for fatigue, duration, and task type.' },
   { step: '04', title: 'Actionable Insights', description: 'EHS managers receive real-time alerts, trend analytics, and AI-generated corrective recommendations.' },
+];
+
+const FEATURE_HIGHLIGHTS = [
+  {
+    icon: ShieldCheck,
+    title: '100% On-Premise Deployment',
+    description: 'Your data never leaves your facility. No cloud uploads, no third-party servers — full sovereignty over your safety data.',
+  },
+  {
+    icon: MonitorCheck,
+    title: 'Zero Wearables Required',
+    description: 'Workers are monitored through existing CCTV infrastructure. No compliance burden, no hardware cost, no battery management.',
+  },
+  {
+    icon: Eye,
+    title: 'Continuous Assessment',
+    description: 'Unlike quarterly RULA/REBA audits, ErgoVigilance monitors posture continuously — catching the transient risks that spot-checks miss.',
+  },
 ];
 
 /* ── Page ──────────────────────────────────────────────────────── */
@@ -144,94 +165,108 @@ export default function LandingPage() {
       </nav>
 
       {/* ══════════════════════════════════════════════════════════════
-          HERO
+          HERO — Command Center 4-panel image
          ══════════════════════════════════════════════════════════════ */}
       <section className="relative z-10">
-        <div className="max-w-7xl mx-auto px-6 pt-16 pb-20 lg:pt-24 lg:pb-28 grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
-          {/* Left — copy */}
-          <div className="space-y-8">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-blue-500/20 bg-blue-500/[0.08] text-xs font-semibold text-blue-400 uppercase tracking-wider">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              System Online — v2.4.1
-            </div>
-            <h1 className="text-4xl sm:text-5xl lg:text-[3.5rem] font-extrabold leading-[1.1] tracking-tight text-white">
-              Industrial Safety,{' '}
-              <span className="bg-gradient-to-r from-blue-400 via-cyan-300 to-blue-400 bg-clip-text text-transparent">
-                Reimagined through AI.
-              </span>
-            </h1>
-            <p className="text-lg text-slate-400 leading-relaxed max-w-xl">
-              Real-time posture analysis and ergonomic risk mitigation for the modern
-              enterprise. Powered by advanced Computer Vision and Machine Learning.
-            </p>
-            <div className="flex items-center gap-4 flex-wrap">
-              <Link
-                to="/request-pilot"
-                className="flex items-center gap-2.5 px-7 py-3.5 rounded-xl bg-blue-600 text-sm font-bold text-white hover:bg-blue-500 transition-all hover:shadow-xl hover:shadow-blue-500/25 active:scale-[0.97]"
-              >
-                Request a Pilot
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-              <a
-                href="#technology"
-                className="flex items-center gap-2 px-6 py-3.5 rounded-xl border border-white/15 text-sm font-semibold text-slate-300 hover:text-white hover:border-white/30 transition-all"
-              >
-                Explore Solutions
-                <ChevronRight className="w-4 h-4" />
-              </a>
-            </div>
-            {/* Trust signals */}
-            <div className="flex items-center gap-6 pt-2">
-              {[
-                { icon: Lock, label: '100% On-Premise' },
-                { icon: MonitorCheck, label: 'No Wearables Required' },
-                { icon: ShieldCheck, label: 'Zero Cloud Upload' },
-              ].map(({ icon: Icon, label }) => (
-                <div key={label} className="flex items-center gap-2 text-xs text-slate-500">
-                  <Icon className="w-3.5 h-3.5 text-blue-400/60" />
-                  {label}
+        <div className="max-w-7xl mx-auto px-6 pt-12 pb-16 lg:pt-20 lg:pb-24">
+          {/* Top: Image */}
+          <AnimatedSection>
+            <div className="relative mb-12 lg:mb-16">
+              <div className="absolute -inset-4 bg-blue-500/[0.06] blur-3xl rounded-full" />
+              <div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl shadow-blue-500/10">
+                <img
+                  src="/images/command-center-monitors.png"
+                  alt="Multi-camera factory monitoring command center with AI pose detection overlays"
+                  className="w-full h-auto object-cover"
+                  style={{ maxHeight: 520 }}
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#10131a]/60 via-transparent to-[#10131a]/30" />
+                {/* Floating live badge */}
+                <div className="absolute top-4 left-4 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-cyan-500/30">
+                  <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
+                  <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">Live Analysis</span>
                 </div>
-              ))}
+                {/* Floating telemetry badges */}
+                <div className="absolute top-4 right-4 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-emerald-500/30">
+                  <span className="text-[10px] font-bold text-emerald-400">SAFE ZONE: POSTURE OPTIMAL</span>
+                </div>
+                <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between bg-black/60 backdrop-blur-sm px-4 py-2.5 rounded-lg border border-white/10">
+                  <div className="flex items-center gap-5">
+                    <div>
+                      <span className="text-[9px] text-slate-400 block">Risk Level</span>
+                      <span className="text-xs font-bold text-emerald-400">LOW</span>
+                    </div>
+                    <div className="w-px h-6 bg-white/10" />
+                    <div>
+                      <span className="text-[9px] text-slate-400 block">Workers Tracked</span>
+                      <span className="text-xs font-bold text-cyan-400">4</span>
+                    </div>
+                    <div className="w-px h-6 bg-white/10" />
+                    <div>
+                      <span className="text-[9px] text-slate-400 block">Confidence</span>
+                      <span className="text-xs font-bold text-blue-400">96%</span>
+                    </div>
+                  </div>
+                  <span className="text-[9px] text-slate-500 hidden sm:block">33 landmarks · 12 features · every frame</span>
+                </div>
+              </div>
             </div>
-          </div>
+          </AnimatedSection>
 
-          {/* Right — hero image */}
-          <div className="relative">
-            <div className="absolute -inset-8 bg-blue-500/[0.08] blur-3xl rounded-full" />
-            <div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl shadow-blue-500/10">
-              <img
-                src="/images/hero-factory-worker.png"
-                alt="Factory worker with AI pose skeleton overlay"
-                className="w-full h-auto object-cover"
-                style={{ maxHeight: 520 }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#10131a]/70 via-transparent to-transparent" />
-              {/* Floating live badge */}
-              <div className="absolute top-4 left-4 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded-lg border border-cyan-500/30">
-                <div className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-                <span className="text-[10px] font-bold text-cyan-400 uppercase tracking-wider">Live Analysis</span>
+          {/* Bottom: Copy + CTAs */}
+          <div className="max-w-4xl mx-auto text-center space-y-8">
+            <AnimatedSection delay={100}>
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-blue-500/20 bg-blue-500/[0.08] text-xs font-semibold text-blue-400 uppercase tracking-wider">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                System Online — v2.4.1
               </div>
-              {/* Bottom telemetry bar */}
-              <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between bg-black/60 backdrop-blur-sm px-4 py-2.5 rounded-lg border border-white/10">
-                <div className="flex items-center gap-5">
-                  <div>
-                    <span className="text-[9px] text-slate-400 block">Risk Level</span>
-                    <span className="text-xs font-bold text-emerald-400">LOW</span>
-                  </div>
-                  <div className="w-px h-6 bg-white/10" />
-                  <div>
-                    <span className="text-[9px] text-slate-400 block">REBA Score</span>
-                    <span className="text-xs font-bold text-cyan-400">3</span>
-                  </div>
-                  <div className="w-px h-6 bg-white/10" />
-                  <div>
-                    <span className="text-[9px] text-slate-400 block">Confidence</span>
-                    <span className="text-xs font-bold text-blue-400">96%</span>
-                  </div>
-                </div>
-                <span className="text-[9px] text-slate-500 hidden sm:block">33 landmarks · 12 features · every frame</span>
+            </AnimatedSection>
+            <AnimatedSection delay={200}>
+              <h1 className="text-4xl sm:text-5xl lg:text-[3.5rem] font-extrabold leading-[1.1] tracking-tight text-white">
+                Industrial Safety,{' '}
+                <span className="bg-gradient-to-r from-blue-400 via-cyan-300 to-blue-400 bg-clip-text text-transparent">
+                  Reimagined through AI.
+                </span>
+              </h1>
+            </AnimatedSection>
+            <AnimatedSection delay={300}>
+              <p className="text-lg text-slate-400 leading-relaxed max-w-2xl mx-auto">
+                Real-time posture analysis and ergonomic risk mitigation for the modern
+                enterprise. Powered by advanced Computer Vision and Machine Learning.
+              </p>
+            </AnimatedSection>
+            <AnimatedSection delay={400}>
+              <div className="flex items-center justify-center gap-4 flex-wrap">
+                <Link
+                  to="/request-pilot"
+                  className="flex items-center gap-2.5 px-7 py-3.5 rounded-xl bg-blue-600 text-sm font-bold text-white hover:bg-blue-500 transition-all hover:shadow-xl hover:shadow-blue-500/25 active:scale-[0.97]"
+                >
+                  Request a Pilot
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+                <a
+                  href="#technology"
+                  className="flex items-center gap-2 px-6 py-3.5 rounded-xl border border-white/15 text-sm font-semibold text-slate-300 hover:text-white hover:border-white/30 transition-all"
+                >
+                  Explore Solutions
+                  <ChevronRight className="w-4 h-4" />
+                </a>
               </div>
-            </div>
+            </AnimatedSection>
+            <AnimatedSection delay={500}>
+              <div className="flex items-center justify-center gap-6 pt-2">
+                {[
+                  { icon: Lock, label: '100% On-Premise' },
+                  { icon: MonitorCheck, label: 'No Wearables Required' },
+                  { icon: ShieldCheck, label: 'Zero Cloud Upload' },
+                ].map(({ icon: Icon, label }) => (
+                  <div key={label} className="flex items-center gap-2 text-xs text-slate-500">
+                    <Icon className="w-3.5 h-3.5 text-blue-400/60" />
+                    {label}
+                  </div>
+                ))}
+              </div>
+            </AnimatedSection>
           </div>
         </div>
       </section>
@@ -263,22 +298,22 @@ export default function LandingPage() {
       </section>
 
       {/* ══════════════════════════════════════════════════════════════
-          CORE TECHNOLOGY
+          CORE TECHNOLOGY — Robotic arm + strain index image
          ══════════════════════════════════════════════════════════════ */}
       <section className="relative z-10 py-20 lg:py-28" id="technology">
         <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-16 items-center">
-          {/* Left — image with data overlay */}
+          {/* Left — image */}
           <AnimatedSection>
             <div className="relative">
               <div className="absolute -inset-4 bg-blue-500/[0.04] blur-2xl rounded-2xl" />
               <div className="relative rounded-2xl overflow-hidden border border-white/10">
                 <img
-                  src="/images/hero-factory-worker.png"
-                  alt="Computer Vision & Pose Estimation"
+                  src="/images/robotic-arm-strain.png"
+                  alt="Industrial robotic arm with ergonomic strain index display showing real-time force sensing"
                   className="w-full h-auto object-cover"
                   style={{ maxHeight: 480 }}
                 />
-                <div className="absolute inset-0 bg-gradient-to-r from-[#10131a]/80 via-transparent to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-r from-[#10131a]/60 via-transparent to-transparent" />
                 {/* Overlay data panel */}
                 <div className="absolute top-4 left-4 bg-black/70 backdrop-blur-sm rounded-xl border border-white/10 p-4 w-56">
                   <p className="text-[9px] text-slate-400 uppercase tracking-wider mb-3">Pose Analysis</p>
@@ -298,6 +333,12 @@ export default function LandingPage() {
                       </div>
                     ))}
                   </div>
+                </div>
+                {/* Floating strain index badge */}
+                <div className="absolute bottom-4 right-4 bg-black/70 backdrop-blur-sm rounded-xl border border-emerald-500/30 px-3 py-2">
+                  <span className="text-[9px] text-slate-400 block">Ergonomic Strain Index</span>
+                  <span className="text-lg font-bold text-emerald-400">2.3</span>
+                  <span className="text-[10px] text-emerald-400 ml-1">SAFE</span>
                 </div>
               </div>
             </div>
@@ -353,7 +394,6 @@ export default function LandingPage() {
             </div>
           </AnimatedSection>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6 relative">
-            {/* Connecting line */}
             <div className="hidden lg:block absolute top-14 left-[12.5%] right-[12.5%] h-px bg-gradient-to-r from-blue-500/20 via-blue-500/40 to-blue-500/20" />
             {HOW_IT_WORKS.map((item, i) => (
               <AnimatedSection key={item.step} delay={i * 120}>
@@ -371,9 +411,38 @@ export default function LandingPage() {
       </section>
 
       {/* ══════════════════════════════════════════════════════════════
-          COMMAND CENTER
+          WHY ERGOVIGILANCE — 3 feature highlights
          ══════════════════════════════════════════════════════════════ */}
-      <section className="relative z-10 py-20 lg:py-28" id="command-center">
+      <section className="relative z-10 py-20 lg:py-28" id="solutions">
+        <div className="max-w-7xl mx-auto px-6">
+          <AnimatedSection>
+            <div className="text-center mb-16">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-3">Why ErgoVigilance</p>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white">
+                Built for the Factory Floor.
+              </h2>
+            </div>
+          </AnimatedSection>
+          <div className="grid md:grid-cols-3 gap-8">
+            {FEATURE_HIGHLIGHTS.map((item, i) => (
+              <AnimatedSection key={item.title} delay={i * 100}>
+                <div className="text-center space-y-4">
+                  <div className="w-14 h-14 rounded-2xl bg-blue-500/[0.08] border border-blue-500/20 flex items-center justify-center mx-auto">
+                    <item.icon className="w-7 h-7 text-blue-400" />
+                  </div>
+                  <h3 className="text-lg font-bold text-white">{item.title}</h3>
+                  <p className="text-sm text-slate-400 leading-relaxed">{item.description}</p>
+                </div>
+              </AnimatedSection>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ══════════════════════════════════════════════════════════════
+          COMMAND CENTER — Cards with images
+         ══════════════════════════════════════════════════════════════ */}
+      <section className="relative z-10 py-20 lg:py-28 bg-white/[0.015] border-y border-white/5" id="command-center">
         <div className="max-w-7xl mx-auto px-6">
           <AnimatedSection>
             <div className="text-center mb-16">
@@ -386,12 +455,26 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-3 gap-6">
             {COMMAND_CARDS.map((card, i) => (
               <AnimatedSection key={card.title} delay={i * 100}>
-                <div className="group relative bg-white/[0.03] border border-white/10 rounded-2xl p-8 hover:border-blue-500/30 hover:bg-blue-500/[0.04] transition-all duration-300 h-full">
-                  <div className="w-12 h-12 rounded-xl bg-blue-500/[0.08] border border-blue-500/20 flex items-center justify-center mb-6 group-hover:bg-blue-500/[0.15] group-hover:scale-105 transition-all">
-                    <card.icon className="w-6 h-6 text-blue-400" />
+                <div className="group relative bg-white/[0.03] border border-white/10 rounded-2xl overflow-hidden hover:border-blue-500/30 hover:bg-blue-500/[0.04] transition-all duration-300 h-full flex flex-col">
+                  {/* Card image */}
+                  <div className="relative h-48 overflow-hidden">
+                    <img
+                      src={card.image}
+                      alt={card.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#10131a] via-[#10131a]/40 to-transparent" />
+                    <div className="absolute bottom-3 left-4">
+                      <div className="w-10 h-10 rounded-xl bg-blue-500/[0.15] border border-blue-500/30 flex items-center justify-center backdrop-blur-sm">
+                        <card.icon className="w-5 h-5 text-blue-400" />
+                      </div>
+                    </div>
                   </div>
-                  <h3 className="text-xl font-bold text-white mb-3">{card.title}</h3>
-                  <p className="text-sm text-slate-400 leading-relaxed">{card.description}</p>
+                  {/* Card content */}
+                  <div className="p-6 flex-1">
+                    <h3 className="text-xl font-bold text-white mb-2">{card.title}</h3>
+                    <p className="text-sm text-slate-400 leading-relaxed">{card.description}</p>
+                  </div>
                   <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-500/30 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
               </AnimatedSection>
@@ -401,26 +484,43 @@ export default function LandingPage() {
       </section>
 
       {/* ══════════════════════════════════════════════════════════════
-          TESTIMONIAL
+          TESTIMONIAL — with tablet skeleton assessment image
          ══════════════════════════════════════════════════════════════ */}
-      <AnimatedSection className="relative z-10 py-20 lg:py-28 bg-white/[0.015] border-y border-white/5">
-        <div className="max-w-4xl mx-auto px-6 text-center">
-          <div className="mb-8">
-            <svg className="w-14 h-14 text-blue-500/20 mx-auto" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
-            </svg>
-          </div>
-          <blockquote className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white leading-tight mb-8">
-            "ErgoVigilance has transformed our safety culture from reactive to proactive.{' '}
-            <span className="text-blue-400">We're seeing risks before they become injuries.</span>"
-          </blockquote>
-          <div className="flex items-center justify-center gap-4">
-            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-blue-500/20">
-              SJ
+      <AnimatedSection className="relative z-10 py-20 lg:py-28">
+        <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-12 items-center">
+          {/* Left — image */}
+          <div className="relative order-2 lg:order-1">
+            <div className="absolute -inset-4 bg-blue-500/[0.04] blur-2xl rounded-2xl" />
+            <div className="relative rounded-2xl overflow-hidden border border-white/10">
+              <img
+                src="/images/tablet-skeleton-assessment.png"
+                alt="Worker viewing real-time skeletal risk assessment on tablet"
+                className="w-full h-auto object-cover"
+                style={{ maxHeight: 400 }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-l from-[#10131a]/60 via-transparent to-transparent" />
             </div>
-            <div className="text-left">
-              <p className="text-base font-bold text-white">Sarah Jenkins</p>
-              <p className="text-sm text-slate-400">Chief Safety Officer, Apex Manufacturing</p>
+          </div>
+
+          {/* Right — quote */}
+          <div className="space-y-8 order-1 lg:order-2">
+            <div>
+              <svg className="w-12 h-12 text-blue-500/20 mb-6" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M14.017 21v-7.391c0-5.704 3.731-9.57 8.983-10.609l.995 2.151c-2.432.917-3.995 3.638-3.995 5.849h4v10h-9.983zm-14.017 0v-7.391c0-5.704 3.748-9.57 9-10.609l.996 2.151c-2.433.917-3.996 3.638-3.996 5.849h3.983v10h-9.983z" />
+              </svg>
+              <blockquote className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white leading-tight">
+                "ErgoVigilance has transformed our safety culture from reactive to proactive.{' '}
+                <span className="text-blue-400">We're seeing risks before they become injuries.</span>"
+              </blockquote>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-blue-500/20">
+                SJ
+              </div>
+              <div>
+                <p className="text-base font-bold text-white">Sarah Jenkins</p>
+                <p className="text-sm text-slate-400">Chief Safety Officer, Apex Manufacturing</p>
+              </div>
             </div>
           </div>
         </div>
@@ -433,7 +533,6 @@ export default function LandingPage() {
         <div className="max-w-4xl mx-auto px-6">
           <AnimatedSection>
             <div className="relative bg-gradient-to-br from-blue-600/[0.08] via-[#10131a] to-cyan-600/[0.08] border border-blue-500/15 rounded-3xl p-12 lg:p-16 text-center overflow-hidden">
-              {/* Decorative glows */}
               <div className="absolute top-0 left-1/4 w-64 h-64 bg-blue-500/[0.06] blur-[80px] rounded-full" />
               <div className="absolute bottom-0 right-1/4 w-64 h-64 bg-cyan-500/[0.04] blur-[80px] rounded-full" />
               <div className="relative z-10">
@@ -459,7 +558,6 @@ export default function LandingPage() {
                     Log In to Dashboard
                   </Link>
                 </div>
-                {/* Trust row */}
                 <div className="flex items-center justify-center gap-6 mt-8 text-xs text-slate-500">
                   <span className="flex items-center gap-1.5"><Lock className="w-3 h-3 text-blue-400/50" /> Zero Cost Pilot</span>
                   <span className="flex items-center gap-1.5"><MonitorCheck className="w-3 h-3 text-blue-400/50" /> 30-Minute Setup</span>
@@ -477,7 +575,6 @@ export default function LandingPage() {
       <footer className="relative z-10 border-t border-white/5 bg-[#0b0e15]">
         <div className="max-w-7xl mx-auto px-6 py-16">
           <div className="grid md:grid-cols-4 gap-12">
-            {/* Brand */}
             <div className="md:col-span-2 space-y-4">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-blue-500/10">
@@ -490,8 +587,6 @@ export default function LandingPage() {
                 Protecting the workforce with technical precision.
               </p>
             </div>
-
-            {/* Platform */}
             <div className="space-y-4">
               <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400">Platform</h4>
               <div className="space-y-3">
@@ -500,8 +595,6 @@ export default function LandingPage() {
                 <Link to="/login" className="block text-sm text-slate-500 hover:text-white transition-colors">Dashboard</Link>
               </div>
             </div>
-
-            {/* Company */}
             <div className="space-y-4">
               <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400">Company</h4>
               <div className="space-y-3">
@@ -511,22 +604,14 @@ export default function LandingPage() {
               </div>
             </div>
           </div>
-
-          {/* Bottom bar */}
           <div className="mt-12 pt-8 border-t border-white/5 flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-xs text-slate-600">
               &copy; 2026 ErgoVigilance Systems. All rights reserved.
             </p>
             <div className="flex items-center gap-4 text-xs text-slate-600">
-              <span className="flex items-center gap-1.5">
-                <Lock className="w-3 h-3" /> 100% On-Premise
-              </span>
-              <span className="flex items-center gap-1.5">
-                <MonitorCheck className="w-3 h-3" /> No Wearables
-              </span>
-              <span className="flex items-center gap-1.5">
-                <ShieldCheck className="w-3 h-3" /> No Cloud Upload
-              </span>
+              <span className="flex items-center gap-1.5"><Lock className="w-3 h-3" /> 100% On-Premise</span>
+              <span className="flex items-center gap-1.5"><MonitorCheck className="w-3 h-3" /> No Wearables</span>
+              <span className="flex items-center gap-1.5"><ShieldCheck className="w-3 h-3" /> No Cloud Upload</span>
             </div>
           </div>
         </div>
