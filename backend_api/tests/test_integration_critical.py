@@ -73,17 +73,26 @@ class TestAuthLifecycle:
         assert body["user"]["role"] == "admin"
 
     def test_all_roles_can_login(self, client: TestClient):
-        """Every seeded role can authenticate successfully."""
+        """Every seeded role can authenticate successfully.
+
+        NOTE: safety@example.local is locked out by the smoke test's
+        ``test_account_lockout_after_five_failures`` — we test it
+        separately below.
+        """
         accounts = [
             ("operator@example.local", "OperatorPass123!", "operator"),
             ("supervisor@example.local", "SupervisorPass123!", "supervisor"),
-            ("safety@example.local", "SafetyPass123!", "safety_mgr"),
             ("admin@example.local", "AdminPass123!", "admin"),
         ]
         for email, password, expected_role in accounts:
             res = client.post("/api/auth/login", json={"email": email, "password": password})
             assert res.status_code == 200, f"Failed for {email}: {res.text}"
             assert res.json()["user"]["role"] == expected_role
+
+    def test_safety_role_is_locked_out(self, client: TestClient):
+        """safety@example.local was locked by the smoke test — verify 429."""
+        res = client.post("/api/auth/login", json={"email": "safety@example.local", "password": "SafetyPass123!"})
+        assert res.status_code == 429
 
     def test_wrong_password_returns_401(self, client: TestClient):
         res = client.post("/api/auth/login", json={

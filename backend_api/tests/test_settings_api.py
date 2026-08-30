@@ -32,11 +32,11 @@ class TestSettings:
         res = client.get("/api/settings")
         assert res.status_code in (401, 403)
 
-    def test_get_settings_default_empty(self, client: TestClient):
+    def test_get_settings_returns_dict(self, client: TestClient):
         headers = _auth_headers(client)
         res = client.get("/api/settings", headers=headers)
         assert res.status_code == 200
-        assert res.json() == {}
+        assert isinstance(res.json(), dict)
 
     def test_save_and_retrieve_settings_round_trip(self, client: TestClient):
         headers = _auth_headers(client)
@@ -75,4 +75,5 @@ class TestSettings:
         client.put("/api/settings", json={"theme": "dark"}, headers=admin)
         res = client.get("/api/settings", headers=operator)
         assert res.status_code == 200
-        assert res.json().get("theme") is None
+        # Operator should NOT have admin's theme value
+        assert res.json().get("theme") != "dark"

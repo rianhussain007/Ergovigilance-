@@ -6,7 +6,7 @@ import time
 from datetime import date, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from app.core.auth import get_current_user, require_live_session_access, require_roles
 from app.core.database import (
     count_users,
@@ -165,7 +165,10 @@ async def get_dashboard(
     service = get_live_service_or_none()
     if service is not None:
         require_live_session_access(user, service)
-    return await repo.get_dashboard()
+    try:
+        return await repo.get_dashboard()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Live monitoring service is unavailable.") from exc
 
 
 @router.get("/session/latest", response_model=DashboardResponse)
