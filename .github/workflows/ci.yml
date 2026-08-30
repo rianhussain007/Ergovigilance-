@@ -66,3 +66,18 @@ jobs:
 
       - name: Python dependency audit (fail on known vulnerabilities)
         run: pip-audit -r backend_api/requirements.txt --progress-spinner off
+
+  docker-build:
+    name: Docker (build verification)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build backend image
+        run: docker build -f backend_api/Dockerfile -t ergovigilance-backend:test .
+
+      - name: Build frontend image
+        run: docker build -f ui_posture/Dockerfile -t ergovigilance-frontend:test .
+
+      - name: Verify docker-compose config
+        run: docker compose config --quiet
