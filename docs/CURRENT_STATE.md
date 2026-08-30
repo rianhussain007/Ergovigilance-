@@ -128,10 +128,10 @@ The following features shipped between 2026-07-07 and 2026-08-20 (80+ commits):
 
 | Suite | Count | What it covers |
 |-------|-------|----------------|
-| `pytest backend_api/tests` | 36 | Auth, live monitor, retention, migrations, privacy, API smoke |
+| `pytest backend_api/tests` | 59 test files, 93+ tests | Auth, alerts, settings, privacy, pilot requests, users, retention, migrations, live monitor, API smoke, integration |
 | Legacy `scripts/test_*.py` | 22 scripts | Context engine, alerts, history, recommendations, trend/safety reports, persistence, sprint integrations |
-| `vitest` (ui_posture) | 5 smoke tests | Login → dashboard → sessions → alerts → backend-down error |
-| **Total** | **63 automated tests + 22 scripts** | |
+| `vitest` (ui_posture) | 7 smoke tests | Login → dashboard → sessions → alerts → Settings page → Reports page → backend-down error |
+| **Total** | **115+ automated tests + 22 scripts** | |
 
 CI runs on every push/PR via GitHub Actions (`.github/workflows/ci.yml`):
 - **Frontend**: `npm ci` → `npm run lint` (tsc) → `npm run build` → `npm audit`
@@ -143,9 +143,9 @@ CI runs on every push/PR via GitHub Actions (`.github/workflows/ci.yml`):
 
 1. **Single-person tracking** — `num_poses=1` default; multi-person reads bounding boxes but only the primary person is scored. Per-worker isolation is the follow-up.
 2. **CPU-only inference** — ~15-20 FPS at 640×480 on a laptop CPU (MediaPipe lite). Full model is 2-4× slower.
-3. **Heuristic thresholds** — risk bands are tuned against a 30,698-pose REBA dataset but **not clinically validated**. The accuracy claim (76.86%) is model-vs-threshold self-consistency, not human ground truth. Ground-truth labeling is in progress.
+3. **Heuristic thresholds** — risk bands are tuned against a 30,698-pose REBA dataset but **not clinically validated**. Ground-truth accuracy is **87.6%** (500 human-labeled frames, `results/ground_truth_evaluation.json`). The model-vs-threshold self-consistency is 76.9%.
 4. **One room / one camera** — the whole pipeline has been validated by one person in one setup. Multi-site generalizability is unproven.
-5. **No WebSocket consumption** — the React frontend uses HTTP polling (1-2 s intervals). WebSocket endpoints exist but are unused.
-6. **Static fallback pages** — Multi-Camera, Audit Trail, and some Deployment widgets still show placeholder data.
-7. **In-memory alerts** — alerts are lost on backend restart; not persisted across sessions.
+5. **WebSocket integration** — frontend WebSocket hooks are wired with HTTP polling fallback. Both paths work.
+6. **Alert persistence** — alerts are persisted to SQLite via the AlertEngine (survives restarts).
+7. **Multi-camera page** — fetches real camera data from the API; shows live feeds and station risk ranking.
 8. **Single-backend design** — one `LiveMonitoringService` singleton per process. Multi-camera = multiple backend processes.

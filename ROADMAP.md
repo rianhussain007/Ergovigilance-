@@ -1,6 +1,6 @@
 # Ergovigilance — Remaining Tasks (Roadmap)
 
-Status as of **2026-08-07**: CI is green for the first time (run `31190381521`).
+Status as of **2026-08-30**: CI green. 87.6% ground-truth accuracy. Docker hardened. 115+ tests.
 Everything below is what still needs doing, roughly in priority order. Each item
 has an acceptance criterion so it is unambiguous when done.
 

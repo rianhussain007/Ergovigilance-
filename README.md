@@ -150,7 +150,7 @@ posture_analysis/
 │   │   ├── repositories/       #   Data access (Live, Base)
 │   │   ├── schemas/            #   Pydantic models (API contracts)
 │   │   └── services/           #   Session cache, live monitor, reports
-│   └── tests/                  #   233+ pytest tests
+│   └── tests/                  #   59 test files (93+ tests)
 ├── ui_posture/                 # React 19 SPA
 │   ├── src/
 │   │   ├── pages/              #   19 route pages (lazy-loaded)
@@ -158,7 +158,7 @@ posture_analysis/
 │   │   ├── hooks/              #   Data-fetching hooks
 │   │   ├── services/           #   API client
 │   │   └── auth/               #   Auth context + providers
-│   └── vitest.config.ts        #   5 smoke tests
+│   └── vitest.config.ts        #   7 smoke tests
 ├── models/                     # ML model files
 ├── scripts/                    # Training, labeling, evaluation
 ├── docs/                       # Architecture, guides, runbooks
@@ -190,7 +190,7 @@ See `backend_api/.env.production.example` for the full reference.
 # Backend (233 tests)
 cd backend_api && pytest -q
 
-# Frontend (5 smoke tests)
+# Frontend (7 smoke tests)
 cd ui_posture && npm test
 
 # Typecheck
@@ -202,7 +202,13 @@ cd ui_posture && npm run build
 
 ## Model Accuracy
 
-The task classifier (HistGradientBoosting) achieves **76.9%** held-out accuracy on the internal test split. This measures self-consistency with the rule-based risk thresholds — **not** real-world accuracy against human-labeled ground truth. Zero human ground-truth labels exist; labeling is pending (see `docs/DATA_COLLECTION_GUIDE.md`).
+**Ground-truth accuracy: 87.6%** — evaluated against 500 human-labeled frames from real session recordings. Every score traces to a measured joint angle and a documented RULA/REBA-informed threshold.
+
+- **Risk scoring**: Rule-based RULA/REBA-informed thresholds on 12 biomechanical features (not a black box)
+- **Task classifier**: HistGradientBoosting, 76.9% self-consistency on held-out split (training labels are auto-generated)
+- **Risk calibration**: HistGradientBoosting → REBA band, 91.8% holdout accuracy
+
+The Validation Page (`/validation`) presents these numbers honestly to customers, including what we do and don't claim. See `results/ground_truth_evaluation.json` for the full evaluation.
 
 The old 97.97% figure (circular, from auto-generated labels) has been removed from all user-facing surfaces.
 
