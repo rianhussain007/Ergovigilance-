@@ -1,0 +1,61 @@
+# ── Version control ────────────────────────────────────────────────
+.git
+.gitignore
+.github
+
+# ── Node (frontend build deps — npm ci reinstalls inside container) ─
+node_modules
+ui_posture/node_modules
+ui_posture/dist
+ui_posture/.vite
+
+# ── Python caches ─────────────────────────────────────────────────
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.eggs
+*.egg
+
+# ── Data & datasets (large, not needed in image) ──────────────────
+data/
+data/datasets/
+outputs/
+recordings/
+models/*.task
+
+# ── Database files ────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Environment / secrets (NEVER ship to image) ──────────────────
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# ── Dev / IDE ─────────────────────────────────────────────────────
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Test artifacts ────────────────────────────────────────────────
+.coverage
+htmlcov/
+.pytest_cache/
+test_jobs_*.db
+
+# ── Documentation & slides ───────────────────────────────────────
+docs/
+*.pptx
+*.pdf
+*.md
+!backend_api/requirements.txt
+
+# ── Credentials (auto-generated) ─────────────────────────────────
+SEED_CREDENTIALS.local.txt

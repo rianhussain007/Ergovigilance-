@@ -57,6 +57,7 @@ describe('frontend smoke', () => {
 
   it('renders the login page and signs in to the dashboard', async () => {
     const user = userEvent.setup();
+    localStorage.setItem('ergovigilance_onboarded', 'true');
     renderApp();
 
     // /login renders the sign-in form (no stored auth).
@@ -78,6 +79,7 @@ describe('frontend smoke', () => {
 
   it('shows the live monitoring page for a signed-in operator', async () => {
     const user = userEvent.setup();
+    localStorage.setItem('ergovigilance_onboarded', 'true');
     renderApp();
     await screen.findByRole('heading', { name: /sign in/i }, { timeout: 10000 });
     await user.click(screen.getByRole('button', { name: /sign in/i }));
@@ -94,6 +96,7 @@ describe('frontend smoke', () => {
 
   it('loads the sessions list', async () => {
     const user = userEvent.setup();
+    localStorage.setItem('ergovigilance_onboarded', 'true');
     renderApp();
     await screen.findByRole('heading', { name: /sign in/i }, { timeout: 10000 });
     await user.click(screen.getByRole('button', { name: /sign in/i }));
@@ -113,6 +116,7 @@ describe('frontend smoke', () => {
 
   it('renders the alert center with no-alerts state', async () => {
     const user = userEvent.setup();
+    localStorage.setItem('ergovigilance_onboarded', 'true');
     renderApp();
     await screen.findByRole('heading', { name: /sign in/i }, { timeout: 10000 });
     await user.click(screen.getByRole('button', { name: /sign in/i }));
@@ -122,6 +126,41 @@ describe('frontend smoke', () => {
     await waitFor(
       () => {
         expect(screen.getByText(/no alerts visible for your current scope/i)).toBeInTheDocument();
+      },
+      { timeout: 10000 },
+    );
+  });
+
+  it('renders the settings page', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem('ergovigilance_onboarded', 'true');
+    renderApp();
+    await screen.findByRole('heading', { name: /sign in/i }, { timeout: 10000 });
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
+    await screen.findByRole('heading', { name: /my dashboard/i }, { timeout: 10000 });
+
+    await user.click(screen.getByRole('link', { name: /settings/i }));
+    await waitFor(
+      () => {
+        expect(screen.getByText(/settings/i)).toBeInTheDocument();
+      },
+      { timeout: 10000 },
+    );
+  });
+
+  it('renders the reports page', async () => {
+    const user = userEvent.setup();
+    localStorage.setItem('ergovigilance_onboarded', 'true');
+    renderApp();
+    await screen.findByRole('heading', { name: /sign in/i }, { timeout: 10000 });
+    await user.click(screen.getByRole('button', { name: /sign in/i }));
+    await screen.findByRole('heading', { name: /my dashboard/i }, { timeout: 10000 });
+
+    await user.click(screen.getByRole('link', { name: /reports/i }));
+    // Reports page has a 'Generate Now' button and digest section
+    await waitFor(
+      () => {
+        expect(screen.getByText(/generate, search, and download/i)).toBeInTheDocument();
       },
       { timeout: 10000 },
     );

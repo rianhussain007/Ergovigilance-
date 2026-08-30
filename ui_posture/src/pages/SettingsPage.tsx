@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { 
   Sun, Moon, Monitor, Camera, RefreshCw, Bell, Save, HardDrive, 
-  AlertTriangle, Brain, Activity, Cpu, Zap, FileText, BarChart3, 
-  Users, Settings as SettingsIcon, ToggleLeft, ToggleRight
+  AlertTriangle, Brain, Activity, Cpu, Zap, FileText, BarChart3,
+  Users, Settings as SettingsIcon, ToggleLeft, ToggleRight,
+  Mail, MessageSquare, ExternalLink
 } from 'lucide-react';
 import { useTheme } from '@/src/hooks/useTheme';
 import { useToast } from '@/src/hooks/useToast';
@@ -262,6 +263,8 @@ export default function SettingsPage() {
           </div>
         </SettingSection>
 
+        <NotificationConfigCard />
+
         {/* ── AI & Analytics Section ──────────────────────────────── */}
         <div className="border-b border-outline-variant/30 pt-md pb-md">
           <div className="flex items-center gap-sm mb-md">
@@ -413,6 +416,123 @@ export default function SettingsPage() {
       <button onClick={handleSave} disabled={!dirty && !retentionDirty} className={`flex items-center gap-sm px-lg py-md rounded-lg font-body-md font-bold transition-all ${dirty || retentionDirty ? 'bg-primary text-on-primary hover:brightness-110' : 'bg-surface-container-high text-on-surface-variant cursor-not-allowed'}`}>
         <Save className="w-5 h-5" /> Save Settings
       </button>
+    </div>
+  );
+}
+
+function NotificationConfigCard() {
+  const [config, setConfig] = useState<{
+    smtp_configured: boolean;
+    smtp_host: string;
+    smtp_port: number;
+    smtp_from: string;
+    slack_configured: boolean;
+    recipients: string[];
+    min_severity: string;
+  } | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/settings/notifications')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && data) setConfig(data);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading) return null;
+
+  return (
+    <div className="bg-surface-container border border-outline-variant rounded-xl p-lg">
+      <div className="flex items-center gap-md mb-md">
+        <Mail className="w-5 h-5 text-primary" />
+        <h3 className="text-headline-md font-bold text-on-surface">Email & Slack Delivery</h3>
+      </div>
+      <p className="text-[11px] text-on-surface-variant mb-md">
+        Configure via environment variables in your .env file. Changes require a backend restart.
+      </p>
+
+      <div className="space-y-sm">
+        {/* SMTP Status */}
+        <div className="flex items-center justify-between p-sm rounded-lg bg-surface-container-low">
+          <div className="flex items-center gap-sm">
+            <Mail className="w-4 h-4 text-on-surface-variant" />
+            <span className="text-body-sm text-on-surface">Email (SMTP)</span>
+          </div>
+          <div className="flex items-center gap-sm">
+            {config?.smtp_configured ? (
+              <span className="text-[10px] font-bold text-green-400 bg-green-500/10 px-sm py-xs rounded-full">
+                CONFIGURED
+              </span>
+            ) : (
+              <span className="text-[10px] font-bold text-on-surface-variant bg-surface-container-highest px-sm py-xs rounded-full">
+                NOT SET
+              </span>
+            )}
+          </div>
+        </div>
+        {config?.smtp_configured && (
+          <div className="text-[10px] text-on-surface-variant pl-8">
+            {config.smtp_host}:{config.smtp_port} → {config.smtp_from}
+          </div>
+        )}
+
+        {/* Slack Status */}
+        <div className="flex items-center justify-between p-sm rounded-lg bg-surface-container-low">
+          <div className="flex items-center gap-sm">
+            <MessageSquare className="w-4 h-4 text-on-surface-variant" />
+            <span className="text-body-sm text-on-surface">Slack Webhook</span>
+          </div>
+          <div className="flex items-center gap-sm">
+            {config?.slack_configured ? (
+              <span className="text-[10px] font-bold text-green-400 bg-green-500/10 px-sm py-xs rounded-full">
+                CONFIGURED
+              </span>
+            ) : (
+              <span className="text-[10px] font-bold text-on-surface-variant bg-surface-container-highest px-sm py-xs rounded-full">
+                NOT SET
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Recipients */}
+        <div className="flex items-center justify-between p-sm rounded-lg bg-surface-container-low">
+          <span className="text-body-sm text-on-surface">Alert Recipients</span>
+          <span className="text-[11px] text-on-surface-variant font-mono">
+            {config?.recipients?.length ? config.recipients.join(', ') : 'None configured'}
+          </span>
+        </div>
+
+        {/* Min Severity */}
+        <div className="flex items-center justify-between p-sm rounded-lg bg-surface-container-low">
+          <span className="text-body-sm text-on-surface">Min Severity for Email</span>
+          <span className="text-[11px] text-on-surface-variant font-mono">
+            {config?.min_severity || 'HIGH'}
+          </span>
+        </div>
+      </div>
+
+      {/* Config Guide */}
+      <div className="mt-md p-sm rounded-lg bg-surface-container-low border border-outline-variant/50">
+        <p className="text-[10px] font-bold text-on-surface mb-xs">Environment Variables:</p>
+        <pre className="text-[9px] text-on-surface-variant font-mono whitespace-pre-wrap leading-relaxed">
+{`SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=alerts@yourcompany.com
+SMTP_PASS=your-app-password
+SMTP_FROM=alerts@yourcompany.com
+ALERT_RECIPIENTS=safety@yourcompany.com
+MIN_EMAIL_SEVERITY=HIGH
+SLACK_WEBHOOK_URL=https://hooks.slack.com/...`}
+        </pre>
+      </div>
     </div>
   );
 }
