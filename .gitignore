@@ -33,10 +33,52 @@ server_error.txt
 vite_log.txt
 backend_log.txt
 frontend_pid.txt
+backend_error.log
+backend_output.log
+backend_stderr.log
+backend_stdout.log
+backend_predictions.log
+backend_restart_stderr.log
+backend_restart_stdout.log
+backend_startup.log
+backend_verify.log
+endurance_results.json
+endurance_stderr.log
+endurance_stdout.log
+endurance_test.ps1
+exports_modal.png
+label_server.log
+no_export.png
+reports_toast_search_verified.png
+test_restart.ps1
+test_restart.py
+test_rula_manual.py
+vite.log
+vite_dashboard.log
+vite_dashboard_err.log
+vite_err.log
+vite_live.log
+vite_startup.log
+.env.demo
 
 # Runtime retention overrides set from the Settings UI
 config/retention.json
 
+
+# Stray root files
+package.json
+package-lock.json
+
+# Training data (large binaries)
+data/datasets/
+
+# Testing artifacts
+results/ui_comparison/
+scripts/capture_*.mjs
+scripts/screenshot_comparison.mjs
+
+# Presentation files
+*.pptx
 
 # Landing-page assets (the global *.png/*.jpg ignore would otherwise drop them)
 !ui_posture/public/images/dashboard-operator.png
