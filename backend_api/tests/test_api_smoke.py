@@ -87,6 +87,9 @@ def test_login_wrong_password_rejected(client: TestClient):
 
 def test_account_lockout_after_five_failures(client: TestClient):
     """5 failed attempts on one account → 6th (even with the right password) → 429."""
+    # Use safety@example.local — its 5 bad-password attempts below will
+    # lock the account for the remainder of the test suite, which is fine
+    # because integration tests skip this email.
     email, password = "safety@example.local", "SafetyPass123!"
     for _ in range(5):
         res = client.post("/api/auth/login", json={"email": email, "password": "bad-password"})

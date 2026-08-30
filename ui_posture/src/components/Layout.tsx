@@ -94,6 +94,19 @@ export default function Layout() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [demoMode, setDemoMode] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 1024);
+
+  useEffect(() => {
+    const mql = window.matchMedia('(max-width: 1023px)');
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
+    mql.addEventListener('change', handler);
+    return () => mql.removeEventListener('change', handler);
+  }, []);
+
+  // Auto-collapse sidebar when entering mobile
+  useEffect(() => {
+    if (isMobile) setSidebarCollapsed(true);
+  }, [isMobile]);
   const [showOnboarding, setShowOnboarding] = useState(() => {
     // Show onboarding for new users (first login) unless they've completed it or are in demo mode
     return !localStorage.getItem('ergovigilance_onboarded') && !isDemoMode;

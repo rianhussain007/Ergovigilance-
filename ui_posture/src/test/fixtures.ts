@@ -10,10 +10,6 @@ import { vi } from 'vitest';
  * endpoint we forgot to stub fails loudly instead of silently passing.
  */
 
-export interface FetchMockHandler {
-  (url: string, init?: RequestInit): Promise<Response>;
-}
-
 export function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -71,6 +67,24 @@ const ANALYTICS = {
   weekly_risk_trend: [],
 };
 
+const WORKERS = [
+  { worker_id: 'worker-001', employee_id: 'EMP-001', name: 'Asha Patel', department: 'Assembly', shift: 'Day' },
+  { worker_id: 'worker-002', employee_id: 'EMP-002', name: 'Rohan Mehta', department: 'Inspection', shift: 'Evening' },
+];
+
+const DEPLOYMENT = {
+  backend: { status: 'healthy', version: '0.1.0', uptime: 3600 },
+  frontend: { status: 'healthy', version: '0.1.0' },
+  database: { status: 'healthy', type: 'sqlite' },
+  cameras: 0,
+};
+
+const AUDIT_LOG = [
+  { id: 'AUD-001', actor_email: 'admin@example.local', action_type: 'user_login', timestamp: '2026-08-29T12:00:00Z' },
+];
+
+const RECORDINGS = { recordings: [] };
+
 const SNAPSHOT = {
   session_id: 'SESH-TEST',
   timestamp: '2026-08-15T00:00:00Z',
@@ -88,12 +102,21 @@ const SNAPSHOT = {
   approximate_features: [],
 };
 
+/** Fetch-mock handler: receives the URL and optional RequestInit, returns JSON data. */
+export type FetchMockHandler = (url: string, init?: RequestInit) => unknown;
+
 /** Default fixture map for the smoke flow. */
-export const FIXTURES: Record<string, () => unknown> = {
-  'POST:/api/auth/login': () => ({
-    token: 'header.payload.signature',
-    user: { id: 1, email: 'operator@example.local', role: 'operator' },
-  }),
+export const FIXTURES: Record<string, FetchMockHandler | (() => unknown)> = {
+  'POST:/api/auth/login': (_url, init) => {
+    // Parse body to return role-appropriate response
+    try {
+      const body = JSON.parse(init?.body as string || '{}');
+      if (body.email?.includes('admin')) {
+        return { token: 'header.payload.signature', user: { id: 1, email: 'admin@example.local', role: 'admin' } };
+      }
+    } catch {}
+    return { token: 'header.payload.signature', user: { id: 1, email: 'operator@example.local', role: 'operator' } };
+  },
   'GET:/api/dashboard': () => DASHBOARD,
   'GET:/api/sessions': () => SESSIONS,
   'GET:/api/alerts': () => EMPTY_ALERTS,
@@ -102,7 +125,23 @@ export const FIXTURES: Record<string, () => unknown> = {
   'GET:/api/context/snapshot': () => SNAPSHOT,
   'GET:/api/context': () => SNAPSHOT,
   'GET:/api/session/timeline/recent': () => ({ timeline: [] }),
-  'GET:/api/recordings': () => ({ recordings: [] }),
+  'GET:/api/recordings': () => RECORDINGS,
+  'GET:/api/workers': () => WORKERS,
+  'GET:/api/deployment': () => DEPLOYMENT,
+  'GET:/api/audit': () => AUDIT_LOG,
+  'GET:/api/settings': () => ({ theme: 'dark' }),
+  'GET:/api/settings/notifications': () => ({
+    smtp_configured: false,
+    slack_configured: false,
+    recipients: [],
+    min_severity: 'HIGH',
+  }),
+  'GET:/api/setup/status': () => ({
+    cameras_detected: 0,
+    model_available: false,
+    db_healthy: true,
+    ws_configured: false,
+  }),
   // Bare arrays: ApiDashboardRepository.getCameras()/getReports() return
   // CameraInfo[] / ReportRecord[] directly via res.json() (see the repo).
   'GET:/api/cameras': () => [],
@@ -123,7 +162,7 @@ export const FIXTURES: Record<string, () => unknown> = {
  * Build a fetch mock from the fixture map. Any request not in the map
  * returns 404 so unmocked endpoints surface immediately in tests.
  */
-export function createFetchMock(fixtures: Record<string, () => unknown> = FIXTURES) {
+export function createFetchMock(fixtures: Record<string, FetchMockHandler | (() => unknown)> = FIXTURES as Record<string, FetchMockHandler | (() => unknown)>) {
   return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : String(input);
     const method = (init?.method ?? 'GET').toUpperCase();
@@ -133,6 +172,6 @@ export function createFetchMock(fixtures: Record<string, () => unknown> = FIXTUR
     if (!maker) {
       return jsonResponse({ detail: `Unmocked endpoint ${key} — add a fixture` }, 404);
     }
-    return jsonResponse(maker());
+    return jsonResponse(maker(url, init));
   });
 }
