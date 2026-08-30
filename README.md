@@ -8,6 +8,16 @@
   <em>Live monitoring dashboard with real-time risk scoring, ergonomic feature analysis, and AI-powered recommendations</em>
 </p>
 
+## Screenshots
+
+| Dashboard | Live Monitoring | Reports |
+|---|---|---|
+| ![Dashboard](ui_posture/public/images/dashboard-operator.png) | ![Live Camera](ui_posture/public/images/live_camera.png) | ![History](ui_posture/public/images/history.png) |
+
+| Multi-Camera | Landing Page | AI Assistant |
+|---|---|---|
+| ![Command Center](ui_posture/public/images/command-center-monitors.png) | ![Hero](ui_posture/public/images/hero-factory-worker.png) | ![Tablet](ui_posture/public/images/tablet-skeleton-assessment.png) |
+
 ## What It Does
 
 ErgoVigilance watches a worker through an ordinary webcam, detects body pose in real time using MediaPipe, converts the skeleton into biomechanical risk scores (RULA/REBA), and gives:

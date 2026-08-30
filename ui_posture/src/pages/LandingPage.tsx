@@ -188,10 +188,9 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-6 pt-12 pb-16 lg:pt-20 lg:pb-24">
           {/* Top: Copy + CTAs */}
           <div className="max-w-4xl mx-auto text-center space-y-8">
-            <AnimatedSection delay={100}>
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-blue-500/20 bg-blue-500/[0.08] text-xs font-semibold text-blue-400 uppercase tracking-wider">
+            <AnimatedSection delay={100}>                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-blue-500/20 bg-blue-500/[0.08] text-xs font-semibold text-blue-400 uppercase tracking-wider">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                System Online — v2.4.1
+                System Online
               </div>
             </AnimatedSection>
             <AnimatedSection delay={200}>
@@ -653,8 +652,8 @@ export default function LandingPage() {
               <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400">Company</h4>
               <div className="space-y-3">
                 <Link to="/request-pilot" className="block text-sm text-slate-500 hover:text-white transition-colors">Request Pilot</Link>
-                <a href="#" className="block text-sm text-slate-500 hover:text-white transition-colors">Privacy Policy</a>
-                <a href="#" className="block text-sm text-slate-500 hover:text-white transition-colors">Terms of Service</a>
+                <Link to="/validation" className="block text-sm text-slate-500 hover:text-white transition-colors">Validation</Link>
+                <a href="mailto:contact@ergovigilance.com" className="block text-sm text-slate-500 hover:text-white transition-colors">Contact</a>
               </div>
             </div>
           </div>
