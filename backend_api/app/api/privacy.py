@@ -93,3 +93,97 @@ async def delete_worker_data(
     )
 
     return {"status": "ok", **result}
+
+
+@router.get("/privacy/export-worker-data/{worker_id}")
+async def export_worker_data(
+    worker_id: str,
+    user: AuthenticatedUser = Depends(require_roles("admin", "safety_mgr")),
+):
+    """GDPR Article 20 — Data Portability.
+
+    Exports all data attributable to a worker as a downloadable JSON bundle:
+    - Worker profile
+    - Session history
+    - Alert history
+    - Recommendations
+    - Consent records
+
+    Returns a JSON response that can be saved or downloaded.
+    """
+    safe_id = Path(worker_id).name
+    if safe_id != worker_id or safe_id in {"", ".", ".."}:
+        raise HTTPException(status_code=400, detail="Invalid worker_id")
+
+    from app.core.database import get_connection
+    conn = get_connection()
+
+    # Worker profile
+    worker_row = conn.execute(
+        "SELECT * FROM workers WHERE worker_id = ?", (safe_id,)
+    ).fetchone()
+
+    worker_profile = None
+    if worker_row:
+        worker_profile = {k: worker_row[k] for k in worker_row.keys()}
+
+    # Sessions for this worker
+    sessions = []
+    sessions_dir = Path("outputs/sessions")
+    if sessions_dir.is_dir():
+        for f in sessions_dir.glob("*.json"):
+            try:
+                import json
+                data = json.loads(f.read_text(encoding="utf-8"))
+                if data.get("worker_id") == safe_id:
+                    sessions.append(data)
+            except Exception:
+                continue
+
+    # Alerts for this worker
+    alert_rows = conn.execute(
+        "SELECT * FROM alerts WHERE worker_id = ? ORDER BY created_at DESC",
+        (safe_id,),
+    ).fetchall()
+    alerts = [{k: row[k] for k in row.keys()} for row in alert_rows]
+
+    # Consent records
+    consent_rows = conn.execute(
+        "SELECT * FROM worker_consent WHERE worker_id = ?",
+        (safe_id,),
+    ).fetchall()
+    consents = [{k: row[k] for k in row.keys()} for row in consent_rows]
+
+    export = {
+        "export_info": {
+            "worker_id": safe_id,
+            "exported_at": datetime.now(timezone.utc).isoformat(),
+            "exported_by": user.email,
+            "gdpr_article": "Article 20 — Right to Data Portability",
+            "format": "JSON",
+        },
+        "worker_profile": worker_profile,
+        "sessions": sessions,
+        "alerts": alerts,
+        "consent_records": consents,
+        "summary": {
+            "total_sessions": len(sessions),
+            "total_alerts": len(alerts),
+            "total_consents": len(consents),
+        },
+    }
+
+    # Log the export for audit
+    insert_audit_log(
+        id=f"AUD-{uuid.uuid4().hex[:8].upper()}",
+        actor_id=user.id,
+        actor_email=user.email,
+        actor_role=user.role,
+        action_type="worker_data_exported",
+        target_type="worker",
+        target_id=safe_id,
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        details=f"sessions={len(sessions)} alerts={len(alerts)}",
+    )
+
+    return export

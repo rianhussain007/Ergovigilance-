@@ -97,6 +97,13 @@ async def metrics() -> Response:
     return Response(content=generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST)
 
 
+@router.get("/sla", include_in_schema=False)
+async def sla_status() -> dict:
+    """SLA compliance status — availability, response times, incidents."""
+    from app.core.sla_monitor import sla_monitor
+    return sla_monitor.get_status()
+
+
 async def http_metrics_middleware(request: Request, call_next):
     """Count every HTTP request by method, path, and response status."""
     response = await call_next(request)

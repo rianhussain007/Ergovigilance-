@@ -1,0 +1,107 @@
+# Deny all ingress by default, then allow specific flows
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: ergovigilance
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+---
+# Allow frontend -> backend
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-to-backend
+  namespace: ergovigilance
+spec:
+  podSelector:
+    matchLabels:
+      app: ergovigilance-backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: ergovigilance-frontend
+      ports:
+        - port: 8000
+          protocol: TCP
+    - from:
+        - podSelector:
+            matchLabels:
+              app: ergovigilance-ingress
+      ports:
+        - port: 8000
+          protocol: TCP
+---
+# Allow backend -> postgres
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-to-postgres
+  namespace: ergovigilance
+spec:
+  podSelector:
+    matchLabels:
+      app: ergovigilance-postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: ergovigilance-backend
+      ports:
+        - port: 5432
+          protocol: TCP
+---
+# Allow DNS resolution for all pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: ergovigilance
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+# Allow backend egress (SMTP, webhooks, external APIs)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-egress
+  namespace: ergovigilance
+spec:
+  podSelector:
+    matchLabels:
+      app: ergovigilance-backend
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: ergovigilance-postgres
+      ports:
+        - port: 5432
+    - to: []  # Allow outbound to external services (SMTP, webhooks)
+      ports:
+        - port: 443
+          protocol: TCP
+        - port: 587
+          protocol: TCP
+        - port: 25
+          protocol: TCP

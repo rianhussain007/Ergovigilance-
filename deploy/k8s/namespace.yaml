@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ergovigilance
+  labels:
+    app.kubernetes.io/name: ergovigilance
+    app.kubernetes.io/part-of: ergovigilance

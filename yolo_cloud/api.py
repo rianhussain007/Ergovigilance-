@@ -883,6 +883,72 @@ async def list_api_keys(tenant: dict = Depends(require_api_key)):
         raise HTTPException(500, f"Failed to list keys: {exc}")
 
 
+@router.post("/api-keys/{key_id}/rotate")
+async def rotate_api_key(key_id: str, tenant: dict = Depends(require_api_key)):
+    """Rotate an API key — generates a new key and deactivates the old one."""
+    import secrets
+    conn = storage.get_connection()
+    if conn is None:
+        raise HTTPException(503, "PostgreSQL not configured")
+    try:
+        # Verify the key belongs to this tenant
+        row = conn.execute(
+            "SELECT key_id, tenant_id FROM cloud_api_keys WHERE key_id = %s AND tenant_id = %s",
+            (key_id, tenant.get("tenant_id", "default")),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "API key not found")
+
+        # Generate new key
+        new_key = f"ev_{secrets.token_urlsafe(32)}"
+        new_key_hash = hashlib.sha256(new_key.encode()).hexdigest()
+
+        # Deactivate old key
+        conn.execute(
+            "UPDATE cloud_api_keys SET is_active = FALSE WHERE key_id = %s",
+            (key_id,),
+        )
+
+        # Create new key
+        conn.execute(
+            "INSERT INTO cloud_api_keys (key_id, key_hash, name, tenant_id, is_active, created_at) VALUES (%s, %s, %s, %s, TRUE, NOW())",
+            (key_id + "-rotated", new_key_hash, f"Rotated {datetime.now().strftime('%Y-%m-%d')}", tenant.get("tenant_id", "default")),
+        )
+        conn.commit()
+
+        logger.info("API key rotated for tenant %s", tenant.get("tenant_id"))
+        return {
+            "new_key": new_key,
+            "message": "Store this key securely — it will not be shown again",
+            "old_key_deactivated": True,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(500, f"Failed to rotate key: {exc}")
+
+
+@router.delete("/api-keys/{key_id}")
+async def revoke_api_key(key_id: str, tenant: dict = Depends(require_api_key)):
+    """Revoke (deactivate) an API key."""
+    conn = storage.get_connection()
+    if conn is None:
+        raise HTTPException(503, "PostgreSQL not configured")
+    try:
+        result = conn.execute(
+            "UPDATE cloud_api_keys SET is_active = FALSE WHERE key_id = %s AND tenant_id = %s",
+            (key_id, tenant.get("tenant_id", "default")),
+        )
+        conn.commit()
+        if result.rowcount == 0:
+            raise HTTPException(404, "API key not found")
+        return {"status": "revoked", "key_id": key_id}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(500, f"Failed to revoke key: {exc}")
+
+
 # -- WebSocket for live camera data streaming -----------------------------
 
 _ws_clients: set = set()
@@ -967,8 +1033,25 @@ def create_app() -> "FastAPI":
 
     _app = FastAPI(
         title="ErgoVigilance Cloud Core",
-        description="YOLO-powered ergonomic risk monitoring for RTSP camera streams",
+        description="""YOLO-powered ergonomic risk monitoring for RTSP camera streams.
+
+## Authentication
+
+All endpoints require an API key via one of:
+- Header: `X-API-Key: ev_your_key_here`
+- Bearer: `Authorization: Bearer ev_your_key_here`
+
+## Rate Limits
+- 100 requests per minute per API key
+- 1000 requests per minute per tenant
+
+## Webhooks
+
+Configure webhook URLs to receive real-time alert notifications.
+All payloads are signed with HMAC-SHA256 for verification.""",
         version="1.0.0",
+        docs_url="/docs",
+        redoc_url="/redoc",
     )
 
     _app.add_middleware(
@@ -979,12 +1062,51 @@ def create_app() -> "FastAPI":
         allow_headers=["*"],
     )
 
+    # Customize OpenAPI schema with security schemes
+    def custom_openapi():
+        if _app.openapi_schema:
+            return _app.openapi_schema
+        from fastapi.openapi.utils import get_openapi
+        schema = get_openapi(
+            title=_app.title,
+            version=_app.version,
+            description=_app.description,
+            routes=_app.routes,
+        )
+        schema["components"] = schema.get("components", {})
+        schema["components"]["securitySchemes"] = {
+            "ApiKeyAuth": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "X-API-Key",
+                "description": "API key for tenant authentication",
+            },
+            "BearerAuth": {
+                "type": "http",
+                "scheme": "bearer",
+                "description": "Bearer token (API key)",
+            },
+        }
+        schema["security"] = [{"ApiKeyAuth": []}, {"BearerAuth": []}]
+        _app.openapi_schema = schema
+        return schema
+
+    _app.openapi = custom_openapi
+
     # Rate limiting (must be added before routers)
     try:
         from yolo_cloud.rate_limit import CloudRateLimitMiddleware
         _app.add_middleware(CloudRateLimitMiddleware)
     except ImportError:
         logger.warning("Rate limiter not available, skipping")
+
+    # Tenant isolation (must be added before routers)
+    try:
+        from yolo_cloud.tenant_middleware import TenantIsolationMiddleware, TenantContextMiddleware
+        _app.add_middleware(TenantContextMiddleware)
+        _app.add_middleware(TenantIsolationMiddleware)
+    except ImportError:
+        logger.warning("Tenant middleware not available, skipping")
 
     _app.include_router(router, prefix="/api")
 
