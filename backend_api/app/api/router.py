@@ -40,6 +40,8 @@ from app.api.worker_summary import router as worker_summary_router
 from app.api.report_digest import router as report_digest_router
 from app.api.evidence import router as evidence_router
 from app.api.setup import router as setup_router
+from app.api.search import router as search_router
+from app.api.billing import router as billing_router
 
 api_router = APIRouter()
 
@@ -81,3 +83,5 @@ api_router.include_router(worker_summary_router, prefix="/api", tags=["Worker Se
 api_router.include_router(report_digest_router, prefix="/api", tags=["Reports"])
 api_router.include_router(evidence_router, prefix="/api", tags=["Sessions"])
 api_router.include_router(setup_router, prefix="/api", tags=["Setup"])
+api_router.include_router(search_router, prefix="/api", tags=["Search"])
+api_router.include_router(billing_router, prefix="/api", tags=["Billing"])

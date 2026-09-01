@@ -33,9 +33,10 @@ ErgoVigilance watches a worker through an ordinary webcam, detects body pose in 
 |---|---|
 | **Frontend** | React 19, TypeScript, Vite, Tailwind CSS, Recharts |
 | **Backend API** | FastAPI (Python 3.11+), Pydantic, SQLite/PostgreSQL |
-| **AI Core** | MediaPipe Pose, YOLOv8 (person detection), YuNet (face), SFace (identity) |
-| **ML Models** | HistGradientBoosting (task classification), Risk Forecaster, SVM (legacy) |
-| **Deployment** | Docker Compose, Windows Service scripts, `.env`-driven config |
+| **AI Core (On-Premise)** | MediaPipe Pose (33 keypoints), YOLOv8 (person detection), YuNet (face), SFace (identity) |
+| **AI Core (Cloud)** | YOLOv8-pose (17 keypoints COCO), ByteTrack (worker tracking), RTSP stream ingestion |
+| **ML Models** | HistGradientBoosting (task + risk classification, 97.6% accuracy, 7 task classes) |
+| **Deployment** | Docker Compose (4 services), Windows Service scripts, `.env`-driven config |
 
 ## Quick Start
 
@@ -118,17 +119,46 @@ DEMO_MODE=true docker compose up -d
 - Multi-Camera dashboard view
 - Camera setup wizard (framing, lighting, face checks)
 
+### YOLO Cloud Core (SaaS)
+- RTSP CCTV stream ingestion via FFmpeg
+- YOLOv8-pose inference (17 COCO keypoints)
+- ByteTrack worker tracking across frames
+- ML-trained risk classifier (94.1% accuracy)
+- ML-trained task classifier (97.6% accuracy, 7 classes)
+- Real-time WebSocket camera data streaming
+- PDF/CSV report generation (daily/weekly)
+- Model versioning with export/import/rollback
+- Docker GPU support (NVIDIA CUDA)
+
+### Dual-Core Architecture
+- **On-Premise Core**: MediaPipe (33 keypoints), USB webcam, gateway PC required
+- **Cloud Core**: YOLOv8-pose (17 keypoints), RTSP CCTV, zero on-site hardware
+- Same dashboard, same reports, same alerts
+- Choose based on factory needs: privacy-first vs. easy installation
+
+### New Pages (31 total)
+- YOLO Demo — Upload image → see pose + risk overlay
+- Model Dashboard — YOLO vs MediaPipe comparison + versioning
+- ROI Analytics — Cost savings, compliance scores, business case
+- System Health — Service status, storage, live metrics
+- Onboarding — 10-step factory setup checklist
+- Cloud Cameras — Camera management with health monitoring
+- Cloud Settings — YOLO model config + RTSP connection tester
+- Pricing — 3-tier pricing (Starter/Cloud/Enterprise)
+
 ### Deployment & Operations
-- Docker Compose with `.env`-driven ports
+- Docker Compose with `.env`-driven ports (4 services)
 - Windows Service scripts (`deploy/`)
 - Health probes (`/healthz`, `/readyz`, `/metrics`)
 - Data retention policy (session age, recording age, disk cap)
 - Crash-safe session recovery from checkpoints
+- CSP security headers, rate limiting, non-root Docker
 
 ## API Surface
 
-70+ REST endpoints across 33 modules:
+112+ REST endpoints across 40+ modules:
 
+### Backend API (87 endpoints)
 | Module | Endpoints | Description |
 |---|---|---|
 | Auth | login, register, refresh, me | JWT authentication |
@@ -138,10 +168,23 @@ DEMO_MODE=true docker compose up -d
 | Reports | safety-report, risk-trend, session-report, PDF export | Report generation |
 | Video | analyze, status, download, recording-analysis | Video analysis pipeline |
 | Workers | CRUD, face samples, identity | Worker management |
+| Users | CRUD, invite, roles | User management |
 | Cameras | detect, configure | Camera management |
 | Settings | GET/PUT | System configuration |
 | Deployment | status, metrics | Infrastructure health |
 | Assistant | chat, corpus | AI assistant (Ollama) |
+
+### YOLO Cloud Core (25 endpoints)
+| Module | Endpoints | Description |
+|---|---|---|
+| Camera | CRUD, start, stop | RTSP camera management |
+| Dashboard | /dashboard, /alerts | Cloud monitoring dashboard |
+| Sessions | list, detail | Cloud session management |
+| Alerts | list, acknowledge | Cloud alert management |
+| Reports | daily, weekly, PDF, CSV | Report generation |
+| Models | metrics, compare, versions | Model management |
+| Inference | /detect | Real-time pose detection |
+| WebSocket | /ws | Live camera data streaming |
 
 Full API docs at `/docs` (Swagger UI) or `/openapi.json`.
 
@@ -149,32 +192,58 @@ Full API docs at `/docs` (Swagger UI) or `/openapi.json`.
 
 ```
 posture_analysis/
-├── backend/                    # AI core engines
+├── backend/                    # AI core engines (on-premise)
 │   ├── context/                #   Context Intelligence Engine
 │   ├── services/               #   Pose, features, risk, alerts, tasks
 │   └── core/                   #   Constants, types
-├── backend_api/                # FastAPI application
+├── backend_api/                # FastAPI application (on-premise)
 │   ├── app/
-│   │   ├── api/                #   33 endpoint modules
+│   │   ├── api/                #   41 endpoint modules
 │   │   ├── core/               #   Auth, config, database, health
 │   │   ├── repositories/       #   Data access (Live, Base)
 │   │   ├── schemas/            #   Pydantic models (API contracts)
 │   │   └── services/           #   Session cache, live monitor, reports
 │   └── tests/                  #   59 test files (93+ tests)
-├── ui_posture/                 # React 19 SPA
+├── yolo_cloud/                 # YOLO Cloud Core (SaaS)
+│   ├── api.py                  #   25 REST + WebSocket endpoints
+│   ├── pose_engine.py          #   YOLOv8-pose + ByteTrack + ML inference
+│   ├── ingestion.py            #   Multi-camera orchestrator
+│   ├── rtsp_manager.py         #   RTSP stream manager (FFmpeg)
+│   ├── model_registry.py       #   Model versioning, export/import
+│   ├── reports.py              #   PDF/CSV report generation
+│   ├── training/               #   10 training scripts
+│   │   ├── build_yolo_features.py
+│   │   ├── train_yolo_risk_model.py
+│   │   ├── train_yolo_task_model.py
+│   │   ├── fine_tune_yolo.py
+│   │   └── prepare_yolo_dataset.py
+│   ├── Dockerfile              #   GPU + CPU support
+│   └── tests/                  #   24 tests (all passing)
+├── ui_posture/                 # React 19 SPA (31 pages)
 │   ├── src/
-│   │   ├── pages/              #   19 route pages (lazy-loaded)
+│   │   ├── pages/              #   31 route pages (lazy-loaded)
+│   │   │   ├── YoloDemoPage    #     Upload image → pose + risk overlay
+│   │   │   ├── ModelDashboard  #     YOLO vs MediaPipe comparison
+│   │   │   ├── ROIAnalytics    #     Cost savings, compliance scores
+│   │   │   ├── SystemHealth    #     Service status, metrics
+│   │   │   ├── Onboarding      #     10-step factory setup checklist
+│   │   │   └── ...             #     26 more pages
 │   │   ├── components/         #   Shared UI components
 │   │   ├── hooks/              #   Data-fetching hooks
 │   │   ├── services/           #   API client
 │   │   └── auth/               #   Auth context + providers
 │   └── vitest.config.ts        #   7 smoke tests
 ├── models/                     # ML model files
+│   ├── yolo_risk_model.pkl     #   Risk classifier (94.1% accuracy)
+│   ├── yolo_task_model.pkl     #   Task classifier (97.6% accuracy)
+│   ├── best_model.pkl          #   MediaPipe risk model
+│   └── task_model_v3.pkl       #   MediaPipe task model
 ├── scripts/                    # Training, labeling, evaluation
-├── docs/                       # Architecture, guides, runbooks
+├── docs/                       # DEPLOYMENT.md, consent form, API docs
 ├── deploy/                     # Windows service scripts
+├── tests/                      # Load test script
 ├── outputs/                    # Sessions, recordings, reports
-└── docker-compose.yml          # Production deployment
+└── docker-compose.yml          # 4 services (db, backend, frontend, cloud-core)
 ```
 
 ## Configuration

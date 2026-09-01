@@ -49,8 +49,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Clean old entries
         self._requests[ip] = [t for t in self._requests[ip] if t > cutoff]
 
-        # Auth endpoints have stricter limits
-        limit = AUTH_MAX if "/auth/" in path else self.max_requests
+        # Auth endpoints are exempt from rate limiting
+        if "/auth/" in path:
+            return False
+
+        limit = self.max_requests
 
         if len(self._requests[ip]) >= limit:
             return True

@@ -23,9 +23,12 @@ import {
   UserCog,
   Users,
   Zap,
+  FileDown,
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import { NeckTrunkTrendChart } from '@/src/components/charts/NeckTrunkTrendChart';
+import { RiskGauge } from '@/src/components/charts/RiskGauge';
+import { GettingStarted } from '@/src/components/common/GettingStarted';
 import { chartTooltipStyle, chartTick, chartColors, riskLevelColor } from '@/src/components/charts/chartTheme';
 import { useDashboard } from '@/src/hooks/useDashboard';
 import { useContextSnapshot } from '@/src/hooks/useContextSnapshot';
@@ -177,7 +180,38 @@ export default function DashboardPage() {
             {user?.role === 'admin' && 'System health, monitoring activity, and team performance at a glance.'}
           </p>
         </div>
+        <button
+          onClick={() => {
+            // Generate a CSV summary of the current dashboard state
+            const rows = [
+              ['Metric', 'Value'],
+              ['Risk Score', String(riskScore ?? 'N/A')],
+              ['Risk Level', riskLevel.toUpperCase()],
+              ['Active Alerts', String(alerts.summary.active_count)],
+              ['Total Sessions', String(sessions.length)],
+              ['Active Session', currentSessionActive ? 'Yes' : 'No'],
+              ['Generated', new Date().toISOString()],
+            ];
+            const csvRows = rows.map(function(r) {
+              return r.map(function(c) { return '"' + c.replace(/"/g, '""') + '"'; }).join(',');
+            });
+            const csv = csvRows.join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'ergovigilance-dashboard-' + new Date().toISOString().slice(0,10) + '.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+          className="flex items-center gap-sm px-md py-sm rounded-lg border border-slate-200 dark:border-outline-variant bg-white dark:bg-surface-container text-sm font-medium text-slate-700 dark:text-on-surface hover:bg-slate-50 dark:hover:bg-surface-container-higher transition-colors"
+        >
+          <FileDown className="w-4 h-4" />
+          Export CSV
+        </button>
       </div>
+
+      {!loading && user?.role === 'operator' && <GettingStarted />}
 
       {loading ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-lg">
@@ -268,8 +302,10 @@ function OperatorDashboard({
   const navigate = useNavigate();
   return (
     <>
-      <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-md">
-        <div className="animate-stagger"><MetricCard icon={Gauge} label="My Current Risk" value={formatMaybeNumber(riskScore, 0)} detail={riskLevel.toUpperCase()} tone={riskLevel === 'high' ? 'danger' : riskLevel === 'moderate' ? 'warning' : 'good'} onClick={() => navigate('/monitoring')} isUrgent={true} /></div>
+      <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-md" data-tour="risk-gauge">
+        <div className="animate-stagger flex items-center justify-center bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-4 shadow-sm dark:shadow-none cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate('/monitoring')}>
+          <RiskGauge score={riskScore ?? 0} level={riskLevel} size={140} label="My Risk" />
+        </div>
         <div className="animate-stagger"><MetricCard icon={Activity} label="My Current Task" value={task || 'Unavailable'} detail={workerStatus || 'No worker status'} onClick={() => navigate('/monitoring')} /></div>
         <div className="animate-stagger"><MetricCard icon={Clock3} label="Today's Monitoring" value={currentSessionActive ? (sessionDuration ?? 'Calculating') : 'No active session'} detail={sessionId ?? 'Start monitoring to begin'} onClick={() => navigate('/sessions')} /></div>
         <div className="animate-stagger"><MetricCard icon={ShieldAlert} label="My Alerts" value={String(alertCount)} detail={`${activeAlertCount} active`} tone={activeAlertCount > 0 ? 'warning' : 'good'} onClick={() => navigate('/monitoring')} isUrgent={true} /></div>
@@ -301,7 +337,7 @@ function OperatorDashboard({
           </div>
         </div>
 
-        <aside className="space-y-lg">
+        <aside className="space-y-lg" data-tour="alerts-section">
           <FeedCard title="My Alerts" icon={AlertTriangle}>
             {ownAlerts.length === 0 ? (
               <p className="text-body-sm text-slate-500 dark:text-on-surface-variant">No alerts visible for your current scope.</p>
@@ -338,7 +374,7 @@ function OperatorDashboard({
         <TopIssuesCard analytics={analytics} />
       </section>
 
-      <section className="grid grid-cols-1 xl:grid-cols-2 gap-lg">
+      <section className="grid grid-cols-1 xl:grid-cols-2 gap-lg" data-tour="task-card">
         <TaskRecognitionCard task={task} taskDuration={sessionDuration} />
         <AIInsightsCard snapshot={snapshot} />
       </section>
@@ -384,7 +420,7 @@ function ElevatedDashboard({
 
   return (
     <>
-      <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-md">
+      <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-md" data-tour="risk-gauge">
         <div className="animate-stagger"><MetricCard icon={Users} label="Visible Workers" value={String(summary.worker_count)} detail="Workers currently tracked" onClick={() => navigate('/workers')} /></div>
         <div className="animate-stagger"><MetricCard icon={Clock3} label="Sessions Today" value={String(summary.sessions_today)} detail="Sessions run today" onClick={() => navigate('/sessions')} /></div>
         <div className="animate-stagger"><MetricCard icon={ShieldAlert} label="Open Alerts" value={String(summary.open_alerts)} detail="Alerts awaiting action" tone={summary.open_alerts > 0 ? 'warning' : 'good'} onClick={() => setNotifOpen(true)} isUrgent={true} /></div>

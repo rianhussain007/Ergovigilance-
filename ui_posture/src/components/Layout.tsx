@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router';
 import Sidebar from './Sidebar';
 import { Header } from '@/src/components/layout/Header';
@@ -12,6 +12,7 @@ import { Brain, Bell, LogOut, UserCog, Shield, Users, HardHat, ChevronDown } fro
 import { useAuth, type Role } from '@/src/auth/AuthContext';
 import { useAlertToasts } from '@/src/hooks/useAlertToasts';
 import OnboardingFlow from '@/src/components/common/OnboardingFlow';
+import { ProductTour, KeyboardHelpPanel, useKeyboardShortcuts, useProductTour, FloatingHelpButton } from '@/src/components/common/ProductTour';
 
 const roleConfig: Record<Role, { label: string; icon: React.ElementType }> = {
   operator: { label: 'Operator', icon: HardHat },
@@ -24,7 +25,7 @@ const rolePaths: Record<Role, string[]> = {
   operator: ['/', '/dashboard', '/monitoring', '/video-review', '/analytics', '/reports', '/sessions', '/workers', '/settings'],
   supervisor: ['/', '/dashboard', '/monitoring', '/video-review', '/analytics', '/reports', '/sessions', '/cameras', '/workers', '/settings'],
   safety_mgr: ['/', '/dashboard', '/monitoring', '/video-review', '/analytics', '/reports', '/sessions', '/cameras', '/audit', '/manager', '/workers', '/settings'],
-  admin: ['/', '/dashboard', '/monitoring', '/video-review', '/analytics', '/reports', '/sessions', '/cameras', '/audit', '/deployment', '/manager', '/workers', '/users', '/pilot-requests', '/settings'],
+  admin: ['/', '/dashboard', '/monitoring', '/video-review', '/analytics', '/reports', '/sessions', '/cameras', '/cloud-cameras', '/cloud-settings', '/model-dashboard', '/yolo-demo', '/roi-analytics', '/system-health', '/onboarding', '/audit', '/deployment', '/manager', '/workers', '/users', '/pilot-requests', '/api-docs', '/settings'],
 };
 
 /** Exact match for static routes; /replay/:sessionId allowed for roles with /sessions access. */
@@ -77,12 +78,22 @@ function UserMenu({ roleLabel, roleIcon: RoleIcon, email, onLogout }: { roleLabe
 }
 
 function DemoModeBanner({ isDemoMode }: { isDemoMode: boolean }) {
-  if (!isDemoMode) return null;
+  const [dismissed, setDismissed] = useState(false);
+  if (!isDemoMode || dismissed) return null;
   return (
-    <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-center">
+    <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-center flex items-center justify-center gap-3">
       <p className="text-xs font-semibold text-amber-400">
         DEMO MODE — Showing synthetic data. No real camera or workers are connected.
       </p>
+      <button
+        onClick={() => setDismissed(true)}
+        className="text-amber-400/60 hover:text-amber-400 transition-colors ml-2"
+        title="Dismiss"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
     </div>
   );
 }
@@ -93,7 +104,7 @@ export default function Layout() {
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [demoMode, setDemoMode] = useState(false);
+
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 1024);
 
   useEffect(() => {
@@ -113,22 +124,50 @@ export default function Layout() {
   });
   const location = useLocation();
 
-  useEffect(() => {
-    fetch('/api/demo-mode')
-      .then(r => r.json())
-      .then(d => { if (d.demo_mode) setDemoMode(true); })
-      .catch(() => {});
-  }, []);
+
 
   useAlertToasts(() => setNotifOpen(true));
 
+  // Product tour + keyboard shortcuts
+  const { showTour, showHelp, startTour, dismissTour, setShowHelp, dismissHelp } = useProductTour();
+
+  // Auto-start tour for demo mode users on first visit
+  useEffect(() => {
+    // Always show the tour in demo mode — it's the first impression for every visitor.
+    // Skip only if user explicitly ended it this session (within last 5 seconds).
+    if (isDemoMode) {
+      const lastDismissed = localStorage.getItem('ergovigilance_tour_dismissed_at');
+      const recentlyDismissed = lastDismissed && (Date.now() - Number(lastDismissed)) < 5000;
+      if (!recentlyDismissed) {
+        const timer = setTimeout(() => startTour(), 800);
+        return () => clearTimeout(timer);
+      }
+    }
+  }, [isDemoMode, startTour]);
+
+  // Stable callbacks for keyboard shortcuts (prevent listener churn)
+  const handleToggleSearch = useCallback(() => {
+    window.dispatchEvent(new Event('opensearch'));
+  }, []);
+  const handleToggleHelp = useCallback(() => {
+    setShowHelp((prev) => !prev);
+  }, [setShowHelp]);
+
+  useKeyboardShortcuts({
+    onToggleSearch: handleToggleSearch,
+    onToggleHelp: handleToggleHelp,
+    tourActive: showTour,
+  });
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // Don't close panels during tour — ProductTour handles Escape itself
+      if (showTour) return;
       if (e.key === 'Escape') { setAiPanelOpen(false); setNotifOpen(false); }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [showTour]);
 
   if (!user) return <Navigate to="/login" replace />;
 
@@ -148,16 +187,11 @@ export default function Layout() {
   return (
     <div className="flex h-screen overflow-hidden bg-surface text-on-surface">
       <Sidebar role={role} rolePaths={rolePaths} collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} isMobile={isMobile} />
-      <div className={`flex flex-col flex-1 min-w-0 transition-[margin] duration-300 ease-out ${sidebarCollapsed ? 'ml-16' : 'ml-64'}`}>
+      <div className={`flex flex-col flex-1 min-w-0 transition-[margin] duration-300 ease-out ${isMobile ? 'ml-0' : sidebarCollapsed ? 'ml-16' : 'ml-64'}`}>
         <Header
           session={dashboard?.session || null}
         />
-        {demoMode && (
-          <div className="mx-lg mt-sm px-4 py-2 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-700 text-sm font-medium flex items-center gap-2">
-            <span className="inline-block w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-            Demo Mode — showing synthetic data for presentation
-          </div>
-        )}
+
         <div className="px-lg pt-md pb-0 space-y-md">
           <div className="flex items-center gap-md flex-wrap">
             {/* Mobile hamburger menu */}
@@ -214,6 +248,15 @@ export default function Layout() {
         </main>
       </div>
       <AIAssistantPanel open={aiPanelOpen} onClose={() => setAiPanelOpen(false)} />
+
+      {/* Product Tour */}
+      {showTour && <ProductTour onComplete={dismissTour} />}
+
+      {/* Keyboard Shortcuts Help */}
+      {showHelp && <KeyboardHelpPanel onClose={dismissHelp} />}
+
+      {/* Floating Help Button */}
+      {!showTour && <FloatingHelpButton onClick={() => setShowHelp(true)} />}
 
       {notifOpen && (
         <>

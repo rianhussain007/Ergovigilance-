@@ -3,12 +3,13 @@ import {
   Sun, Moon, Monitor, Camera, RefreshCw, Bell, Save, HardDrive, 
   AlertTriangle, Brain, Activity, Cpu, Zap, FileText, BarChart3,
   Users, Settings as SettingsIcon, ToggleLeft, ToggleRight,
-  Mail, MessageSquare, ExternalLink
+  Mail, MessageSquare, ExternalLink, CreditCard, Globe
 } from 'lucide-react';
 import { useTheme } from '@/src/hooks/useTheme';
 import { useToast } from '@/src/hooks/useToast';
 import { useAuth } from '@/src/auth/AuthContext';
 import { useSettings } from '@/src/hooks/useSettings';
+import { useI18n } from '@/src/i18n';
 import { getCameras, getRetentionStats, updateRetentionConfig } from '@/src/services/dashboardService';
 import ModelDiagnosticsCard from '@/src/components/common/ModelDiagnosticsCard';
 import type { CameraInfo } from '@/src/types/api';
@@ -17,6 +18,7 @@ export default function SettingsPage() {
   const { setMode } = useTheme();
   const { addToast } = useToast();
   const { user } = useAuth();
+  const { locale, setLocale } = useI18n();
   const { settings, updateSetting, saveSettings, dirty } = useSettings();
   const canEditSystemSettings = user?.role === 'admin';
   const [cameras, setCameras] = useState<CameraInfo[]>([]);
@@ -84,7 +86,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="p-lg space-y-lg pb-32 max-w-4xl">
+    <div className="p-lg space-y-lg pb-32 max-w-4xl" data-tour="settings-content">
       <div>
         <h1 className="text-display-lg font-bold text-on-surface">Settings</h1>
         <p className="text-body-sm text-on-surface-variant mt-xs">Configure your dashboard, monitoring, and deployment preferences</p>
@@ -140,6 +142,31 @@ export default function SettingsPage() {
               </select>
             </div>
           </div>
+        </SettingSection>
+
+        {/* ── Language Section ──────────────────────────────── */}
+        <SettingSection icon={Globe} title="Language / भाषा">
+          <div className="flex gap-sm flex-wrap">
+            {([
+              { code: 'en' as const, label: 'English', flag: '🇬🇧' },
+              { code: 'hi' as const, label: 'हिन्दी', flag: '🇮🇳' },
+              { code: 'zh' as const, label: '中文', flag: '🇨🇳' },
+            ]).map((lang) => (
+              <button
+                key={lang.code}
+                onClick={() => setLocale(lang.code)}
+                className={`flex items-center gap-sm px-md py-sm rounded-lg border text-body-sm font-medium transition-all ${
+                  locale === lang.code
+                    ? 'border-primary/50 bg-primary/10 text-primary'
+                    : 'border-outline-variant text-on-surface-variant hover:text-on-surface'
+                }`}
+              >
+                <span className="text-lg">{lang.flag}</span>
+                {lang.label}
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-on-surface-variant mt-sm">Operator-facing labels and posture guidance will appear in the selected language</p>
         </SettingSection>
 
         {/* ── Monitoring Section ──────────────────────────────── */}
@@ -264,6 +291,9 @@ export default function SettingsPage() {
         </SettingSection>
 
         <NotificationConfigCard />
+
+        {/* ── Billing Section ─────────────────────────────────────── */}
+        <BillingSection />
 
         {/* ── AI & Analytics Section ──────────────────────────────── */}
         <div className="border-b border-outline-variant/30 pt-md pb-md">
@@ -431,6 +461,8 @@ function NotificationConfigCard() {
     min_severity: string;
   } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [testStatus, setTestStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [testMessage, setTestMessage] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -445,6 +477,25 @@ function NotificationConfigCard() {
       });
     return () => { cancelled = true; };
   }, []);
+
+  const handleSendTest = async () => {
+    setTestStatus('sending');
+    setTestMessage('');
+    try {
+      const res = await fetch('/api/settings/notifications/test', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setTestStatus('sent');
+        setTestMessage(data.detail || 'Test alert sent successfully! Check your email/Slack.');
+      } else {
+        setTestStatus('error');
+        setTestMessage(data.detail || 'Failed to send test alert. Check your SMTP/Slack configuration.');
+      }
+    } catch {
+      setTestStatus('error');
+      setTestMessage('Network error — is the backend running?');
+    }
+  };
 
   if (loading) return null;
 
@@ -519,6 +570,32 @@ function NotificationConfigCard() {
         </div>
       </div>
 
+      {/* Send Test Button */}
+      <div className="mt-md flex items-center gap-sm">
+        <button
+          onClick={handleSendTest}
+          disabled={testStatus === 'sending'}
+          className="flex items-center gap-sm px-md py-sm rounded-lg bg-primary/10 text-primary text-body-sm font-medium hover:bg-primary/20 transition-colors disabled:opacity-50"
+        >
+          {testStatus === 'sending' ? (
+            <>
+              <span className="w-3.5 h-3.5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+              Sending...
+            </>
+          ) : (
+            <>
+              <Mail className="w-3.5 h-3.5" />
+              Send Test Alert
+            </>
+          )}
+        </button>
+        {testMessage && (
+          <span className={`text-[11px] ${testStatus === 'sent' ? 'text-green-400' : 'text-red-400'}`}>
+            {testMessage}
+          </span>
+        )}
+      </div>
+
       {/* Config Guide */}
       <div className="mt-md p-sm rounded-lg bg-surface-container-low border border-outline-variant/50">
         <p className="text-[10px] font-bold text-on-surface mb-xs">Environment Variables:</p>
@@ -532,6 +609,45 @@ ALERT_RECIPIENTS=safety@yourcompany.com
 MIN_EMAIL_SEVERITY=HIGH
 SLACK_WEBHOOK_URL=https://hooks.slack.com/...`}
         </pre>
+      </div>
+    </div>
+  );
+}
+
+function BillingSection() {
+  const [billing, setBilling] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/billing/config')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setBilling(data); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return null;
+
+  return (
+    <div className="bg-surface-container border border-outline-variant rounded-xl p-lg">
+      <div className="flex items-center gap-md mb-md">
+        <CreditCard className="w-5 h-5 text-primary" />
+        <h3 className="text-headline-md font-bold text-on-surface">Billing & Subscription</h3>
+      </div>
+      <div className="space-y-sm">
+        <div className="flex items-center justify-between p-sm rounded-lg bg-surface-container-low">
+          <span className="text-body-sm text-on-surface">Stripe Integration</span>
+          <span className={`text-[10px] font-bold px-sm py-xs rounded-full ${
+            billing?.stripe_configured ? 'text-green-400 bg-green-500/10' : 'text-on-surface-variant bg-surface-container-highest'
+          }`}>
+            {billing?.stripe_configured ? 'CONFIGURED' : 'NOT SET'}
+          </span>
+        </div>
+        {!billing?.stripe_configured && (
+          <p className="text-[11px] text-on-surface-variant">
+            Set STRIPE_SECRET_KEY in .env to enable cloud billing. Customers can then subscribe to the Cloud tier directly from the Pricing page.
+          </p>
+        )}
       </div>
     </div>
   );

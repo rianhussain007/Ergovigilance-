@@ -243,7 +243,7 @@ export function CameraPanel({ status, workerName, task, reconnecting, onCaptureR
             key={streamKey}
             src={streamSrc}
             alt="Live camera feed"
-            className="absolute inset-0 w-full h-full object-cover contrast-[1.08] saturate-[0.95]"
+            className="absolute inset-0 w-full h-full object-contain contrast-[1.08] saturate-[0.95]"
             onLoad={() => {
               frameCountRef.current += 1;
               setStreamLoading(false);

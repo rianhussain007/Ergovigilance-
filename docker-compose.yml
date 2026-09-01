@@ -83,6 +83,47 @@ services:
     #   - ./certs/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
     #   - ./ui_posture/nginx.tls.conf.example:/etc/nginx/conf.d/default.conf:ro
 
+  cloud-core:
+    build:
+      context: .
+      dockerfile: yolo_cloud/Dockerfile
+    container_name: ergovigilance-cloud
+    ports:
+      - "127.0.0.1:${CLOUD_PORT:-8100}:8100"
+    environment:
+      - DEBUG=true
+      - YOLO_MODEL=${YOLO_MODEL:-yolov8s-pose.pt}
+      - YOLO_DEVICE=${YOLO_DEVICE:-cpu}
+      - YOLO_CONFIDENCE=${YOLO_CONFIDENCE:-0.5}
+      - INFERENCE_FPS=${INFERENCE_FPS:-10}
+      - CLOUD_PORT=8100
+      - RTSP_TRANSPORT=${RTSP_TRANSPORT:-tcp}
+      - RTSP_TIMEOUT=${RTSP_TIMEOUT:-5}
+      - RTSP_RECONNECT_DELAY=${RTSP_RECONNECT_DELAY:-2.0}
+      - SESSION_IDLE_TIMEOUT=${SESSION_IDLE_TIMEOUT:-60}
+      - SESSIONS_DIR=/data/sessions
+      - AUTH_JWT_SECRET=${AUTH_JWT_SECRET:-}
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost
+    volumes:
+      - ergovigilance-db:/data
+      - ./outputs/sessions:/data/sessions
+      - ./recordings:/data/recordings
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    # Uncomment below for GPU access (requires NVIDIA Container Toolkit):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
 volumes:
   ergovigilance-db:
   ergovigilance-pg:

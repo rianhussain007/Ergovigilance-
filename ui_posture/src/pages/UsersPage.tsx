@@ -70,6 +70,14 @@ export default function UsersPage() {
   const [resetError, setResetError] = useState<string | null>(null);
   const [resetResult, setResetResult] = useState<string | null>(null);
 
+  // Invitation state
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteRole, setInviteRole] = useState<Role>('operator');
+  const [inviting, setInviting] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteResult, setInviteResult] = useState<string | null>(null);
+
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -115,6 +123,36 @@ export default function UsersPage() {
     setFormData({ email: '', password: '', role: 'operator' });
     setFormError(null);
     setShowPassword(false);
+  };
+
+  const handleInvite = async () => {
+    if (!inviteEmail.trim()) return;
+    setInviting(true);
+    setInviteError(null);
+    setInviteResult(null);
+    try {
+      const res = await apiFetch('/api/users/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail || `Invite failed (${res.status})`);
+      }
+      const data = await res.json();
+      setInviteResult(`Invitation sent! Temp password: ${data.temp_password}`);
+      fetchUsers();
+      setTimeout(() => {
+        setShowInvite(false);
+        setInviteResult(null);
+        setInviteEmail('');
+      }, 5000);
+    } catch (e: unknown) {
+      setInviteError(e instanceof Error ? e.message : 'Invite failed');
+    } finally {
+      setInviting(false);
+    }
   };
 
   const handleSave = async () => {
@@ -235,10 +273,16 @@ export default function UsersPage() {
       <div className="flex items-center justify-between">
         <SectionHeader title="Users" />
         {isAdmin && (
-          <button onClick={openAdd} className="flex items-center gap-sm px-md py-sm rounded-lg text-body-sm font-medium bg-primary text-on-primary hover:bg-primary/90 transition-colors">
-            <Plus className="w-4 h-4" />
-            Add User
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => { setShowInvite(true); setInviteEmail(''); setInviteRole('operator'); setInviteError(null); setInviteResult(null); }} className="flex items-center gap-sm px-md py-sm rounded-lg text-body-sm font-medium border border-outline-variant text-on-surface hover:bg-surface-container-highest transition-colors">
+              <KeyRound className="w-4 h-4" />
+              Invite
+            </button>
+            <button onClick={openAdd} className="flex items-center gap-sm px-md py-sm rounded-lg text-body-sm font-medium bg-primary text-on-primary hover:bg-primary/90 transition-colors">
+              <Plus className="w-4 h-4" />
+              Add User
+            </button>
+          </div>
         )}
       </div>
 
@@ -482,6 +526,59 @@ export default function UsersPage() {
               <button onClick={() => { setResetTarget(null); setResetResult(null); setResetError(null); }} disabled={resetting} style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 500 }} className="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-higher transition-colors disabled:opacity-50">
                 {resetResult ? 'Done' : 'Cancel'}
               </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {showInvite && createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)' }} onClick={() => { if (!inviting) { setShowInvite(false); setInviteResult(null); } }}>
+          <div style={{ background: 'var(--color-surface-container)', width: '100%', maxWidth: '24rem', margin: '0 24px', borderRadius: '12px', border: '1px solid var(--color-outline-variant)', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)', padding: '24px' }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+              <h3 className="font-label-caps text-label-caps text-on-surface uppercase tracking-widest">Invite User</h3>
+              <button onClick={() => { setShowInvite(false); setInviteResult(null); }} style={{ padding: '4px', borderRadius: '6px' }} className="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-higher transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-body-sm text-on-surface-variant" style={{ marginBottom: '16px' }}>
+              Send an invitation email with a temporary password. The user can log in and change it on first visit.
+            </p>
+
+            {inviteError && (
+              <div className="p-sm rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 text-body-sm" style={{ marginBottom: '16px' }}>{inviteError}</div>
+            )}
+
+            {inviteResult ? (
+              <div className="p-sm rounded-lg bg-green-500/10 border border-green-500/30 text-green-400 text-body-sm" style={{ marginBottom: '16px' }}>{inviteResult}</div>
+            ) : (
+              <>
+                <div style={{ marginBottom: '12px' }}>
+                  <label className="block text-body-sm font-medium text-on-surface mb-1">Email</label>
+                  <input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="colleague@factory.com"
+                    className="w-full px-3 py-sm rounded-lg bg-surface-container-high border border-outline-variant text-on-surface text-body-sm focus:outline-none focus:border-primary" />
+                </div>
+                <div style={{ marginBottom: '16px' }}>
+                  <label className="block text-body-sm font-medium text-on-surface mb-1">Role</label>
+                  <select value={inviteRole} onChange={(e) => setInviteRole(e.target.value as Role)}
+                    className="w-full px-3 py-sm rounded-lg bg-surface-container-high border border-outline-variant text-on-surface text-body-sm focus:outline-none focus:border-primary">
+                    {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                  </select>
+                </div>
+              </>
+            )}
+
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '16px' }}>
+              <button onClick={() => { setShowInvite(false); setInviteResult(null); }} disabled={inviting} style={{ padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 500 }} className="text-on-surface-variant hover:text-on-surface hover:bg-surface-container-higher transition-colors disabled:opacity-50">
+                {inviteResult ? 'Done' : 'Cancel'}
+              </button>
+              {!inviteResult && (
+                <button onClick={handleInvite} disabled={inviting || !inviteEmail.trim()} style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 500, background: 'var(--color-primary)', color: 'var(--color-on-primary)' }} className="hover:opacity-90 transition-colors disabled:opacity-50">
+                  <KeyRound className="w-4 h-4" />
+                  {inviting ? 'Sending...' : 'Send Invitation'}
+                </button>
+              )}
             </div>
           </div>
         </div>,

@@ -1,0 +1,26 @@
+{
+  "name": "ErgoVigilance — AI-Powered Ergonomic Monitoring",
+  "short_name": "ErgoVigilance",
+  "description": "Real-time workplace ergonomic monitoring using AI pose detection. Detect risky postures, prevent injuries, protect your workforce.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0b0f14",
+  "theme_color": "#0b0f14",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/images/logo-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "64x64",
+      "type": "image/svg+xml"
+    }
+  ],
+  "categories": ["business", "utilities", "productivity"],
+  "lang": "en",
+  "dir": "ltr"
+}

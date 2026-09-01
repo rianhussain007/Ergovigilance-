@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import os
 import secrets
 import string
 from datetime import datetime, timezone
 from typing import List
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -35,6 +39,12 @@ class UserCreateRequest(BaseModel):
 
 class UserUpdateRequest(BaseModel):
     role: str = Field(...)
+
+
+class UserInviteRequest(BaseModel):
+    email: str = Field(..., min_length=3)
+    role: str = Field(...)
+    name: str = Field(default="", description="Optional display name")
 
 
 class UserResetPasswordRequest(BaseModel):
@@ -161,3 +171,59 @@ async def delete_user(
     with get_connection() as conn:
         conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
         conn.commit()
+
+
+@router.post("/users/invite", status_code=201)
+async def invite_user(
+    body: UserInviteRequest,
+    user: AuthenticatedUser = Depends(require_roles("admin")),
+):
+    """Invite a new user by email. Creates the account with a temporary password
+    and sends an invitation email (if SMTP is configured).
+
+    The invitee receives their login URL and temporary password via email.
+    They should change their password on first login.
+    """
+    _require_admin(user)
+    if body.role not in VALID_ROLES:
+        raise HTTPException(400, f"Role must be one of: {', '.join(sorted(VALID_ROLES))}")
+    existing = get_user_by_email(body.email)
+    if existing:
+        raise HTTPException(409, f"A user with {body.email} already exists")
+
+    # Generate temporary password
+    temp_password = _generate_temp_password()
+    now = datetime.now(timezone.utc).isoformat()
+    pw_hash = await asyncio.to_thread(hash_password, temp_password)
+
+    with get_connection() as conn:
+        cur = conn.execute(
+            "INSERT INTO users (email, password_hash, role, created_at) VALUES (?, ?, ?, ?)",
+            (body.email, pw_hash, body.role, now),
+        )
+        conn.commit()
+        new_id = cur.lastrowid
+
+    # Send invitation email (non-blocking)
+    try:
+        from app.services.notifications import _send_email_sync
+        invite_link = f"{os.getenv('APP_URL', 'http://localhost:3000')}/login"
+        subject = f"You've been invited to ErgoVigilance ({body.role})"
+        body_html = f"""
+        <h2>Welcome to ErgoVigilance</h2>
+        <p>{body.name or 'An administrator'} has invited you to join ErgoVigilance as a <strong>{body.role}</strong>.</p>
+        <p><strong>Login URL:</strong> {invite_link}</p>
+        <p><strong>Email:</strong> {body.email}</p>
+        <p><strong>Temporary Password:</strong> <code>{temp_password}</code></p>
+        <p>Please log in and change your password immediately.</p>
+        """
+        _send_email_sync(subject, body_html, [body.email], severity="LOW")
+    except Exception as e:
+        logger.debug("Invite email send failed (non-fatal): %s", e)
+
+    return {
+        "message": f"Invitation sent to {body.email}",
+        "user_id": new_id,
+        "temp_password": temp_password,  # Return once; not stored
+        "role": body.role,
+    }

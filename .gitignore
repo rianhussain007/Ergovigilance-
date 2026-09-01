@@ -88,3 +88,27 @@ scripts/screenshot_comparison.mjs
 !ui_posture/public/images/tablet-skeleton-assessment.png
 !ui_posture/public/images/logo.png
 !ui_posture/public/favicon.png
+
+# YOLO Cloud Core
+yolo_cloud/__pycache__/
+yolo_cloud/.pytest_cache/
+yolo_cloud/tests/__pycache__/
+
+# Trained models (large binaries)
+models/*.pkl
+models/*.json
+models/.registry/
+
+# Training outputs
+outputs/real_data/keypoints/
+outputs/real_data/frames_diverse/
+outputs/real_data/extraction_manifest.json
+data/processed/yolo_features.csv
+
+# Test artifacts
+tests/__pycache__/
+
+# Demo artifacts
+backend_api/start_demo.bat
+.freebuff/
+*.log

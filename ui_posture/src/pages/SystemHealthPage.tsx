@@ -1,0 +1,339 @@
+import { useEffect, useState } from 'react';
+import { Activity, Server, Database, Wifi, WifiOff, Clock, Cpu, HardDrive, RefreshCw, CheckCircle2, XCircle, AlertTriangle, Zap } from 'lucide-react';
+
+interface ServiceHealth {
+  name: string;
+  status: 'healthy' | 'degraded' | 'down';
+  port: number;
+  uptime: string;
+  latency_ms: number;
+  last_check: string;
+  details?: Record<string, any>;
+}
+
+interface SystemMetrics {
+  services: ServiceHealth[];
+  database: {
+    status: string;
+    connections: number;
+    max_connections: number;
+    size_mb: number;
+  };
+  storage: {
+    sessions_mb: number;
+    recordings_mb: number;
+    models_mb: number;
+    total_mb: number;
+  };
+  api: {
+    total_requests: number;
+    avg_response_ms: number;
+    error_rate: number;
+    endpoints_count: number;
+  };
+}
+
+export default function SystemHealthPage() {
+  const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+
+  const fetchHealth = async () => {
+    try {
+      // Check each service — /health is proxied to backend:8001,
+      // /cloud-api/cloud/health is proxied to cloud-core:8100,
+      // /healthz is the liveness probe.
+      const checks = await Promise.allSettled([
+        fetch('/health').then(r => r.json()).catch(() => ({ status: 'down' })),
+        fetch('/cloud-api/api/cloud/health').then(r => r.json()).catch(() => ({ status: 'down' })),
+        fetch('/health').then(r => r.json()).catch(() => ({ status: 'down' })),
+      ]);
+
+      const backend = checks[0].status === 'fulfilled' ? checks[0].value : { status: 'down' };
+      const cloudCore = checks[1].status === 'fulfilled' ? checks[1].value : { status: 'down' };
+      const frontend = checks[2].status === 'fulfilled' ? checks[2].value : { status: 'down' };
+
+      // Backend is healthy if it returned a JSON with status healthy/degraded
+      const backendUp = backend.status === 'healthy' || backend.status === 'degraded';
+      const cloudUp = cloudCore.status === 'healthy' || cloudCore.status === 'degraded';
+      // Frontend is up if THIS page loaded (we're running in it)
+      const frontendUp = true;
+
+      const services: ServiceHealth[] = [
+        {
+          name: 'Backend API',
+          status: backendUp ? (backend.status === 'healthy' ? 'healthy' : 'degraded') : 'down',
+          port: 8001,
+          uptime: backend.uptime || '-',
+          latency_ms: backend.latency_ms || backend.db_latency_ms || 0,
+          last_check: new Date().toISOString(),
+          details: backend,
+        },
+        {
+          name: 'YOLO Cloud Core',
+          status: cloudUp ? (cloudCore.status === 'healthy' ? 'healthy' : 'degraded') : 'down',
+          port: 8100,
+          uptime: cloudCore.uptime || cloudCore.uptime_seconds ? `${Math.round(cloudCore.uptime_seconds || 0)}s` : '-',
+          latency_ms: cloudCore.latency_ms || 0,
+          last_check: new Date().toISOString(),
+          details: cloudCore,
+        },
+        {
+          name: 'Frontend',
+          status: 'healthy',
+          port: 3000,
+          uptime: '-',
+          latency_ms: 0,
+          last_check: new Date().toISOString(),
+        },
+        {
+          name: 'Database (SQLite)',
+          status: backend.database_status === 'connected' ? 'healthy' : backendUp ? 'degraded' : 'down',
+          port: 0,
+          uptime: '-',
+          latency_ms: backend.db_latency_ms || 0,
+          last_check: new Date().toISOString(),
+          details: { status: backend.database_status || 'unknown' },
+        },
+      ];
+
+      // Get storage info from health endpoint
+      const disk = backend.disk_usage_mb || {};
+      const metricsData: SystemMetrics = {
+        services,
+        database: {
+          status: backend.database_status || 'unknown',
+          connections: 1,
+          max_connections: 1,
+          size_mb: disk.sessions || 0,
+        },
+        storage: {
+          sessions_mb: disk.sessions || 0,
+          recordings_mb: disk.recordings || 0,
+          models_mb: disk.models || 0,
+          total_mb: (disk.sessions || 0) + (disk.recordings || 0) + (disk.models || 0),
+        },
+        api: {
+          total_requests: backend.total_requests || 0,
+          avg_response_ms: backend.latency_ms || 0,
+          error_rate: backend.error_rate || 0,
+          endpoints_count: 87,
+        },
+      };
+
+      setMetrics(metricsData);
+      setLastRefresh(new Date());
+    } catch {
+      // All services down
+      setMetrics({
+        services: [
+          { name: 'Backend API', status: 'down', port: 8001, uptime: '-', latency_ms: 0, last_check: new Date().toISOString() },
+          { name: 'YOLO Cloud Core', status: 'down', port: 8100, uptime: '-', latency_ms: 0, last_check: new Date().toISOString() },
+          { name: 'Frontend', status: 'healthy', port: 3000, uptime: '-', latency_ms: 0, last_check: new Date().toISOString() },
+          { name: 'Database (SQLite)', status: 'down', port: 0, uptime: '-', latency_ms: 0, last_check: new Date().toISOString() },
+        ],
+        database: { status: 'disconnected', connections: 0, max_connections: 100, size_mb: 0 },
+        storage: { sessions_mb: 0, recordings_mb: 0, models_mb: 0, total_mb: 0 },
+        api: { total_requests: 0, avg_response_ms: 0, error_rate: 0, endpoints_count: 46 },
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchHealth();
+    const interval = setInterval(fetchHealth, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  const allHealthy = metrics?.services.every(s => s.status === 'healthy');
+  const anyDown = metrics?.services.some(s => s.status === 'down');
+
+  return (
+    <div className="mx-auto max-w-6xl space-y-6 p-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className={`rounded-lg p-2 ${allHealthy ? 'bg-green-500/10' : anyDown ? 'bg-red-500/10' : 'bg-amber-500/10'}`}>
+            <Activity className={`h-6 w-6 ${allHealthy ? 'text-green-400' : anyDown ? 'text-red-400' : 'text-amber-400'}`} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-white">System Health</h1>
+            <p className="text-sm text-slate-400">
+              Live status of all services — auto-refreshes every 10s
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-slate-500">
+            Last check: {lastRefresh.toLocaleTimeString()}
+          </span>
+          <button
+            onClick={fetchHealth}
+            className="p-2 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Overall Status Banner */}
+      <div className={`rounded-xl border p-4 ${
+        allHealthy
+          ? 'border-green-500/20 bg-green-500/10'
+          : anyDown
+          ? 'border-red-500/20 bg-red-500/10'
+          : 'border-amber-500/20 bg-amber-500/10'
+      }`}>
+        <div className="flex items-center gap-3">
+          {allHealthy ? (
+            <CheckCircle2 className="h-5 w-5 text-green-400" />
+          ) : anyDown ? (
+            <XCircle className="h-5 w-5 text-red-400" />
+          ) : (
+            <AlertTriangle className="h-5 w-5 text-amber-400" />
+          )}
+          <span className={`font-medium ${
+            allHealthy ? 'text-green-400' : anyDown ? 'text-red-400' : 'text-amber-400'
+          }`}>
+            {allHealthy ? 'All Systems Operational' : anyDown ? 'Some Services Down' : 'Degraded Performance'}
+          </span>
+        </div>
+      </div>
+
+      {/* Service Cards */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {metrics?.services.map(service => (
+          <ServiceCard key={service.name} service={service} />
+        ))}
+      </div>
+
+      {/* Metrics Grid */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <MetricCard
+          icon={Zap}
+          label="API Requests"
+          value={metrics?.api.total_requests.toLocaleString() || '0'}
+          sub="total"
+        />
+        <MetricCard
+          icon={Clock}
+          label="Avg Response"
+          value={`${metrics?.api.avg_response_ms.toFixed(0) || '0'}ms`}
+          sub="latency"
+        />
+        <MetricCard
+          icon={HardDrive}
+          label="Storage"
+          value={`${((metrics?.storage.total_mb || 0) + (metrics?.storage.sessions_mb || 0)).toFixed(1)}MB`}
+          sub="used"
+        />
+        <MetricCard
+          icon={Database}
+          label="DB Connections"
+          value={`${metrics?.database.connections || 0}/${metrics?.database.max_connections || 100}`}
+          sub="active"
+        />
+      </div>
+
+      {/* Storage Breakdown */}
+      <div className="rounded-xl border border-white/10 bg-white/5 p-6">
+        <h2 className="mb-4 text-lg font-semibold text-white">Storage Usage</h2>
+        <div className="space-y-3">
+          <StorageBar label="Session Data" used={metrics?.storage.sessions_mb || 0} max={500} color="bg-cyan-500" />
+          <StorageBar label="YOLO Models" used={metrics?.storage.models_mb || 0} max={10} color="bg-purple-500" />
+          <StorageBar label="Recordings" used={metrics?.storage.recordings_mb || 0} max={1000} color="bg-amber-500" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ServiceCard({ service }: { service: ServiceHealth }) {
+  const statusColors = {
+    healthy: 'border-green-500/20 bg-green-500/5',
+    degraded: 'border-amber-500/20 bg-amber-500/5',
+    down: 'border-red-500/20 bg-red-500/5',
+  };
+  const statusText = {
+    healthy: 'text-green-400',
+    degraded: 'text-amber-400',
+    down: 'text-red-400',
+  };
+  const statusDot = {
+    healthy: 'bg-green-400',
+    degraded: 'bg-amber-400',
+    down: 'bg-red-400',
+  };
+
+  return (
+    <div className={`rounded-xl border p-4 ${statusColors[service.status]}`}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div className={`h-2 w-2 rounded-full ${statusDot[service.status]}`} />
+          <h3 className="font-medium text-white">{service.name}</h3>
+        </div>
+        <span className={`text-xs font-medium ${statusText[service.status]}`}>
+          {service.status.toUpperCase()}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 text-xs">
+        <div>
+          <span className="text-slate-500">Port</span>
+          <p className="font-mono text-slate-300">{service.port}</p>
+        </div>
+        <div>
+          <span className="text-slate-500">Latency</span>
+          <p className="font-mono text-slate-300">{service.latency_ms > 0 ? `${service.latency_ms}ms` : '-'}</p>
+        </div>
+        <div>
+          <span className="text-slate-500">Uptime</span>
+          <p className="font-mono text-slate-300">{service.uptime}</p>
+        </div>
+        <div>
+          <span className="text-slate-500">Last Check</span>
+          <p className="font-mono text-slate-300">{new Date(service.last_check).toLocaleTimeString()}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MetricCard({ icon: Icon, label, value, sub }: {
+  icon: any; label: string; value: string; sub: string;
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+      <Icon className="mb-2 h-4 w-4 text-slate-500" />
+      <p className="text-sm text-slate-400">{label}</p>
+      <p className="text-xl font-bold text-white">{value}</p>
+      <p className="text-xs text-slate-500">{sub}</p>
+    </div>
+  );
+}
+
+function StorageBar({ label, used, max, color }: {
+  label: string; used: number; max: number; color: string;
+}) {
+  const pct = Math.min(100, (used / max) * 100);
+  return (
+    <div>
+      <div className="flex items-center justify-between text-xs mb-1">
+        <span className="text-slate-400">{label}</span>
+        <span className="text-slate-500">{used.toFixed(1)}MB / {max}MB</span>
+      </div>
+      <div className="h-2 rounded-full bg-white/10">
+        <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}

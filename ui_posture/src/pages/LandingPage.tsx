@@ -116,18 +116,196 @@ const FEATURE_HIGHLIGHTS = [
   },
 ];
 
-/* ── Page ──────────────────────────────────────────────────────── */
-export default function LandingPage() {
+/* ── Animated Counter ─────────────────────────────────────────── */
+function AnimatedCounter({ target, suffix = '' }: { target: string; suffix?: string }) {
+  const [count, setCount] = useState(0);
+  const [visible, setVisible] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const numericTarget = parseInt(target.replace(/[^0-9]/g, ''), 10);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting && !visible) setVisible(true);
+    }, { threshold: 0.3 });
+    if (ref.current) observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, [visible]);
+
+  useEffect(() => {
+    if (!visible || isNaN(numericTarget) || numericTarget === 0) {
+      setCount(0);
+      return;
+    }
+    const duration = 1500;
+    const start = Date.now();
+    const animate = () => {
+      const elapsed = Date.now() - start;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setCount(Math.round(numericTarget * eased));
+      if (progress < 1) requestAnimationFrame(animate);
+    };
+    requestAnimationFrame(animate);
+  }, [visible, numericTarget]);
+
+  if (isNaN(numericTarget) || numericTarget === 0) {
+    return <span ref={ref}>{target}</span>;
+  }
+
+  return (
+    <span ref={ref}>
+      {target.includes('+') ? `${count}+` : target.includes('/') ? target : `${count}${suffix}`}
+    </span>
+  );
+}
+
+/* ── Interactive Demo Section ──────────────────────────────────── */
+
+const DEMO_VIEWS = [
+  {
+    id: 'dashboard',
+    title: 'Executive Dashboard',
+    description: 'Factory-wide risk overview with worker status, department heatmaps, and trend analytics for safety managers.',
+    image: '/images/dashboard-admin-full.png',
+    stats: ['Real-time risk scores', 'Worker tracking', 'Trend analysis'],
+  },
+  {
+    id: 'monitoring',
+    title: 'Live Monitoring',
+    description: 'Real-time pose skeleton overlay on camera feeds with per-joint risk coloring and instant alert generation.',
+    image: '/images/live_camera.png',
+    stats: ['33-point pose tracking', 'Risk scoring', 'Live alerts'],
+  },
+  {
+    id: 'reports',
+    title: 'Compliance Reports',
+    description: 'Auto-generated PDF/CSV reports with posture scores, risk history, and audit-ready evidence packages.',
+    image: '/images/dashboard-operator.png',
+    stats: ['PDF export', 'CSV data', 'Audit trail'],
+  },
+];
+
+function InteractiveDemoSection() {
+  const [activeView, setActiveView] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Auto-rotate every 5 seconds when playing
+  useEffect(() => {
+    if (isPlaying) {
+      timerRef.current = setInterval(() => {
+        setActiveView(prev => (prev + 1) % DEMO_VIEWS.length);
+      }, 5000);
+    }
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [isPlaying]);
+
+  const view = DEMO_VIEWS[activeView];
+
+  return (
+    <section className="relative z-10 py-20 lg:py-28">
+      <div className="max-w-7xl mx-auto px-6">
+        <AnimatedSection>
+          <div className="text-center mb-12">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-3">Live Demo</p>
+            <h2 className="text-3xl sm:text-4xl font-bold text-white">
+              See ErgoVigilance in Action.
+            </h2>
+            <p className="text-base text-slate-400 mt-4 max-w-2xl mx-auto">
+              Real screenshots from the platform — dashboard, live monitoring, and compliance reports.
+            </p>
+          </div>
+        </AnimatedSection>
+
+        <AnimatedSection delay={200}>
+          <div className="relative">
+            {/* View tabs */}
+            <div className="flex items-center justify-center gap-2 mb-6">
+              {DEMO_VIEWS.map((v, i) => (
+                <button
+                  key={v.id}
+                  onClick={() => { setActiveView(i); setIsPlaying(false); }}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    i === activeView
+                      ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
+                      : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white border border-white/10'
+                  }`}
+                >
+                  {v.title}
+                </button>
+              ))}
+              <button
+                onClick={() => setIsPlaying(!isPlaying)}
+                className={`ml-2 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                  isPlaying
+                    ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                    : 'bg-white/5 text-slate-400 border border-white/10 hover:bg-white/10'
+                }`}
+              >
+                {isPlaying ? 'Pause' : 'Auto-play'}
+              </button>
+            </div>
+
+            {/* Screenshot display */}
+            <div className="relative rounded-2xl overflow-hidden border border-white/10 bg-white/[0.02] shadow-2xl shadow-blue-500/5">
+              <img
+                src={view.image}
+                alt={view.title}
+                className="w-full h-auto max-h-[500px] object-cover object-top"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#10131a]/80 via-transparent to-transparent" />
+
+              {/* Info overlay */}
+              <div className="absolute bottom-0 left-0 right-0 p-6">
+                <div className="flex items-end justify-between">
+                  <div>
+                    <h3 className="text-xl font-bold text-white mb-1">{view.title}</h3>
+                    <p className="text-sm text-slate-300 max-w-lg">{view.description}</p>
+                  </div>
+                  <div className="hidden sm:flex items-center gap-2">
+                    {view.stats.map((stat) => (
+                      <span key={stat} className="px-2 py-1 rounded bg-white/10 text-[10px] text-white/70">
+                        {stat}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Navigation dots */}
+              <div className="absolute bottom-6 right-6 flex items-center gap-1.5">
+                {DEMO_VIEWS.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => { setActiveView(i); setIsPlaying(false); }}
+                    className={`w-2 h-2 rounded-full transition-all ${
+                      i === activeView ? 'bg-blue-400 w-4' : 'bg-white/30 hover:bg-white/50'
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </AnimatedSection>
+      </div>
+    </section>
+  );
+}
+
+/* ── Page ──────────────────────────────────────────────────────── */export default function LandingPage() {
+
   const { demoLogin } = useAuth();
   const navigate = useNavigate();
   const [demoLoading, setDemoLoading] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleTryDemo = async () => {
     if (demoLoading) return;
     setDemoLoading(true);
     try {
       await demoLogin();
-      navigate('/dashboard');
+      // Navigate to live monitoring so the customer immediately sees the product in action
+      navigate('/monitoring');
     } catch (err) {
       console.error('Demo login failed:', err);
       alert('Demo mode requires the backend server to be running. Please start the backend and try again.');
@@ -158,7 +336,9 @@ export default function LandingPage() {
             <a href="#solutions" className="text-sm text-slate-400 hover:text-white transition-colors">Solutions</a>
             <a href="#technology" className="text-sm text-slate-400 hover:text-white transition-colors">Technology</a>
             <a href="#how-it-works" className="text-sm text-slate-400 hover:text-white transition-colors">How It Works</a>
+            <a href="#deployment-options" className="text-sm text-slate-400 hover:text-white transition-colors">Deploy</a>
             <a href="#command-center" className="text-sm text-slate-400 hover:text-white transition-colors">Command Center</a>
+            <Link to="/pricing" className="text-sm text-slate-400 hover:text-white transition-colors">Pricing</Link>
             <Link
               to="/request-pilot"
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-sm font-semibold text-white hover:bg-blue-500 transition-all hover:shadow-lg hover:shadow-blue-500/25 active:scale-[0.97]"
@@ -173,12 +353,48 @@ export default function LandingPage() {
               Log In
             </Link>
           </div>
-          <button className="md:hidden text-slate-400 hover:text-white">
-            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
+          <button className="md:hidden text-slate-400 hover:text-white" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+            {mobileMenuOpen ? (
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
+            )}
           </button>
         </div>
+        {/* Mobile menu drawer */}
+        {mobileMenuOpen && (
+          <div className="md:hidden border-t border-white/5 bg-[#10131a]/95 backdrop-blur-xl">
+            <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col gap-3">
+              <a href="#solutions" onClick={() => setMobileMenuOpen(false)} className="text-sm text-slate-400 hover:text-white transition-colors py-2">Solutions</a>
+              <a href="#technology" onClick={() => setMobileMenuOpen(false)} className="text-sm text-slate-400 hover:text-white transition-colors py-2">Technology</a>
+              <a href="#how-it-works" onClick={() => setMobileMenuOpen(false)} className="text-sm text-slate-400 hover:text-white transition-colors py-2">How It Works</a>
+              <a href="#deployment-options" onClick={() => setMobileMenuOpen(false)} className="text-sm text-slate-400 hover:text-white transition-colors py-2">Deploy</a>
+              <a href="#command-center" onClick={() => setMobileMenuOpen(false)} className="text-sm text-slate-400 hover:text-white transition-colors py-2">Command Center</a>
+              <Link to="/pricing" onClick={() => setMobileMenuOpen(false)} className="text-sm text-slate-400 hover:text-white transition-colors py-2">Pricing</Link>
+              <div className="flex flex-col gap-2 pt-2 border-t border-white/5">
+                <button
+                  onClick={() => { setMobileMenuOpen(false); handleTryDemo(); }}
+                  disabled={demoLoading}
+                  className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-500 text-sm font-bold text-white"
+                >
+                  <Play className="w-4 h-4" fill="currentColor" />
+                  {demoLoading ? 'Starting...' : 'Try Demo'}
+                </button>
+                <Link to="/request-pilot" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-blue-600 text-sm font-bold text-white">
+                  Request a Pilot
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+                <Link to="/login" onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl border border-white/10 text-sm text-slate-400 hover:text-white">
+                  Log In
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* ══════════════════════════════════════════════════════════════
@@ -309,7 +525,7 @@ export default function LandingPage() {
               <AnimatedSection key={stat.label}>
                 <div className="py-8 px-6 text-center group cursor-default">
                   <stat.icon className="w-6 h-6 text-blue-400 mx-auto mb-3 group-hover:scale-110 transition-transform" />
-                  <p className="text-3xl sm:text-4xl font-bold text-white mb-1">{stat.value}</p>
+                  <p className="text-3xl sm:text-4xl font-bold text-white mb-1"><AnimatedCounter target={stat.value} /></p>
                   <p className="text-sm text-slate-400">{stat.label}</p>
                 </div>
               </AnimatedSection>
@@ -317,6 +533,11 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      {/* ══════════════════════════════════════════════════════════════
+          INTERACTIVE DEMO — Product screenshots
+         ══════════════════════════════════════════════════════════════ */}
+      <InteractiveDemoSection />
 
       {/* ══════════════════════════════════════════════════════════════
           CORE TECHNOLOGY — Robotic arm + strain index image
@@ -461,6 +682,104 @@ export default function LandingPage() {
       </section>
 
       {/* ══════════════════════════════════════════════════════════════
+          DEPLOYMENT OPTIONS — On-Premise + Cloud
+         ══════════════════════════════════════════════════════════════ */}
+      <section className="relative z-10 py-20 lg:py-28 bg-white/[0.015] border-y border-white/5" id="deployment-options">
+        <div className="max-w-7xl mx-auto px-6">
+          <AnimatedSection>
+            <div className="text-center mb-16">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-400 mb-3">Deploy Your Way</p>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white">
+                Two Cores. One Dashboard.
+              </h2>
+              <p className="mt-4 text-slate-400 max-w-2xl mx-auto">
+                Choose on-premise for maximum accuracy, or cloud for zero-install factory deployment.
+                Both connect to the same real-time dashboard.
+              </p>
+            </div>
+          </AnimatedSection>
+          <div className="grid md:grid-cols-2 gap-8">
+            <AnimatedSection delay={0}>
+              <div className="p-8 rounded-2xl bg-gradient-to-br from-blue-500/[0.08] to-blue-500/[0.02] border border-blue-500/20">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-12 h-12 rounded-xl bg-blue-500/20 flex items-center justify-center">
+                    <span className="text-2xl">🖥</span>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">MediaPipe Core</h3>
+                    <p className="text-xs text-blue-400">On-Premise</p>
+                  </div>
+                </div>
+                <ul className="space-y-3 text-sm text-slate-300">
+                  <li className="flex items-start gap-2">
+                    <span className="text-blue-400 mt-0.5">✓</span>
+                    <span>33-landmark MediaPipe pose estimation</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-blue-400 mt-0.5">✓</span>
+                    <span>Real-time processing &lt;100ms latency</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-blue-400 mt-0.5">✓</span>
+                    <span>USB webcam or local video input</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-blue-400 mt-0.5">✓</span>
+                    <span>Full RULA/REBA with 33 keypoints</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-blue-400 mt-0.5">✓</span>
+                    <span>Worker video never leaves the factory</span>
+                  </li>
+                </ul>
+                <div className="mt-6 pt-6 border-t border-blue-500/20">
+                  <p className="text-xs text-slate-500">Best for: Safety-critical environments, high-accuracy requirements</p>
+                </div>
+              </div>
+            </AnimatedSection>
+            <AnimatedSection delay={100}>
+              <div className="p-8 rounded-2xl bg-gradient-to-br from-cyan-500/[0.08] to-cyan-500/[0.02] border border-cyan-500/20">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-12 h-12 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                    <span className="text-2xl">☁</span>
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-bold text-white">YOLO Cloud Core</h3>
+                    <p className="text-xs text-cyan-400">Zero-Install SaaS</p>
+                  </div>
+                </div>
+                <ul className="space-y-3 text-sm text-slate-300">
+                  <li className="flex items-start gap-2">
+                    <span className="text-cyan-400 mt-0.5">✓</span>
+                    <span>YOLOv8-pose + ByteTrack worker tracking</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-cyan-400 mt-0.5">✓</span>
+                    <span>Just share CCTV RTSP URLs — no on-site install</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-cyan-400 mt-0.5">✓</span>
+                    <span>Scales to 100+ cameras across factories</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-cyan-400 mt-0.5">✓</span>
+                    <span>Multi-factory dashboard with PDF/CSV reports</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="text-cyan-400 mt-0.5">✓</span>
+                    <span>Monthly SaaS subscription per camera</span>
+                  </li>
+                </ul>
+                <div className="mt-6 pt-6 border-t border-cyan-500/20">
+                  <p className="text-xs text-slate-500">Best for: Mass deployment, multiple factories, easy installation</p>
+                </div>
+              </div>
+            </AnimatedSection>
+          </div>
+        </div>
+      </section>
+
+      {/* ══════════════════════════════════════════════════════════════
           COMMAND CENTER — Cards with images
          ══════════════════════════════════════════════════════════════ */}
       <section className="relative z-10 py-20 lg:py-28 bg-white/[0.015] border-y border-white/5" id="command-center">
@@ -581,6 +900,29 @@ export default function LandingPage() {
       </AnimatedSection>
 
       {/* ══════════════════════════════════════════════════════════════
+          BY THE NUMBERS — Key metrics
+         ══════════════════════════════════════════════════════════════ */}
+      <section className="relative z-10 py-16 lg:py-20 border-t border-white/5">
+        <div className="max-w-5xl mx-auto px-6">
+          <AnimatedSection>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+              {[
+                { value: '33', label: 'Skeletal Landmarks', suffix: '' },
+                { value: '87', label: 'Ground-Truth Accuracy', suffix: '%' },
+                { value: '7', label: 'Task Classes', suffix: '' },
+                { value: '4', label: 'Risk Assessment Methods', suffix: '' },
+              ].map((stat) => (
+                <div key={stat.label}>
+                  <AnimatedCounter target={stat.value} suffix={stat.suffix} />
+                  <p className="text-xs text-slate-400 mt-2 uppercase tracking-wider">{stat.label}</p>
+                </div>
+              ))}
+            </div>
+          </AnimatedSection>
+        </div>
+      </section>
+
+      {/* ══════════════════════════════════════════════════════════════
           CTA — Request a Pilot
          ══════════════════════════════════════════════════════════════ */}
       <section className="relative z-10 py-20 lg:py-28 border-t border-white/5">
@@ -629,6 +971,51 @@ export default function LandingPage() {
       </section>
 
       {/* ══════════════════════════════════════════════════════════════
+          CHANGELOG
+         ══════════════════════════════════════════════════════════════ */}
+      <section className="relative z-10 py-20 border-t border-white/5">
+        <div className="max-w-4xl mx-auto px-6">
+          <AnimatedSection>
+            <div className="text-center mb-12">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-blue-400 mb-3">Changelog</p>
+              <h2 className="text-3xl sm:text-4xl font-bold text-white">
+                What We've Built.
+              </h2>
+              <p className="text-base text-slate-400 mt-4">
+                Transparent development — see what's new and what's coming.
+              </p>
+            </div>
+          </AnimatedSection>
+
+          <div className="space-y-6">
+            {[
+              { version: 'v1.0.0', date: 'Sep 2026', title: 'Initial Release', items: ['34-page React dashboard', 'YOLO cloud core with RTSP ingestion', 'MediaPipe on-premise engine', 'RULA/REBA risk scoring', 'Real-time pose tracking', 'PDF/CSV report export', 'Worker management', 'Alert system with email/Slack'] },
+              { version: 'v0.9.0', date: 'Aug 2026', title: 'Cloud Platform', items: ['YOLOv8-pose cloud inference', 'Multi-camera RTSP support', 'API key authentication', 'PostgreSQL persistent storage', 'Webhook alert delivery', 'Model versioning & rollback', 'Data retention policies', 'Public status page'] },
+              { version: 'v0.8.0', date: 'Aug 2026', title: 'ML Pipeline', items: ['10 training scripts', 'Risk classifier (94.1% F1)', 'Task classifier (97.6% F1)', '7-class task recognition', 'Feature extraction from COCO_17 keypoints', 'Synthetic data generation', 'Model comparison dashboard'] },
+            ].map((release, i) => (
+              <AnimatedSection key={release.version} delay={i * 100}>
+                <div className="bg-white/[0.03] border border-white/10 rounded-xl p-6 hover:border-white/15 transition-colors">
+                  <div className="flex items-center gap-3 mb-3">
+                    <span className="px-2.5 py-1 rounded-md bg-blue-500/10 text-blue-400 text-xs font-bold font-mono">{release.version}</span>
+                    <span className="text-xs text-slate-500">{release.date}</span>
+                    <span className="text-sm font-semibold text-white">{release.title}</span>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {release.items.map((item) => (
+                      <div key={item} className="flex items-start gap-2 text-xs text-slate-400">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-green-400 mt-0.5 shrink-0" />
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </AnimatedSection>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ══════════════════════════════════════════════════════════════
           FOOTER
          ══════════════════════════════════════════════════════════════ */}
       <footer className="relative z-10 border-t border-white/5 bg-[#0b0e15]">
@@ -651,6 +1038,7 @@ export default function LandingPage() {
             <div className="space-y-4">
               <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400">Company</h4>
               <div className="space-y-3">
+                <Link to="/pricing" className="block text-sm text-slate-500 hover:text-white transition-colors">Pricing</Link>
                 <Link to="/request-pilot" className="block text-sm text-slate-500 hover:text-white transition-colors">Request Pilot</Link>
                 <Link to="/validation" className="block text-sm text-slate-500 hover:text-white transition-colors">Validation</Link>
                 <a href="mailto:contact@ergovigilance.com" className="block text-sm text-slate-500 hover:text-white transition-colors">Contact</a>

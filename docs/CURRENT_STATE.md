@@ -1,6 +1,6 @@
 # CURRENT_STATE.md
 
-Snapshot of ErgoVigilance as of **2026-08-20**. Every statement below is backed by
+Snapshot of ErgoVigilance as of **2026-09-01**. Every statement below is backed by
 code inspection or runtime evidence.
 
 ---
@@ -9,14 +9,20 @@ code inspection or runtime evidence.
 
 ```
 ┌──────────────────────────────── ui_posture/ (React 19 + Vite 6, port 3000 / 8080)
-│  21 pages: live monitoring, role dashboards, session history, replay,
+│  34 pages: live monitoring, role dashboards, session history, replay,
 │  video review, workers/users admin, alerts, AI assistant, setup wizard,
-│  pilot requests, validation page, landing flow
-│        │  HTTP / WebSocket  (/api, /video, /ws)
+│  pilot requests, validation page, landing flow, cloud cameras,
+│  cloud onboarding, cloud settings, YOLO demo, ROI analytics,
+│  model dashboard, system health, API docs, status page,
+│  onboarding, search, billing, pricing, request pilot
+│  + i18n (English / Hindi), animated risk gauge, product tour,
+│  keyboard shortcuts, PWA manifest, network status indicator
+│        │  HTTP / WebSocket  (/api, /video, /ws, /cloud-api)
 │        ▼
 ┌──────────────────────────────── backend_api/ (FastAPI, port 8000)
-│  ~70 endpoints, JWT auth (4 roles), versioned SQLite migrations,
-│  LiveMonitoringService — owns and drives the AI engines
+│  ~92 endpoints, JWT auth (4 roles), versioned SQLite migrations,
+│  LiveMonitoringService — owns and drives the AI engines,
+│  Stripe billing, search API, settings API, retention policy
 │        │  in-process calls
 │        ▼
 ┌──────────────────────────────── backend/ (AI core — no HTTP)
@@ -25,9 +31,14 @@ code inspection or runtime evidence.
 │  EventBus, Fatigue & Exposure models, AI Assistant,
 │  Worker Identity Engine (SFace + YOLO), Liveness anti-spoof,
 │  Camera Setup Wizard, Crash-safe session checkpoints
+├──────────────────────────────── yolo_cloud/ (YOLO Cloud Core, port 8100)
+│  YOLOv8-pose inference, RTSP stream ingestion, tenant isolation,
+│  PostgreSQL storage, API key auth, webhooks, email/Slack alerts,
+│  data retention, onboarding wizard, live frame snapshots
 ```
 
-> **`backend/` is the product. `backend_api/` is how the product talks to a browser.**
+> **`backend/` is the on-premise AI core. `yolo_cloud/` is the cloud CCTV core.
+> `backend_api/` bridges both to the browser.**
 
 ---
 
@@ -73,7 +84,7 @@ The following features shipped between 2026-07-07 and 2026-08-20 (80+ commits):
 
 ---
 
-## Endpoints (as of 2026-08-20)
+## Endpoints (as of 2026-09-01)
 
 | Area | Key endpoints |
 |------|---------------|
@@ -93,10 +104,27 @@ The following features shipped between 2026-07-07 and 2026-08-20 (80+ commits):
 | Retention | Stats + manual trigger (admin only) |
 | Privacy | Per-worker data deletion (admin only) |
 | Task config | `/api/task-modifiers` |
+| Search | `GET /api/search?q=` |
+| Billing | `POST /api/billing/checkout`, `/subscription`, `/portal`, `/webhook` |
+| Settings | `GET /api/settings`, `/api/settings/retention` |
+
+### Cloud Core (YOLO) Endpoints
+
+| Area | Key endpoints |
+|------|---------------|
+| Cameras | CRUD for RTSP cameras, live snapshot JPEG |
+| Sessions | Start/stop/list cloud monitoring sessions |
+| Alerts | List/acknowledge cloud alerts |
+| API Keys | Create/list API keys for tenant auth |
+| Webhooks | CRUD + test webhook delivery (HMAC-SHA256) |
+| Retention | Cleanup old sessions/alerts |
+| Storage Stats | Session/alert/camera counts per tenant |
+| Inference | `POST /api/inference/detect` for YOLO pose detection |
+| Health | `/healthz` with storage mode indicator |
 
 ---
 
-## Frontend Pages (21 pages, lazy-loaded)
+## Frontend Pages (34 pages, lazy-loaded)
 
 | Page | Route | Data source |
 |------|-------|-------------|
@@ -121,8 +149,38 @@ The following features shipped between 2026-07-07 and 2026-08-20 (80+ commits):
 | Pilot Requests | `/pilot-requests` | Pilot intake |
 | Request Pilot | `/request-pilot` | Public pilot signup |
 | Forgot Password | `/forgot-password` | Auth flow |
+| Dashboard (Operator) | `/dashboard` | Personal risk gauge + session data |
+| Dashboard (Supervisor) | `/dashboard` | Team overview + worker alerts |
+| Cloud Cameras | `/cloud-cameras` | RTSP camera management + live thumbnails |
+| Cloud Onboarding | `/cloud-onboarding` | 6-step guided camera setup wizard |
+| Cloud Settings | `/cloud-settings` | YOLO model config + webhooks + RTSP tester |
+| YOLO Demo | `/yolo-demo` | Image upload + live webcam inference |
+| ROI Analytics | `/roi-analytics` | Cost savings calculator |
+| Model Dashboard | `/model-dashboard` | Training metrics + per-class F1 scores |
+| System Health | `/system-health` | Service health, storage, DB connections |
+| API Docs | `/api-docs` | OpenAPI explorer |
+| Status Page | `/status` | Public uptime status (no auth) |
+| Onboarding | `/onboarding` | Getting started checklist |
+| My Posture | `/my-posture` | Personal posture history |
+| Pricing | `/pricing` | Cloud tier pricing + Stripe checkout |
 
 ---
+
+## SaaS Features (Cloud Core)
+
+| Feature | Status | Details |
+|---------|--------|---------|
+| PostgreSQL storage | ✅ | Sessions, alerts, cameras, API keys persist |
+| API key auth | ✅ | `X-API-Key` header validation with dev-mode bypass |
+| Multi-tenancy | ✅ | Tenant isolation on all cloud queries |
+| Stripe billing | ✅ | Checkout, subscription, portal, webhook events |
+| Live camera preview | ✅ | JPEG snapshot endpoint + frontend thumbnails |
+| Alert notifications | ✅ | Self-contained email/Slack delivery |
+| Webhook system | ✅ | Customer-configurable HTTP delivery with HMAC signing |
+| Data retention | ✅ | Configurable cleanup for sessions/alerts |
+| Onboarding wizard | ✅ | 6-step guided camera setup |
+| Pricing → checkout | ✅ | Stripe integration on Pricing page |
+| Hindi language | ✅ | 120+ operator-facing translations |
 
 ## Test Baseline
 
@@ -143,9 +201,11 @@ CI runs on every push/PR via GitHub Actions (`.github/workflows/ci.yml`):
 
 1. **Single-person tracking** — `num_poses=1` default; multi-person reads bounding boxes but only the primary person is scored. Per-worker isolation is the follow-up.
 2. **CPU-only inference** — ~15-20 FPS at 640×480 on a laptop CPU (MediaPipe lite). Full model is 2-4× slower.
-3. **Heuristic thresholds** — risk bands are tuned against a 30,698-pose REBA dataset but **not clinically validated**. Ground-truth accuracy is **87.6%** (500 human-labeled frames, `results/ground_truth_evaluation.json`). The model-vs-threshold self-consistency is 76.9%.
-4. **One room / one camera** — the whole pipeline has been validated by one person in one setup. Multi-site generalizability is unproven.
+3. **Heuristic thresholds** — risk bands are tuned against a 30,698-pose REBA dataset but **not clinically validated**. Ground-truth accuracy is **87.6%** (500 human-labeled frames, `results/ground_truth_evaluation.json`).
+4. **One room / one camera** — the on-premise pipeline has been validated by one person in one setup. Cloud core (YOLO) enables multi-camera via RTSP.
 5. **WebSocket integration** — frontend WebSocket hooks are wired with HTTP polling fallback. Both paths work.
-6. **Alert persistence** — alerts are persisted to SQLite via the AlertEngine (survives restarts).
-7. **Multi-camera page** — fetches real camera data from the API; shows live feeds and station risk ranking.
+6. **Alert persistence** — alerts are persisted to SQLite (on-premise) or PostgreSQL (cloud core).
+7. **Stripe billing** — integration is built but requires live API keys to activate. Works in free-tier mode without keys.
+8. **Hindi translation** — 120+ operator-facing strings translated. Admin/supervisor pages still English-only.
+9. **YOLO task classifier** — predicts mostly "Seated Work" with zero recall on minority classes. Risk scoring works independently of task label.
 8. **Single-backend design** — one `LiveMonitoringService` singleton per process. Multi-camera = multiple backend processes.

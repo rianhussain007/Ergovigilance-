@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 220" fill="none">
+  <!-- Shield outline -->
+  <path d="M100 10 L185 45 L185 110 C185 155 148 195 100 210 C52 195 15 155 15 110 L15 45 Z" 
+        stroke="#22d3ee" stroke-width="14" stroke-linejoin="round" fill="none"/>
+  <!-- Person: head -->
+  <circle cx="100" cy="72" r="16" fill="#22d3ee"/>
+  <!-- Person: body -->
+  <path d="M100 88 L100 145" stroke="#22d3ee" stroke-width="12" stroke-linecap="round"/>
+  <!-- Person: arms (raised up) -->
+  <path d="M100 105 L60 72" stroke="#22d3ee" stroke-width="12" stroke-linecap="round"/>
+  <path d="M100 105 L140 72" stroke="#22d3ee" stroke-width="12" stroke-linecap="round"/>
+  <!-- Person: legs -->
+  <path d="M100 145 L70 185" stroke="#22d3ee" stroke-width="12" stroke-linecap="round"/>
+  <path d="M100 145 L130 185" stroke="#22d3ee" stroke-width="12" stroke-linecap="round"/>
+</svg>
