@@ -166,6 +166,16 @@ class RequestLoggingMiddleware:
                 status = message.get("status", 0)
                 duration = round((time.time() - start) * 1000, 1)
 
+                # Track SLA metrics
+                try:
+                    from app.core.sla_monitor import sla_monitor
+                    sla_monitor.record_request(
+                        success=status < 500,
+                        response_time_ms=duration,
+                    )
+                except ImportError:
+                    pass
+
                 # Skip health check noise
                 if path not in ("/healthz", "/readyz", "/metrics"):
                     extra = {
