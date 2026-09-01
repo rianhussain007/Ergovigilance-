@@ -221,7 +221,30 @@ async def lifespan(app: FastAPI):
     except RuntimeError:
         pass
 
-    logger.info("Shutting down %s", settings.APP_NAME)
+    # Start auto-recovery monitor
+    from app.core.auto_recovery import recovery_monitor
+    recovery_monitor.start()
+
+    # Register services for auto-recovery
+    def check_ollama():
+        import requests as _req
+        try:
+            r = _req.get(os.environ.get("OLLAMA_HOST", "http://localhost:11434") + "/api/tags", timeout=3)
+            return r.status_code == 200
+        except Exception:
+            return False
+
+    recovery_monitor.register_service("ollama", check_ollama)
+
+    logger.info("Auto-recovery monitor started")
+
+    yield
+
+    # Graceful shutdown: drain in-flight requests
+    from app.core.graceful_shutdown import shutdown_manager
+    await shutdown_manager.drain()
+
+    recovery_monitor.stop()
 
 
 class _SafeJSONEncoder(json.JSONEncoder):
@@ -331,6 +354,18 @@ app.add_middleware(APIVersionMiddleware)
 # --- Enterprise Request Validation ---
 from app.core.request_validation import ValidationMiddleware
 app.add_middleware(ValidationMiddleware)
+
+# --- Enterprise Request ID Tracking ---
+from app.core.request_id import RequestIDMiddleware
+app.add_middleware(RequestIDMiddleware)
+
+# --- Enterprise Input Sanitization ---
+from app.core.sanitization import SanitizationMiddleware
+app.add_middleware(SanitizationMiddleware)
+
+# --- Enterprise Response Compression ---
+from app.core.compression import CompressionMiddleware
+app.add_middleware(CompressionMiddleware)
 
 # --- Routers ---
 app.include_router(api_router)
