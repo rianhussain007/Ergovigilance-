@@ -274,6 +274,10 @@ app.add_middleware(
 # --- Rate limiting ---
 app.add_middleware(RateLimitMiddleware)
 
+# --- Enterprise Security Headers ---
+from app.core.security_headers import SecurityHeadersMiddleware
+app.add_middleware(SecurityHeadersMiddleware)
+
 # --- Routers ---
 app.include_router(api_router)
 app.include_router(ws_router)

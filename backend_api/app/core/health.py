@@ -74,3 +74,68 @@ def _format_uptime(seconds: float) -> str:
     if hours > 0:
         return f"{hours}h {minutes}m"
     return f"{minutes}m"
+
+
+# --- Prometheus-compatible metrics ---
+_request_count = 0
+_request_errors = 0
+_active_websockets = 0
+_active_sessions = 0
+
+def increment_requests():
+    global _request_count
+    _request_count += 1
+
+def increment_errors():
+    global _request_errors
+    _request_errors += 1
+
+def set_websocket_count(count: int):
+    global _active_websockets
+    _active_websockets = count
+
+def set_session_count(count: int):
+    global _active_sessions
+    _active_sessions = count
+
+def prometheus_metrics() -> str:
+    """Generate Prometheus-format metrics text."""
+    db = _check_database()
+    disk = _check_disk()
+    uptime = get_uptime()
+
+    metrics = []
+    metrics.append('# HELP ergovigilance_uptime_seconds Time since server start')
+    metrics.append('# TYPE ergovigilance_uptime_seconds gauge')
+    metrics.append(f'ergovigilance_uptime_seconds {uptime:.2f}')
+    metrics.append('')
+    metrics.append('# HELP ergovigilance_requests_total Total HTTP requests')
+    metrics.append('# TYPE ergovigilance_requests_total counter')
+    metrics.append(f'ergovigilance_requests_total {_request_count}')
+    metrics.append('')
+    metrics.append('# HELP ergovigilance_request_errors_total Total HTTP errors')
+    metrics.append('# TYPE ergovigilance_request_errors_total counter')
+    metrics.append(f'ergovigilance_request_errors_total {_request_errors}')
+    metrics.append('')
+    metrics.append('# HELP ergovigilance_websockets_active Active WebSocket connections')
+    metrics.append('# TYPE ergovigilance_websockets_active gauge')
+    metrics.append(f'ergovigilance_websockets_active {_active_websockets}')
+    metrics.append('')
+    metrics.append('# HELP ergovigilance_sessions_active Active monitoring sessions')
+    metrics.append('# TYPE ergovigilance_sessions_active gauge')
+    metrics.append(f'ergovigilance_sessions_active {_active_sessions}')
+    metrics.append('')
+    metrics.append('# HELP ergovigilance_db_latency_ms Database query latency')
+    metrics.append('# TYPE ergovigilance_db_latency_ms gauge')
+    metrics.append(f'ergovigilance_db_latency_ms {db["latency_ms"]}')
+    metrics.append('')
+    metrics.append('# HELP ergovigilance_disk_usage_bytes Disk usage per directory')
+    metrics.append('# TYPE ergovigilance_disk_usage_bytes gauge')
+    for name, mb in disk.items():
+        metrics.append(f'ergovigilance_disk_usage_bytes{{dir="{name}"}} {mb * 1024 * 1024}')
+    metrics.append('')
+    metrics.append('# HELP ergovigilance_db_connected Database connection status')
+    metrics.append('# TYPE ergovigilance_db_connected gauge')
+    metrics.append(f'ergovigilance_db_connected {1 if db["status"] == "connected" else 0}')
+
+    return '\n'.join(metrics)

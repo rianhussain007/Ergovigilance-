@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ergovigilance-backend
+  namespace: ergovigilance
+  labels:
+    app: ergovigilance-backend
+spec:
+  selector:
+    app: ergovigilance-backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+      name: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ergovigilance-frontend
+  namespace: ergovigilance
+  labels:
+    app: ergovigilance-frontend
+spec:
+  selector:
+    app: ergovigilance-frontend
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ergovigilance-postgres
+  namespace: ergovigilance
+  labels:
+    app: ergovigilance-postgres
+spec:
+  selector:
+    app: ergovigilance-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
+      name: postgres
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ergovigilance-cloud-core
+  namespace: ergovigilance
+  labels:
+    app: ergovigilance-cloud-core
+spec:
+  selector:
+    app: ergovigilance-cloud-core
+  ports:
+    - port: 8100
+      targetPort: 8100
+      name: http
+  type: ClusterIP
