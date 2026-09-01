@@ -3,12 +3,87 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Primary Meta Tags -->
+    <title>ErgoVigilance — AI-Powered Ergonomic Risk Monitoring</title>
+    <meta name="title" content="ErgoVigilance — AI-Powered Ergonomic Risk Monitoring" />
+    <meta name="description" content="Real-time workplace ergonomic monitoring using AI pose estimation. Detect risky postures, prevent musculoskeletal injuries, and protect your workforce — no wearables required." />
+    <meta name="keywords" content="ergonomic monitoring, workplace safety, pose estimation, RULA, REBA, AI safety, computer vision, musculoskeletal disorders, OSHA compliance" />
+    <meta name="author" content="ErgoVigilance Systems" />
+    <meta name="robots" content="index, follow" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://ergovigilance.com" />
+    <meta property="og:title" content="ErgoVigilance — AI-Powered Ergonomic Risk Monitoring" />
+    <meta property="og:description" content="Real-time workplace ergonomic monitoring using AI pose estimation. Detect risky postures, prevent injuries, protect your workforce — no wearables required." />
+    <meta property="og:image" content="/og-image.png" />
+    <meta property="og:site_name" content="ErgoVigilance" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://ergovigilance.com" />
+    <meta property="twitter:title" content="ErgoVigilance — AI-Powered Ergonomic Risk Monitoring" />
+    <meta property="twitter:description" content="Real-time workplace ergonomic monitoring using AI pose estimation. Detect risky postures, prevent injuries, protect your workforce." />
+    <meta property="twitter:image" content="/og-image.png" />
+
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0b0f14" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="ErgoVigilance" />
+    <link rel="apple-touch-icon" href="/images/logo-icon.svg" />
+
+    <!-- Theme color for mobile browsers -->
+    <meta name="theme-color" content="#0b0f14" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="ErgoVigilance" />
+
+    <!-- Favicon (multiple sizes for different devices) -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="icon" type="image/png" href="/favicon.png" />
-    <title>ErgoVigilance Pro - Ergonomic Posture Analysis Dashboard</title>
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Preconnect to external resources -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+    <!-- Structured Data (JSON-LD) for SEO -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "ErgoVigilance",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Windows, Linux, Docker",
+      "description": "AI-powered real-time workplace ergonomic risk monitoring using computer vision pose estimation. RULA/REBA-informed risk scoring, no wearables required.",
+      "url": "https://ergovigilance.com",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD",
+        "description": "Free on-premise self-hosted version"
+      },
+      "featureList": [
+        "Real-time 33-point pose tracking",
+        "RULA/REBA risk scoring",
+        "Live dashboard and alerts",
+        "PDF/CSV report export",
+        "RTSP camera support",
+        "Worker management",
+        "Multi-site monitoring"
+      ]
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

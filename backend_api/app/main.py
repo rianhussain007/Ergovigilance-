@@ -285,11 +285,39 @@ app.include_router(ops_router)
 app.middleware("http")(metrics_middleware)
 
 
+# --- Global exception handler (prevents unhandled crashes) ---
+# Use a Starlette exception handler class instead of the decorator
+# to avoid conflicts with middleware ordering.
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.requests import Request
+from starlette.responses import JSONResponse as _JSONResponse
+
+
+@app.exception_handler(StarletteHTTPException)
+async def http_exception_handler(request: Request, exc: StarletteHTTPException):
+    return _JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+    )
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error("Unhandled exception on %s %s: %s", request.method, request.url.path, exc, exc_info=True)
+    return _JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "type": type(exc).__name__},
+    )
+
+
 # --- Health ---
 @app.get("/health", tags=["System"])
 async def health():
     """Health check endpoint — used by Deployment Center and load balancers."""
+    import time as _time
+    t0 = _time.time()
     status = health_status()
+    status["latency_ms"] = round((_time.time() - t0) * 1000, 1)
     try:
         from app.services.live_monitor import get_live_service
         service = get_live_service()

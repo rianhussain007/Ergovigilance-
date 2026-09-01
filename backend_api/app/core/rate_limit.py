@@ -21,8 +21,8 @@ from starlette.responses import JSONResponse
 logger = logging.getLogger(__name__)
 
 WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
-MAX_REQUESTS = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "100"))
-AUTH_MAX = int(os.getenv("RATE_LIMIT_AUTH_MAX", "10"))
+MAX_REQUESTS = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "500"))
+AUTH_MAX = int(os.getenv("RATE_LIMIT_AUTH_MAX", "50"))
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -49,8 +49,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # Clean old entries
         self._requests[ip] = [t for t in self._requests[ip] if t > cutoff]
 
-        # Auth endpoints have stricter limits
-        limit = AUTH_MAX if "/auth/" in path else self.max_requests
+        # Auth, search, settings, and health endpoints are exempt
+        exempt = ["/auth/", "/search", "/settings", "/billing", "/healthz", "/readyz", "/metrics", "/health"]
+        if any(e in path for e in exempt):
+            return False
+
+        limit = self.max_requests
 
         if len(self._requests[ip]) >= limit:
             return True
@@ -59,9 +63,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return False
 
     async def dispatch(self, request: Request, call_next):
-        # Skip rate limiting for health checks and static files
+        # Skip rate limiting for health checks, docs, and static files
         path = request.url.path
-        if path in ("/healthz", "/readyz", "/health", "/", "/docs", "/openapi.json"):
+        if path in ("/healthz", "/readyz", "/health", "/", "/docs", "/openapi.json", "/redoc"):
             return await call_next(request)
 
         ip = self._get_client_ip(request)

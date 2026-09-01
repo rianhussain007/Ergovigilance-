@@ -10,6 +10,7 @@ import { useLiveTimeline } from '@/src/hooks/useLiveTimeline';
 import { useContextSnapshot } from '@/src/hooks/useContextSnapshot';
 import { useToast } from '@/src/hooks/useToast';
 import { useSettings } from '@/src/hooks/useSettings';
+import { useI18n } from '@/src/i18n';
 import { AlertTriangle, Camera, Clock3, FileDown, FileText, Radio, ShieldAlert, Brain, ScanLine, Users } from 'lucide-react';
 import type { Issue, ErgonomicFeature, LiveStatus, Recommendations, SessionInfo, ContextSnapshot } from '@/src/types/api';
 
@@ -223,7 +224,7 @@ export default function LiveMonitoring() {
             </div>
           )}
         </div>
-        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-md">
+        <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-md" data-tour="camera-panel">
           <CameraPanel
             status={session.cameraStatus}
             workerName={session.workerName}
@@ -630,22 +631,23 @@ function CameraFramingCard({ snapshot, unavailableFeatures, active }: { snapshot
 // whether their posture is OK, needs attention, or must be corrected NOW.
 // Technical detail (RULA/REBA bands, feature values) stays in the cards below.
 function PostureStatusBanner({ riskLevel, active, currentTask }: { riskLevel: string; active: boolean; currentTask?: string | null }) {
+  const { t } = useI18n();
   if (!active) {
     return (
       <div className="rounded-xl border border-outline-variant bg-surface-container-low px-lg py-md">
-        <p className="text-body-md font-semibold text-on-surface-variant">Start monitoring to see your posture status.</p>
+        <p className="text-body-md font-semibold text-on-surface-variant">{t('monitoring.startSession')}</p>
       </div>
     );
   }
   const level = (riskLevel || '').toUpperCase();
   const critical = level === 'HIGH' || level === 'CRITICAL';
   const attention = level === 'MEDIUM';
-  const statusText = critical ? 'STOP — unsafe posture' : attention ? 'Watch your back' : 'Posture: OK';
+  const statusText = critical ? t('worker.highRisk') : attention ? t('worker.adjustPosture') : t('worker.goodPosture');
   const statusDetail = critical
-    ? 'Correct your posture now — hold position and adjust.'
+    ? t('worker.highRisk')
     : attention
-      ? 'Posture needs attention — straighten up and take it easy.'
-      : 'Working in a safe range — keep it up.';
+      ? t('worker.adjustPosture')
+      : t('worker.goodPosture');
   return (
     <div
       className={`rounded-xl border px-lg py-md flex flex-wrap items-center justify-between gap-md ${

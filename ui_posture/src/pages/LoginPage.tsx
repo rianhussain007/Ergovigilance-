@@ -1,6 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router';
-import { Activity, Lock, Eye, EyeOff, Loader2, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Activity, Lock, Eye, EyeOff, Loader2, AlertTriangle, ArrowRight, Play } from 'lucide-react';
 import { useAuth } from '@/src/auth/AuthContext';
 import { IndustrialBackdrop } from '@/src/components/common';
 import Logo from '../components/common/Logo';
@@ -8,11 +8,12 @@ import Logo from '../components/common/Logo';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginPage() {
-  const { user, login } = useAuth();
+  const { user, login, demoLogin } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('operator@example.local');
   const [password, setPassword] = useState('OperatorPass123!');
   const [showPassword, setShowPassword] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -64,7 +65,7 @@ export default function LoginPage() {
           {/* Brand header — wordmark links back to the marketing homepage */}
           <div className="px-xl pt-xl pb-md space-y-md">
             <Link to="/" className="flex items-center gap-sm group w-fit">
-              <Logo className="h-11 w-auto" variant="auto" />
+              <Logo className="h-11 w-auto" variant="light" />
             </Link>
             <div>
               <h1 className="text-headline-md font-bold text-slate-900 dark:text-on-surface">Sign in</h1>
@@ -148,6 +149,26 @@ export default function LoginPage() {
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
               {loading ? 'Signing in…' : 'Sign In'}
+            </button>
+
+            <button
+              type="button"
+              onClick={async () => {
+                setDemoLoading(true);
+                try {
+                  await demoLogin();
+                  navigate('/monitoring');
+                } catch {
+                  setServerError('Demo mode requires the backend server to be running.');
+                } finally {
+                  setDemoLoading(false);
+                }
+              }}
+              disabled={demoLoading}
+              className="w-full h-12 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white text-body-sm font-semibold hover:from-cyan-500 hover:to-blue-500 hover:shadow-lg hover:shadow-cyan-500/20 disabled:opacity-60 flex items-center justify-center gap-sm transition-all active:scale-[0.98] mt-3"
+            >
+              {demoLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" fill="currentColor" />}
+              {demoLoading ? 'Starting Demo...' : 'Try Demo — No Login Required'}
             </button>
 
             <div className="pt-md border-t border-slate-100 dark:border-outline-variant/60">

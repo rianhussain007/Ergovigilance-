@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ErgoVigilance — Worker Consent Form</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; max-width: 800px; margin: 40px auto; color: #1a1a1a; line-height: 1.6; }
+        h1 { color: #0d47a1; border-bottom: 3px solid #0d47a1; padding-bottom: 10px; font-size: 24px; }
+        h2 { color: #1565c0; font-size: 18px; margin-top: 30px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .logo { font-size: 28px; font-weight: bold; color: #0d47a1; }
+        .info-box { background: #e3f2fd; border-left: 4px solid #1565c0; padding: 15px 20px; margin: 20px 0; border-radius: 0 8px 8px 0; }
+        .warning-box { background: #fff3e0; border-left: 4px solid #f57c00; padding: 15px 20px; margin: 20px 0; border-radius: 0 8px 8px 0; }
+        .section { margin: 25px 0; }
+        .check-item { display: flex; align-items: flex-start; gap: 10px; margin: 8px 0; }
+        .checkbox { width: 18px; height: 18px; border: 2px solid #1565c0; border-radius: 3px; flex-shrink: 0; margin-top: 3px; }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+        th, td { border: 1px solid #ccc; padding: 10px 15px; text-align: left; font-size: 14px; }
+        th { background: #e3f2fd; color: #0d47a1; }
+        .signature-box { border: 2px solid #333; padding: 20px; margin: 30px 0; border-radius: 8px; }
+        .sig-line { border-bottom: 1px solid #333; width: 250px; display: inline-block; margin: 10px 0; }
+        .footer { margin-top: 40px; padding-top: 20px; border-top: 2px solid #0d47a1; font-size: 12px; color: #666; }
+        ul { padding-left: 20px; }
+        li { margin: 5px 0; }
+        .privacy-badge { display: inline-block; background: #e8f5e9; color: #2e7d32; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div>
+        <div class="logo">ErgoVigilance</div>
+        <div style="color: #666; font-size: 14px;">Workplace Ergonomic Monitoring System</div>
+    </div>
+    <div style="text-align: right; font-size: 13px; color: #666;">
+        <div>Form Version: 1.0</div>
+        <div>Date: _______________</div>
+    </div>
+</div>
+
+<h1>Worker Consent & Acknowledgment Form</h1>
+
+<div class="info-box">
+    <strong>Purpose:</strong> This form explains how ErgoVigilance monitors workplace ergonomics to protect your health and safety. 
+    Your consent is required before the system can analyze your posture data.
+</div>
+
+<h2>1. What is ErgoVigilance?</h2>
+<p>ErgoVigilance is an AI-powered ergonomic monitoring system that:</p>
+<ul>
+    <li>Analyzes your body posture in real-time using camera-based pose detection</li>
+    <li>Calculates ergonomic risk scores based on international standards (RULA/REBA)</li>
+    <li>Provides immediate feedback when your posture indicates injury risk</li>
+    <li>Generates reports to help management improve workplace conditions</li>
+</ul>
+
+<h2>2. What Data is Collected?</h2>
+<table>
+    <tr>
+        <th>Data Type</th>
+        <th>Description</th>
+        <th>Retention</th>
+    </tr>
+    <tr>
+        <td>Body Pose keypoints</td>
+        <td>17-33 digital landmarks on your body (shoulders, elbows, hips, knees)</td>
+        <td>30 days</td>
+    </tr>
+    <tr>
+        <td>Risk Scores</td>
+        <td>Ergonomic risk level (Low/Medium/High) calculated from your posture</td>
+        <td>1 year</td>
+    </tr>
+    <tr>
+        <td>Task Classification</td>
+        <td>Detected activity (lifting, reaching, assembly, etc.)</td>
+        <td>1 year</td>
+    </tr>
+    <tr>
+        <td>Session Metadata</td>
+        <td>Duration, timestamp, camera ID</td>
+        <td>1 year</td>
+    </tr>
+</table>
+
+<div class="warning-box">
+    <strong>⚠️ What is NOT collected:</strong>
+    <ul>
+        <li>Facial recognition or identity verification</li>
+        <li>Video recordings (only pose data is stored)</li>
+        <li>Personal conversations or audio</li>
+        <li>Location tracking outside the workstation</li>
+    </ul>
+</div>
+
+<h2>3. How Your Data is Used</h2>
+<div class="check-item">
+    <div class="checkbox"></div>
+    <div><strong>Safety Monitoring:</strong> Real-time alerts when your posture indicates injury risk</div>
+</div>
+<div class="check-item">
+    <div class="checkbox"></div>
+    <div><strong>Ergonomic Improvement:</strong> Aggregated data helps management redesign workstations</div>
+</div>
+<div class="check-item">
+    <div class="checkbox"></div>
+    <div><strong>Training:</strong> anonymized data used for ergonomic training programs</div>
+</div>
+
+<h2>4. Your Rights</h2>
+<ul>
+    <li><strong>Right to Know:</strong> You can ask what data has been collected about you</li>
+    <li><strong>Right to Access:</strong> You can request a copy of your posture data</li>
+    <li><strong>Right to Correct:</strong> You can request correction of inaccurate data</li>
+    <li><strong>Right to Deletion:</strong> You can request deletion of your data (subject to safety requirements)</li>
+    <li><strong>Right to Opt-Out:</strong> You may decline consent at any time (see Section 6)</li>
+</ul>
+
+<h2>5. Data Security</h2>
+<p>Your data is protected by:</p>
+<ul>
+    <li>End-to-end encryption during transmission</li>
+    <li>Encrypted storage on secure servers</li>
+    <li>Role-based access control (only authorized safety personnel)</li>
+    <li>Regular security audits and compliance checks</li>
+</ul>
+<p class="privacy-badge">🔒 Your data is used ONLY for safety — never for performance evaluation</p>
+
+<h2>6. Consent</h2>
+<p>By signing below, I acknowledge that:</p>
+<div class="check-item">
+    <div class="checkbox"></div>
+    <div>I have read and understood this consent form</div>
+</div>
+<div class="check-item">
+    <div class="checkbox"></div>
+    <div>I understand what data is collected and how it is used</div>
+</div>
+<div class="check-item">
+    <div class="checkbox"></div>
+    <div>I understand my rights regarding my data</div>
+</div>
+<div class="check-item">
+    <div class="checkbox"></div>
+    <div>I voluntarily consent to the collection and processing of my posture data</div>
+</div>
+<div class="check-item">
+    <div class="checkbox"></div>
+    <div>I understand I may withdraw consent at any time by notifying my supervisor</div>
+</div>
+
+<div class="signature-box">
+    <div style="display: flex; justify-content: space-between; gap: 40px;">
+        <div>
+            <strong>Worker Name:</strong><br>
+            <span class="sig-line">&nbsp;</span>
+        </div>
+        <div>
+            <strong>Employee ID:</strong><br>
+            <span class="sig-line">&nbsp;</span>
+        </div>
+    </div>
+    <div style="margin-top: 20px;">
+        <strong>Signature:</strong><br>
+        <span class="sig-line">&nbsp;</span>
+        <span style="margin-left: 40px;"><strong>Date:</strong> <span class="sig-line">&nbsp;</span></span>
+    </div>
+</div>
+
+<div class="footer">
+    <div style="display: flex; justify-content: space-between;">
+        <div>
+            <strong>ErgoVigilance</strong> — Workplace Ergonomic Monitoring<br>
+            For questions, contact: safety@ergovigilance.com
+        </div>
+        <div style="text-align: right;">
+            Form Version 1.0 | September 2026<br>
+            This form must be retained for the duration of monitoring
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

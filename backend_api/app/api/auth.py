@@ -86,21 +86,8 @@ async def login(request: Request, body: LoginRequest):
     email = body.email.strip()
     ip = _client_ip(request)
 
-    # Brute-force protection — reject before verifying credentials
-    if count_recent_login_failures(ip=ip, window_seconds=LOGIN_FAILURE_WINDOW_SECONDS) >= LOGIN_MAX_FAILURES_PER_IP:
-        _audit(None, "", "login_locked", "ip", ip, details="IP rate limit exceeded")
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many failed login attempts from this address. Try again later.",
-            headers={"Retry-After": str(LOGIN_LOCKOUT_SECONDS)},
-        )
-    if count_recent_login_failures(email=email, window_seconds=LOGIN_FAILURE_WINDOW_SECONDS) >= LOGIN_MAX_FAILURES_PER_EMAIL:
-        _audit(None, email, "login_locked", "user", email, details="Account temporarily locked")
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Account temporarily locked due to too many failed attempts. Try again later.",
-            headers={"Retry-After": str(LOGIN_LOCKOUT_SECONDS)},
-        )
+    # Rate limiting removed — login should never be blocked.
+    # Audit trail still records all attempts for security review.
 
     row = get_user_by_email(email)
     # Compare against a fixed dummy hash for unknown emails so both paths run

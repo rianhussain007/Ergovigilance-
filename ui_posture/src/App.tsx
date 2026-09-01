@@ -33,6 +33,18 @@ const WorkerSelfView = lazy(() => import('./pages/WorkerSelfView'));
 const UsersPage = lazy(() => import('./pages/UsersPage'));
 const PilotRequestsPage = lazy(() => import('./pages/PilotRequestsPage'));
 const SetupWizardPage = lazy(() => import('./pages/SetupWizardPage'));
+const ApiDocsPage = lazy(() => import('./pages/ApiDocsPage'));
+const CloudCamerasPage = lazy(() => import('./pages/CloudCamerasPage'));
+const CloudSettingsPage = lazy(() => import('./pages/CloudSettingsPage'));
+const PricingPage = lazy(() => import('./pages/PricingPage'));
+const ModelDashboardPage = lazy(() => import('./pages/ModelDashboardPage'));
+const YoloDemoPage = lazy(() => import('./pages/YoloDemoPage'));
+const ROIAnalyticsPage = lazy(() => import('./pages/ROIAnalyticsPage'));
+const SystemHealthPage = lazy(() => import('./pages/SystemHealthPage'));
+const OnboardingChecklistPage = lazy(() => import('./pages/OnboardingChecklistPage'));
+const CloudOnboardingPage = lazy(() => import('./pages/CloudOnboardingPage'));
+const StatusPage = lazy(() => import('./pages/StatusPage'));
+const ArchitecturePage = lazy(() => import('./pages/ArchitecturePage'));
 
 function HomeRoute() {
   const { user } = useAuth();
@@ -86,7 +98,19 @@ export default function App() {
               <Route path="/users" element={<UsersPage />} />
               <Route path="/pilot-requests" element={<PilotRequestsPage />} />
               <Route path="/setup" element={<SetupWizardPage />} />
+              <Route path="/api-docs" element={<ApiDocsPage />} />
+              <Route path="/cloud-cameras" element={<CloudCamerasPage />} />
+              <Route path="/cloud-settings" element={<CloudSettingsPage />} />
+              <Route path="/cloud-onboarding" element={<CloudOnboardingPage />} />
+              <Route path="/model-dashboard" element={<ModelDashboardPage />} />
+              <Route path="/yolo-demo" element={<YoloDemoPage />} />
+              <Route path="/roi-analytics" element={<ROIAnalyticsPage />} />
+              <Route path="/system-health" element={<SystemHealthPage />} />
+              <Route path="/architecture" element={<ArchitecturePage />} />
+              <Route path="/onboarding" element={<OnboardingChecklistPage />} />
             </Route>
+            <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/status" element={<StatusPage />} />
           </Routes>
         </AppSuspense>
       </RouteErrorBoundary>

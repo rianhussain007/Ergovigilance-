@@ -1,41 +1,55 @@
 import { useState, useMemo } from 'react';
 import { NavLink } from 'react-router';
-import { LayoutDashboard, Radio, BarChart3, FileText, History, Settings, ChevronLeft, ChevronRight, Activity, Building2, Camera, ScrollText, Server, Clapperboard, Users, ClipboardList, UserCog, Heart } from 'lucide-react';
+import { LayoutDashboard, Radio, BarChart3, FileText, History, Settings, ChevronLeft, ChevronRight, Activity, Building2, Camera, ScrollText, Server, Clapperboard, Users, ClipboardList, UserCog, Heart, Code, Wifi, SlidersHorizontal, Brain, Scan, TrendingUp, HeartPulse, ListChecks, Rocket, Network } from 'lucide-react';
 import { motion } from 'motion/react';
 import Logo from '../components/common/Logo';
+import { useI18n } from '@/src/i18n';
 
 // Navigation grouped into labeled sections. Each item keeps its own role gate
 // so operator/supervisor roles never see admin-only destinations (Manager,
 // Deployment, Audit Trail, Pilot Requests, Users).
-const NAV_SECTIONS: { title: string; items: { to: string; label: string; icon: typeof LayoutDashboard; roles: string[] }[] }[] = [
+const NAV_SECTIONS: { title: string; tKey: string; items: { to: string; label: string; tKey: string; icon: typeof LayoutDashboard; roles: string[] }[] }[] = [
   {
     title: 'Monitoring',
+    tKey: 'nav.dashboard',
     items: [
-      { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['operator', 'supervisor', 'safety_mgr', 'admin'] },
-      { to: '/monitoring', label: 'Live Monitoring', icon: Radio, roles: ['operator', 'supervisor', 'safety_mgr', 'admin'] },
-      { to: '/my-posture', label: 'My Posture', icon: Heart, roles: ['operator'] },
-      { to: '/video-review', label: 'Video Review', icon: Clapperboard, roles: ['operator', 'supervisor', 'safety_mgr', 'admin'] },
+      { to: '/dashboard', label: 'Dashboard', tKey: 'nav.dashboard', icon: LayoutDashboard, roles: ['operator', 'supervisor', 'safety_mgr', 'admin'] },
+      { to: '/monitoring', label: 'Live Monitoring', tKey: 'nav.liveMonitoring', icon: Radio, roles: ['operator', 'supervisor', 'safety_mgr', 'admin'] },
+      { to: '/my-posture', label: 'My Posture', tKey: 'nav.myPosture', icon: Heart, roles: ['operator'] },
+      { to: '/video-review', label: 'Video Review', tKey: 'nav.videoReview', icon: Clapperboard, roles: ['operator', 'supervisor', 'safety_mgr', 'admin'] },
     ],
   },
   {
     title: 'Data',
+    tKey: 'nav.analytics',
     items: [
-      { to: '/analytics', label: 'Analytics', icon: BarChart3, roles: ['operator', 'supervisor', 'safety_mgr', 'admin'] },
-      { to: '/reports', label: 'Reports', icon: FileText, roles: ['operator', 'supervisor', 'safety_mgr', 'admin'] },
-      { to: '/sessions', label: 'Sessions', icon: History, roles: ['operator', 'supervisor', 'safety_mgr', 'admin'] },
-      { to: '/workers', label: 'Workers', icon: Users, roles: ['supervisor', 'safety_mgr', 'admin'] },
-      { to: '/cameras', label: 'Multi-Camera', icon: Camera, roles: ['supervisor', 'safety_mgr', 'admin'] },
+      { to: '/analytics', label: 'Analytics', tKey: 'nav.analytics', icon: BarChart3, roles: ['operator', 'supervisor', 'safety_mgr', 'admin'] },
+      { to: '/reports', label: 'Reports', tKey: 'nav.reports', icon: FileText, roles: ['operator', 'supervisor', 'safety_mgr', 'admin'] },
+      { to: '/sessions', label: 'Sessions', tKey: 'nav.sessions', icon: History, roles: ['operator', 'supervisor', 'safety_mgr', 'admin'] },
+      { to: '/workers', label: 'Workers', tKey: 'nav.workers', icon: Users, roles: ['supervisor', 'safety_mgr', 'admin'] },
+      { to: '/cameras', label: 'Multi-Camera', tKey: 'nav.multiCamera', icon: Camera, roles: ['supervisor', 'safety_mgr', 'admin'] },
+      { to: '/cloud-cameras', label: 'Cloud Cameras', tKey: 'nav.cloudCameras', icon: Wifi, roles: ['supervisor', 'safety_mgr', 'admin'] },
+      { to: '/cloud-onboarding', label: 'Cloud Setup', tKey: 'nav.cloudSetup', icon: Rocket, roles: ['admin'] },
+      { to: '/cloud-settings', label: 'Cloud Settings', tKey: 'nav.cloudSettings', icon: SlidersHorizontal, roles: ['admin'] },
+      { to: '/model-dashboard', label: 'Model Dashboard', tKey: 'nav.modelDashboard', icon: Brain, roles: ['admin'] },
+      { to: '/yolo-demo', label: 'YOLO Demo', tKey: 'nav.yoloDemo', icon: Scan, roles: ['admin', 'safety_mgr'] },
+      { to: '/roi-analytics', label: 'ROI Analytics', tKey: 'nav.roiAnalytics', icon: TrendingUp, roles: ['admin', 'safety_mgr'] },
     ],
   },
   {
     title: 'Admin',
+    tKey: 'nav.manager',
     items: [
-      { to: '/manager', label: 'Manager', icon: Building2, roles: ['safety_mgr', 'admin'] },
-      { to: '/deployment', label: 'Deployment', icon: Server, roles: ['admin'] },
-      { to: '/audit', label: 'Audit Trail', icon: ScrollText, roles: ['safety_mgr', 'admin'] },
-      { to: '/users', label: 'Users', icon: UserCog, roles: ['admin'] },
-      { to: '/pilot-requests', label: 'Pilot Requests', icon: ClipboardList, roles: ['admin'] },
-      { to: '/settings', label: 'Settings', icon: Settings, roles: ['operator', 'supervisor', 'safety_mgr', 'admin'] },
+      { to: '/manager', label: 'Manager', tKey: 'nav.manager', icon: Building2, roles: ['safety_mgr', 'admin'] },
+      { to: '/deployment', label: 'Deployment', tKey: 'nav.deployment', icon: Server, roles: ['admin'] },
+      { to: '/audit', label: 'Audit Trail', tKey: 'nav.auditTrail', icon: ScrollText, roles: ['safety_mgr', 'admin'] },
+      { to: '/users', label: 'Users', tKey: 'nav.users', icon: UserCog, roles: ['admin'] },
+      { to: '/pilot-requests', label: 'Pilot Requests', tKey: 'nav.pilotRequests', icon: ClipboardList, roles: ['admin'] },
+      { to: '/api-docs', label: 'API Docs', tKey: 'nav.apiDocs', icon: Code, roles: ['admin'] },
+      { to: '/system-health', label: 'System Health', tKey: 'nav.systemHealth', icon: HeartPulse, roles: ['admin'] },
+      { to: '/architecture', label: 'Architecture', tKey: 'nav.architecture', icon: Network, roles: ['admin'] },
+      { to: '/onboarding', label: 'Onboarding', tKey: 'nav.onboarding', icon: ListChecks, roles: ['admin'] },
+      { to: '/settings', label: 'Settings', tKey: 'nav.settings', icon: Settings, roles: ['operator', 'supervisor', 'safety_mgr', 'admin'] },
     ],
   },
 ];
@@ -51,6 +65,7 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ role = 'administrator', rolePaths, collapsed: collapsedProp, onCollapsedChange, isMobile }: SidebarProps) {
+  const { t } = useI18n();
   // Internal fallback keeps Sidebar usable standalone; when `collapsed` is
   // provided by the parent, the parent owns the state.
   const [collapsedState, setCollapsedState] = useState(false);
@@ -82,7 +97,7 @@ export default function Sidebar({ role = 'administrator', rolePaths, collapsed: 
       <aside className={`h-screen fixed left-0 top-0 flex flex-col py-md bg-white dark:bg-surface-container-low/95 border-r border-slate-200 dark:border-outline-variant/60 z-50 transition-all duration-300 ease-out ${collapsed ? 'w-16' : 'w-64'} ${isMobile && !collapsed ? 'shadow-2xl' : ''}`}>
       <div className={`mb-xl transition-all duration-300 ${collapsed ? 'w-full flex justify-center' : 'px-lg'}`}>
         {collapsed ? (
-          <Logo className="w-10 h-10" variant="light" />
+          <Logo className="w-10 h-10" variant="light" iconOnly />
         ) : (
           <div className="transition-all duration-300">
             <Logo className="h-10 w-auto" variant="auto" />
@@ -123,7 +138,7 @@ export default function Sidebar({ role = 'administrator', rolePaths, collapsed: 
                       )}
                       <item.icon className={`w-5 h-5 shrink-0 transition-colors duration-150 ${isActive ? 'text-blue-600 dark:text-primary' : 'text-slate-400 dark:text-on-surface-variant group-hover:text-slate-700 dark:group-hover:text-on-surface'}`} />
                       {!collapsed && (
-                        <span className="truncate">{item.label}</span>
+                        <span className="truncate">{t(item.tKey)}</span>
                       )}
                     </>
                   )}

@@ -263,7 +263,7 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="p-lg space-y-lg pb-32">
+    <div className="p-lg space-y-lg pb-32" data-tour="reports-content">
       <div>
         <h1 className="text-display-lg font-bold text-slate-900 dark:text-on-surface">Reports</h1>
         <p className="text-body-sm text-slate-500 dark:text-on-surface-variant mt-xs">Generate, search, and download ergonomic reports</p>

@@ -39,24 +39,24 @@ export function Header({ session }: HeaderProps) {
 
   return (
     <header className="sticky top-0 z-30 bg-white/80 dark:bg-surface/95 backdrop-blur-xl border-b border-slate-200 dark:border-outline-variant/60">
-      <div className="flex items-center h-14 px-lg gap-lg">
-        <button onClick={() => window.dispatchEvent(new CustomEvent('opensearch'))} className="flex items-center gap-md h-10 px-md rounded-xl bg-slate-100 dark:bg-surface-container-high border border-slate-200 dark:border-outline-variant/80 text-slate-400 dark:text-on-surface-variant hover:text-slate-600 dark:hover:text-on-surface hover:border-blue-300 dark:hover:border-primary/40 hover:shadow-sm focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20 transition-all w-[340px] shrink group">
+      <div className="flex items-center h-14 px-md md:px-lg gap-lg">
+        <button onClick={() => window.dispatchEvent(new CustomEvent('opensearch'))} className="flex items-center gap-md h-10 px-md rounded-xl bg-slate-100 dark:bg-surface-container-high border border-slate-200 dark:border-outline-variant/80 text-slate-400 dark:text-on-surface-variant hover:text-slate-600 dark:hover:text-on-surface hover:border-blue-300 dark:hover:border-primary/40 hover:shadow-sm focus-visible:border-blue-500 focus-visible:ring-2 focus-visible:ring-blue-500/20 transition-all w-full max-w-[340px] shrink group">
           <Search className="w-4 h-4 shrink-0 text-slate-400 dark:text-on-surface-variant/60 group-hover:text-blue-500 dark:group-hover:text-primary transition-colors" />
-          <span className="text-body-sm text-slate-400 dark:text-on-surface-variant/60 group-hover:text-slate-500 dark:group-hover:text-on-surface-variant/80 truncate">Search sessions, workers, reports...</span>
-          <span className="ml-auto font-label-mono text-[10px] text-slate-300 dark:text-on-surface-variant/30 border border-slate-200 dark:border-outline-variant rounded px-1.5 py-0.5 group-hover:text-slate-400 dark:group-hover:text-on-surface-variant/60 group-hover:border-slate-300 dark:group-hover:border-outline-variant/60 transition-colors shrink-0">Ctrl+K</span>
+          <span className="text-body-sm text-slate-400 dark:text-on-surface-variant/60 group-hover:text-slate-500 dark:group-hover:text-on-surface-variant/80 truncate hidden sm:inline">Search sessions, workers, reports...</span>
+          <span className="ml-auto font-label-mono text-[10px] text-slate-300 dark:text-on-surface-variant/30 border border-slate-200 dark:border-outline-variant rounded px-1.5 py-0.5 group-hover:text-slate-400 dark:group-hover:text-on-surface-variant/60 group-hover:border-slate-300 dark:group-hover:border-outline-variant/60 transition-colors shrink-0 hidden md:inline">Ctrl+K</span>
         </button>
 
         <div className="flex items-center gap-lg ml-auto h-8">
           {isActive && (
             <div className="flex items-center gap-sm text-slate-500 dark:text-on-surface-variant h-full">
               <Video className="w-4 h-4 shrink-0 text-emerald-500 dark:text-green-400" />
-              <span className="text-body-sm text-slate-700 dark:text-on-surface whitespace-nowrap">{session?.workerName || 'Active session'}</span>
+              <span className="text-body-sm text-slate-700 dark:text-on-surface whitespace-nowrap hidden sm:inline">{session?.workerName || 'Active session'}</span>
             </div>
           )}
 
           <div className="flex items-center gap-sm text-slate-500 dark:text-on-surface-variant h-full">
             <Clock className="w-4 h-4 shrink-0" />
-            <span className="font-label-mono text-label-mono text-slate-700 dark:text-on-surface whitespace-nowrap">
+            <span className="font-label-mono text-label-mono text-slate-700 dark:text-on-surface whitespace-nowrap hidden sm:inline">
               {formatISTClock()}
             </span>
           </div>
@@ -69,7 +69,7 @@ export function Header({ session }: HeaderProps) {
           <ThemeToggle />
 
           {isActive && session?.id && (
-            <div className="h-8 flex items-center px-md bg-slate-100 dark:bg-surface-container-high rounded-lg border border-slate-200 dark:border-outline-variant">
+            <div className="h-8 items-center px-md bg-slate-100 dark:bg-surface-container-high rounded-lg border border-slate-200 dark:border-outline-variant hidden lg:flex">
               <span className="font-label-mono text-[10px] text-slate-500 dark:text-on-surface-variant uppercase whitespace-nowrap">{session.id}</span>
             </div>
           )}
