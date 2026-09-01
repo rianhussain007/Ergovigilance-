@@ -260,7 +260,48 @@ app = FastAPI(
     "Connects to the live OpenCV/MediaPipe pipeline via LiveMonitoringService.",
     lifespan=lifespan,
     default_response_class=_SafeJSONResponse,
+    openapi_tags=[
+        {"name": "Authentication", "description": "Login, register, demo access, and token refresh"},
+        {"name": "Workers", "description": "CRUD for worker profiles and face enrollment"},
+        {"name": "Monitoring", "description": "Start/stop live posture monitoring sessions"},
+        {"name": "Alerts", "description": "Real-time posture risk alerts and notifications"},
+        {"name": "Reports", "description": "Session reports and PDF/CSV exports"},
+        {"name": "Dashboard", "description": "Aggregated KPIs, trends, and risk analytics"},
+        {"name": "Cloud Cameras", "description": "YOLO-based RTSP camera management (Cloud tier)"},
+        {"name": "Privacy", "description": "GDPR data export and worker deletion"},
+        {"name": "MFA", "description": "Multi-factor authentication setup and management"},
+        {"name": "Operations", "description": "Health checks, metrics, SLA status"},
+    ],
 )
+
+# Customize OpenAPI with security scheme
+@app.get("/openapi.json", include_in_schema=False)
+async def custom_openapi():
+    from fastapi.openapi.utils import get_openapi
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+        tags=app.openapi_tags,
+    )
+    schema["components"] = schema.get("components", {})
+    schema["components"]["securitySchemes"] = {
+        "BearerAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "Login via POST /api/auth/login to get a JWT token, then enter it here as: Bearer <token>",
+        },
+        "APIKeyAuth": {
+            "type": "apiKey",
+            "in": "header",
+            "name": "X-API-Key",
+            "description": "API key for YOLO Cloud Core endpoints",
+        },
+    }
+    schema["security"] = [{"BearerAuth": []}]
+    return JSONResponse(schema)
 
 # --- CORS ---
 app.add_middleware(
@@ -286,6 +327,10 @@ app.add_middleware(RequestLoggingMiddleware)
 # --- Enterprise API Versioning ---
 from app.core.api_versioning import APIVersionMiddleware
 app.add_middleware(APIVersionMiddleware)
+
+# --- Enterprise Request Validation ---
+from app.core.request_validation import ValidationMiddleware
+app.add_middleware(ValidationMiddleware)
 
 # --- Routers ---
 app.include_router(api_router)

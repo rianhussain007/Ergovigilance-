@@ -104,6 +104,36 @@ async def sla_status() -> dict:
     return sla_monitor.get_status()
 
 
+@router.get("/storage", include_in_schema=False)
+async def storage_stats() -> dict:
+    """Storage usage — recordings, alerts, reports, disk space."""
+    from app.core.storage_manager import storage_manager
+    stats = storage_manager.get_stats()
+    disk = storage_manager.get_disk_info()
+    return {
+        "usage": {
+            "total_mb": stats.total_size_mb,
+            "max_mb": stats.max_size_mb,
+            "usage_percent": stats.usage_percent,
+            "recordings": {
+                "size_mb": stats.recordings_size_mb,
+                "count": stats.recordings_count,
+            },
+            "alerts": {
+                "size_mb": stats.alerts_size_mb,
+                "count": stats.alerts_count,
+            },
+            "reports": {
+                "size_mb": stats.reports_size_mb,
+                "count": stats.reports_count,
+            },
+            "oldest_recording": stats.oldest_recording,
+            "newest_recording": stats.newest_recording,
+        },
+        "disk": disk,
+    }
+
+
 async def http_metrics_middleware(request: Request, call_next):
     """Count every HTTP request by method, path, and response status."""
     response = await call_next(request)
