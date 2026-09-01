@@ -58,10 +58,10 @@ export default function Logo({ className = 'h-10 w-auto', variant = 'auto', icon
 
   return (
     <svg
-      viewBox="0 0 650 120"
+      viewBox="0 0 750 120"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className={className}
+      className={`${className} max-w-full`}
       role="img"
       aria-label="ErgoVigilance"
     >
@@ -82,7 +82,7 @@ export default function Logo({ className = 'h-10 w-auto', variant = 'auto', icon
         Ergo
       </text>
       <text
-        x="275"
+        x="270"
         y="82"
         fontFamily="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
         fontSize="62"

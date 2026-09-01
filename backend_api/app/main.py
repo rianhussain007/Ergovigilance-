@@ -221,7 +221,30 @@ async def lifespan(app: FastAPI):
     except RuntimeError:
         pass
 
-    logger.info("Shutting down %s", settings.APP_NAME)
+    # Start auto-recovery monitor
+    from app.core.auto_recovery import recovery_monitor
+    recovery_monitor.start()
+
+    # Register services for auto-recovery
+    def check_ollama():
+        import requests as _req
+        try:
+            r = _req.get(os.environ.get("OLLAMA_HOST", "http://localhost:11434") + "/api/tags", timeout=3)
+            return r.status_code == 200
+        except Exception:
+            return False
+
+    recovery_monitor.register_service("ollama", check_ollama)
+
+    logger.info("Auto-recovery monitor started")
+
+    yield
+
+    # Graceful shutdown: drain in-flight requests
+    from app.core.graceful_shutdown import shutdown_manager
+    await shutdown_manager.drain()
+
+    recovery_monitor.stop()
 
 
 class _SafeJSONEncoder(json.JSONEncoder):
@@ -260,7 +283,48 @@ app = FastAPI(
     "Connects to the live OpenCV/MediaPipe pipeline via LiveMonitoringService.",
     lifespan=lifespan,
     default_response_class=_SafeJSONResponse,
+    openapi_tags=[
+        {"name": "Authentication", "description": "Login, register, demo access, and token refresh"},
+        {"name": "Workers", "description": "CRUD for worker profiles and face enrollment"},
+        {"name": "Monitoring", "description": "Start/stop live posture monitoring sessions"},
+        {"name": "Alerts", "description": "Real-time posture risk alerts and notifications"},
+        {"name": "Reports", "description": "Session reports and PDF/CSV exports"},
+        {"name": "Dashboard", "description": "Aggregated KPIs, trends, and risk analytics"},
+        {"name": "Cloud Cameras", "description": "YOLO-based RTSP camera management (Cloud tier)"},
+        {"name": "Privacy", "description": "GDPR data export and worker deletion"},
+        {"name": "MFA", "description": "Multi-factor authentication setup and management"},
+        {"name": "Operations", "description": "Health checks, metrics, SLA status"},
+    ],
 )
+
+# Customize OpenAPI with security scheme
+@app.get("/openapi.json", include_in_schema=False)
+async def custom_openapi():
+    from fastapi.openapi.utils import get_openapi
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+        tags=app.openapi_tags,
+    )
+    schema["components"] = schema.get("components", {})
+    schema["components"]["securitySchemes"] = {
+        "BearerAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",
+            "description": "Login via POST /api/auth/login to get a JWT token, then enter it here as: Bearer <token>",
+        },
+        "APIKeyAuth": {
+            "type": "apiKey",
+            "in": "header",
+            "name": "X-API-Key",
+            "description": "API key for YOLO Cloud Core endpoints",
+        },
+    }
+    schema["security"] = [{"BearerAuth": []}]
+    return JSONResponse(schema)
 
 # --- CORS ---
 app.add_middleware(
@@ -286,6 +350,22 @@ app.add_middleware(RequestLoggingMiddleware)
 # --- Enterprise API Versioning ---
 from app.core.api_versioning import APIVersionMiddleware
 app.add_middleware(APIVersionMiddleware)
+
+# --- Enterprise Request Validation ---
+from app.core.request_validation import ValidationMiddleware
+app.add_middleware(ValidationMiddleware)
+
+# --- Enterprise Request ID Tracking ---
+from app.core.request_id import RequestIDMiddleware
+app.add_middleware(RequestIDMiddleware)
+
+# --- Enterprise Input Sanitization ---
+from app.core.sanitization import SanitizationMiddleware
+app.add_middleware(SanitizationMiddleware)
+
+# --- Enterprise Response Compression ---
+from app.core.compression import CompressionMiddleware
+app.add_middleware(CompressionMiddleware)
 
 # --- Routers ---
 app.include_router(api_router)
