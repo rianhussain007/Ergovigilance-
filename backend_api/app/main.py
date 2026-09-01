@@ -278,6 +278,15 @@ app.add_middleware(RateLimitMiddleware)
 from app.core.security_headers import SecurityHeadersMiddleware
 app.add_middleware(SecurityHeadersMiddleware)
 
+# --- Enterprise Structured Logging ---
+from app.core.structured_logging import setup_logging, RequestLoggingMiddleware
+setup_logging()
+app.add_middleware(RequestLoggingMiddleware)
+
+# --- Enterprise API Versioning ---
+from app.core.api_versioning import APIVersionMiddleware
+app.add_middleware(APIVersionMiddleware)
+
 # --- Routers ---
 app.include_router(api_router)
 app.include_router(ws_router)
