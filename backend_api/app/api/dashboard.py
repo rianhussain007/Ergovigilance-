@@ -8,6 +8,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from app.core.auth import get_current_user, require_live_session_access, require_roles
+from app.core.response_cache import cache_response
 from app.core.database import (
     count_users,
     count_users_by_role,
@@ -157,6 +158,7 @@ async def _build_supervisor_summary(repo: DashboardRepository, user: Authenticat
 
 
 @router.get("/dashboard", response_model=DashboardResponse)
+@cache_response(ttl=10)
 async def get_dashboard(
     repo: DashboardRepository = Depends(get_repository),
     user: AuthenticatedUser = Depends(get_current_user),

@@ -134,6 +134,34 @@ async def storage_stats() -> dict:
     }
 
 
+@router.get("/cache", include_in_schema=False)
+async def cache_stats() -> dict:
+    """Response cache statistics — hit rate, entries, memory usage."""
+    from app.core.response_cache import response_cache
+    return response_cache.get_stats()
+
+
+@router.get("/queries", include_in_schema=False)
+async def query_stats() -> dict:
+    """Database query performance — slow queries, top queries, latency."""
+    from app.core.query_monitor import query_monitor
+    return query_monitor.get_stats()
+
+
+@router.get("/logs", include_in_schema=False)
+async def log_stats() -> dict:
+    """Logging configuration and file sizes."""
+    from app.core.log_config import get_log_stats
+    return get_log_stats()
+
+
+@router.get("/recovery", include_in_schema=False)
+async def recovery_stats() -> dict:
+    """Auto-recovery monitor status."""
+    from app.core.auto_recovery import recovery_monitor
+    return recovery_monitor.get_status()
+
+
 async def http_metrics_middleware(request: Request, call_next):
     """Count every HTTP request by method, path, and response status."""
     response = await call_next(request)
