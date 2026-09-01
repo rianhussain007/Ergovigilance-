@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Activity, Server, Database, Wifi, WifiOff, Clock, Cpu, HardDrive, RefreshCw, CheckCircle2, XCircle, AlertTriangle, Zap } from 'lucide-react';
+import { Activity, Server, Database, Wifi, WifiOff, Clock, Cpu, HardDrive, RefreshCw, CheckCircle2, XCircle, AlertTriangle, Zap, Shield, FileText, Gauge, HeartPulse } from 'lucide-react';
 
 interface ServiceHealth {
   name: string;
@@ -254,6 +254,14 @@ export default function SystemHealthPage() {
           <StorageBar label="Recordings" used={metrics?.storage.recordings_mb || 0} max={1000} color="bg-amber-500" />
         </div>
       </div>
+
+      {/* Enterprise Monitoring */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <CacheStatsCard />
+        <QueryStatsCard />
+        <RecoveryStatsCard />
+        <LogStatsCard />
+      </div>
     </div>
   );
 }
@@ -334,6 +342,128 @@ function StorageBar({ label, used, max, color }: {
       <div className="h-2 rounded-full bg-white/10">
         <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
       </div>
+    </div>
+  );
+}
+
+// ── Enterprise Monitoring Cards ──────────────────────────
+
+function CacheStatsCard() {
+  const [stats, setStats] = useState<any>(null);
+  useEffect(() => {
+    fetch('/health').then(r => r.json()).then(d => setStats(d.cache || null)).catch(() => {});
+    const iv = setInterval(() => fetch('/health').then(r => r.json()).then(d => setStats(d.cache || null)).catch(() => {}), 15000);
+    return () => clearInterval(iv);
+  }, []);
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+      <div className="flex items-center gap-2 mb-3">
+        <Gauge className="h-4 w-4 text-cyan-400" />
+        <h3 className="font-medium text-white">Response Cache</h3>
+      </div>
+      {stats ? (
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between"><span className="text-slate-400">Hit Rate</span><span className="text-white font-mono">{stats.hit_rate_percent || 0}%</span></div>
+          <div className="flex justify-between"><span className="text-slate-400">Entries</span><span className="text-white font-mono">{stats.entries || 0}/{stats.max_entries || 500}</span></div>
+          <div className="flex justify-between"><span className="text-slate-400">Hits</span><span className="text-green-400 font-mono">{stats.hits || 0}</span></div>
+          <div className="flex justify-between"><span className="text-slate-400">Misses</span><span className="text-amber-400 font-mono">{stats.misses || 0}</span></div>
+        </div>
+      ) : (
+        <p className="text-xs text-slate-500">Loading...</p>
+      )}
+    </div>
+  );
+}
+
+function QueryStatsCard() {
+  const [stats, setStats] = useState<any>(null);
+  useEffect(() => {
+    fetch('/health').then(r => r.json()).then(d => setStats(d.queries || null)).catch(() => {});
+    const iv = setInterval(() => fetch('/health').then(r => r.json()).then(d => setStats(d.queries || null)).catch(() => {}), 15000);
+    return () => clearInterval(iv);
+  }, []);
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+      <div className="flex items-center gap-2 mb-3">
+        <Database className="h-4 w-4 text-purple-400" />
+        <h3 className="font-medium text-white">Query Performance</h3>
+      </div>
+      {stats ? (
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between"><span className="text-slate-400">Total Queries</span><span className="text-white font-mono">{stats.total_queries || 0}</span></div>
+          <div className="flex justify-between"><span className="text-slate-400">Slow Queries</span><span className={`font-mono ${(stats.slow_queries || 0) > 0 ? 'text-amber-400' : 'text-green-400'}`}>{stats.slow_queries || 0}</span></div>
+          <div className="flex justify-between"><span className="text-slate-400">Avg Latency</span><span className="text-white font-mono">{stats.avg_query_ms || 0}ms</span></div>
+          <div className="flex justify-between"><span className="text-slate-400">Threshold</span><span className="text-slate-500 font-mono">{stats.slow_threshold_ms || 100}ms</span></div>
+        </div>
+      ) : (
+        <p className="text-xs text-slate-500">Loading...</p>
+      )}
+    </div>
+  );
+}
+
+function RecoveryStatsCard() {
+  const [stats, setStats] = useState<any>(null);
+  useEffect(() => {
+    fetch('/health').then(r => r.json()).then(d => setStats(d.recovery || null)).catch(() => {});
+    const iv = setInterval(() => fetch('/health').then(r => r.json()).then(d => setStats(d.recovery || null)).catch(() => {}), 15000);
+    return () => clearInterval(iv);
+  }, []);
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+      <div className="flex items-center gap-2 mb-3">
+        <HeartPulse className="h-4 w-4 text-green-400" />
+        <h3 className="font-medium text-white">Auto-Recovery</h3>
+      </div>
+      {stats ? (
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between"><span className="text-slate-400">Status</span><span className={`font-medium ${stats.enabled ? 'text-green-400' : 'text-red-400'}`}>{stats.enabled ? 'Enabled' : 'Disabled'}</span></div>
+          <div className="flex justify-between"><span className="text-slate-400">Check Interval</span><span className="text-white font-mono">{stats.check_interval_seconds || 30}s</span></div>
+          {stats.services && Object.entries(stats.services).map(([name, svc]: [string, any]) => (
+            <div key={name} className="flex justify-between">
+              <span className="text-slate-400 capitalize">{name}</span>
+              <span className={`font-mono text-xs ${svc.status === 'healthy' ? 'text-green-400' : svc.status === 'down' ? 'text-red-400' : 'text-amber-400'}`}>{svc.status}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-slate-500">Loading...</p>
+      )}
+    </div>
+  );
+}
+
+function LogStatsCard() {
+  const [stats, setStats] = useState<any>(null);
+  useEffect(() => {
+    fetch('/health').then(r => r.json()).then(d => setStats(d.logs || null)).catch(() => {});
+    const iv = setInterval(() => fetch('/health').then(r => r.json()).then(d => setStats(d.logs || null)).catch(() => {}), 15000);
+    return () => clearInterval(iv);
+  }, []);
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 p-5">
+      <div className="flex items-center gap-2 mb-3">
+        <FileText className="h-4 w-4 text-amber-400" />
+        <h3 className="font-medium text-white">Logging</h3>
+      </div>
+      {stats ? (
+        <div className="space-y-2 text-sm">
+          <div className="flex justify-between"><span className="text-slate-400">Level</span><span className="text-white font-mono">{stats.level || 'INFO'}</span></div>
+          <div className="flex justify-between"><span className="text-slate-400">Format</span><span className="text-white font-mono">{stats.json_format ? 'JSON' : 'Text'}</span></div>
+          {stats.files && Object.entries(stats.files).map(([name, file]: [string, any]) => (
+            <div key={name} className="flex justify-between">
+              <span className="text-slate-400 font-mono text-xs">{name}</span>
+              <span className="text-white font-mono text-xs">{file.size_mb || 0}MB</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-slate-500">Loading...</p>
+      )}
     </div>
   );
 }
