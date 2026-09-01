@@ -137,7 +137,8 @@ export default function Layout() {
     // Skip only if user explicitly ended it this session (within last 5 seconds).
     if (isDemoMode) {
       const lastDismissed = localStorage.getItem('ergovigilance_tour_dismissed_at');
-      const recentlyDismissed = lastDismissed && (Date.now() - Number(lastDismissed)) < 5000;
+      // Only auto-show tour if it was never dismissed this session (24h window)
+      const recentlyDismissed = lastDismissed && (Date.now() - Number(lastDismissed)) < 86400000;
       if (!recentlyDismissed) {
         const timer = setTimeout(() => startTour(), 800);
         return () => clearTimeout(timer);
