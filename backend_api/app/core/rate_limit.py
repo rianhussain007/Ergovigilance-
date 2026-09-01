@@ -119,4 +119,21 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 headers={"Retry-After": str(self.window)},
             )
 
-        return await call_next(request)
+        response = await call_next(request)
+
+        # Add rate limit headers to response
+        import base64 as _b64
+        multiplier = ROLE_MULTIPLIERS.get(role, 1.0)
+        limit = int(self.max_requests * multiplier)
+        now = time.time()
+        cutoff = now - self.window
+        used = sum(1 for t in self._requests.get(ip, []) if t > cutoff)
+        remaining = max(0, limit - used)
+        reset_time = int(cutoff + self.window)
+
+        response.headers["X-RateLimit-Limit"] = str(limit)
+        response.headers["X-RateLimit-Remaining"] = str(remaining)
+        response.headers["X-RateLimit-Reset"] = str(reset_time)
+        response.headers["X-RateLimit-Role"] = role
+
+        return response

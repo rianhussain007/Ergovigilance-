@@ -4,6 +4,7 @@ import { Plus, Pencil, Trash2, X, Search, Camera, CheckCircle2, Loader2, QrCode,
 import { SectionHeader, EmptyState } from '@/src/components/common';
 import { useAuth } from '@/src/auth/AuthContext';
 import { apiFetch } from '@/src/services/apiClient';
+import CameraCapture from '@/src/components/common/CameraCapture';
 
 interface Worker {
   worker_id: string;
@@ -59,6 +60,7 @@ export default function WorkersPage() {
   const [faceError, setFaceError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [faceTargetId, setFaceTargetId] = useState<string | null>(null);
+  const [showCameraCapture, setShowCameraCapture] = useState(false);
 
   // Identity mode / consent / badge config.
   const [identityTarget, setIdentityTarget] = useState<Worker | null>(null);
@@ -120,8 +122,32 @@ export default function WorkersPage() {
   const openFacePicker = (workerId: string) => {
     setFaceTargetId(workerId);
     setFaceError(null);
-    // Reuse a single hidden input; clicking it opens the file dialog.
-    window.setTimeout(() => fileInputRef.current?.click(), 0);
+    setShowCameraCapture(true);
+  };
+
+  const handleCameraCapture = async (blob: Blob) => {
+    if (!faceTargetId) return;
+    const workerId = faceTargetId;
+    setFaceUploading((prev) => ({ ...prev, [workerId]: true }));
+    setFaceError(null);
+    setShowCameraCapture(false);
+    try {
+      const form = new FormData();
+      form.append('file', blob, 'face-capture.jpg');
+      const res = await apiFetch(`/api/workers/${workerId}/face`, {
+        method: 'POST',
+        body: form,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || `Enrollment failed (${res.status})`);
+      }
+      setFaceStatus((prev) => ({ ...prev, [workerId]: { worker_id: workerId, enrolled: true, enrolled_at: new Date().toISOString() } }));
+    } catch (err: unknown) {
+      setFaceError(err instanceof Error ? err.message : 'Enrollment failed');
+    } finally {
+      setFaceUploading((prev) => ({ ...prev, [workerId]: false }));
+    }
   };
 
   const handleFaceFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -681,6 +707,14 @@ export default function WorkersPage() {
           </div>
         </div>,
         document.body
+      )}
+
+      {showCameraCapture && (
+        <CameraCapture
+          onCapture={handleCameraCapture}
+          onClose={() => setShowCameraCapture(false)}
+          title="Enroll Worker Face"
+        />
       )}
     </div>
   );
