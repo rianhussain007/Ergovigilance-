@@ -42,29 +42,63 @@ def _sign_payload(payload: bytes) -> str:
     return hmac.new(WEBHOOK_SECRET.encode(), payload, hashlib.sha256).hexdigest()
 
 
-def _deliver_webhook(url: str, payload: dict, timeout: int = 10) -> bool:
-    """Deliver a webhook to a single URL. Returns True on success."""
-    try:
-        body = json.dumps(payload, default=str).encode()
-        signature = _sign_payload(body)
+def _deliver_webhook(
+    url: str,
+    payload: dict,
+    timeout: int = 10,
+    max_retries: int = 3,
+    base_delay: float = 1.0,
+) -> bool:
+    """Deliver a webhook with exponential backoff retry.
 
-        req = urllib.request.Request(
-            url,
-            data=body,
-            headers={
-                "Content-Type": "application/json",
-                "X-ErgoVigilance-Signature": signature,
-                "X-ErgoVigilance-Event": payload.get("event", "unknown"),
-                "User-Agent": "ErgoVigilance-Cloud/1.0",
-            },
-            method="POST",
-        )
-        urllib.request.urlopen(req, timeout=timeout)
-        logger.info("Webhook delivered to %s", url)
-        return True
-    except Exception as exc:
-        logger.warning("Webhook delivery to %s failed: %s", url, exc)
-        return False
+    Args:
+        url: Webhook URL
+        payload: JSON payload
+        timeout: Request timeout in seconds
+        max_retries: Maximum retry attempts
+        base_delay: Base delay in seconds (doubles each retry)
+
+    Returns:
+        True on success, False after all retries exhausted
+    """
+    body = json.dumps(payload, default=str).encode()
+    signature = _sign_payload(body)
+    event = payload.get("event", "unknown")
+
+    for attempt in range(max_retries + 1):
+        try:
+            req = urllib.request.Request(
+                url,
+                data=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-ErgoVigilance-Signature": signature,
+                    "X-ErgoVigilance-Event": event,
+                    "X-ErgoVigilance-Attempt": str(attempt + 1),
+                    "User-Agent": "ErgoVigilance-Cloud/1.0",
+                },
+                method="POST",
+            )
+            urllib.request.urlopen(req, timeout=timeout)
+            logger.info(
+                "Webhook delivered to %s (attempt %d/%d)",
+                url, attempt + 1, max_retries + 1,
+            )
+            return True
+        except Exception as exc:
+            if attempt < max_retries:
+                delay = base_delay * (2 ** attempt)  # Exponential backoff
+                logger.warning(
+                    "Webhook to %s failed (attempt %d/%d): %s — retrying in %.1fs",
+                    url, attempt + 1, max_retries + 1, exc, delay,
+                )
+                time.sleep(delay)
+            else:
+                logger.error(
+                    "Webhook to %s failed after %d attempts: %s",
+                    url, max_retries + 1, exc,
+                )
+    return False
 
 
 def send_webhook(
