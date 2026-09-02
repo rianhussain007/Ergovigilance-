@@ -45,6 +45,7 @@ const OnboardingChecklistPage = lazy(() => import('./pages/OnboardingChecklistPa
 const CloudOnboardingPage = lazy(() => import('./pages/CloudOnboardingPage'));
 const StatusPage = lazy(() => import('./pages/StatusPage'));
 const ArchitecturePage = lazy(() => import('./pages/ArchitecturePage'));
+const ConsentPage = lazy(() => import('./pages/ConsentPage'));
 
 function HomeRoute() {
   const { user } = useAuth();
@@ -108,6 +109,7 @@ export default function App() {
               <Route path="/system-health" element={<SystemHealthPage />} />
               <Route path="/architecture" element={<ArchitecturePage />} />
               <Route path="/onboarding" element={<OnboardingChecklistPage />} />
+              <Route path="/consent" element={<ConsentPage />} />
             </Route>
             <Route path="/pricing" element={<PricingPage />} />
             <Route path="/status" element={<StatusPage />} />

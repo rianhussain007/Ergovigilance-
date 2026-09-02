@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { NavLink } from 'react-router';
-import { LayoutDashboard, Radio, BarChart3, FileText, History, Settings, ChevronLeft, ChevronRight, Activity, Building2, Camera, ScrollText, Server, Clapperboard, Users, ClipboardList, UserCog, Heart, Code, Wifi, SlidersHorizontal, Brain, Scan, TrendingUp, HeartPulse, ListChecks, Rocket, Network } from 'lucide-react';
+import { LayoutDashboard, Radio, BarChart3, FileText, History, Settings, ChevronLeft, ChevronRight, Activity, Building2, Camera, ScrollText, Server, Clapperboard, Users, ClipboardList, UserCog, Heart, Code, Wifi, SlidersHorizontal, Brain, Scan, TrendingUp, HeartPulse, ListChecks, Rocket, Network, Shield } from 'lucide-react';
 import { motion } from 'motion/react';
 import Logo from '../components/common/Logo';
 import { useI18n } from '@/src/i18n';
@@ -49,6 +49,7 @@ const NAV_SECTIONS: { title: string; tKey: string; items: { to: string; label: s
       { to: '/system-health', label: 'System Health', tKey: 'nav.systemHealth', icon: HeartPulse, roles: ['admin'] },
       { to: '/architecture', label: 'Architecture', tKey: 'nav.architecture', icon: Network, roles: ['admin'] },
       { to: '/onboarding', label: 'Onboarding', tKey: 'nav.onboarding', icon: ListChecks, roles: ['admin'] },
+      { to: '/consent', label: 'Consent', tKey: 'nav.consent', icon: Shield, roles: ['safety_mgr', 'admin'] },
       { to: '/settings', label: 'Settings', tKey: 'nav.settings', icon: Settings, roles: ['operator', 'supervisor', 'safety_mgr', 'admin'] },
     ],
   },
