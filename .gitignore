@@ -112,3 +112,10 @@ tests/__pycache__/
 backend_api/start_demo.bat
 .freebuff/
 *.log
+
+# Root-level runtime artifacts
+local_auth.db
+*.pt
+ops/keep_alive.py
+ops/start_services.bat
+node_modules/

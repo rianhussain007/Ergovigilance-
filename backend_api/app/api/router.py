@@ -44,6 +44,7 @@ from app.api.search import router as search_router
 from app.api.billing import router as billing_router
 from app.api.mfa import router as mfa_router
 from app.api.audit_log import router as audit_log_router
+from app.api.consent import router as consent_router
 
 api_router = APIRouter()
 
@@ -89,3 +90,4 @@ api_router.include_router(search_router, prefix="/api", tags=["Search"])
 api_router.include_router(billing_router, prefix="/api", tags=["Billing"])
 api_router.include_router(mfa_router, prefix="/api", tags=["MFA"])
 api_router.include_router(audit_log_router, prefix="", tags=["Audit Log (SOC2)"])
+api_router.include_router(consent_router, prefix="/api", tags=["Consent Management"])
