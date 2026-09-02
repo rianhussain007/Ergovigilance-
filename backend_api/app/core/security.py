@@ -81,6 +81,8 @@ class AuthenticatedUser:
     id: int
     email: str
     role: str
+    org_id: int | None = None
+    org_slug: str | None = None
 
 
 def hash_password(password: str) -> str:
