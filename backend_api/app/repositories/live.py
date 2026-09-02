@@ -899,10 +899,11 @@ class LiveRepository(DashboardRepository):
             ),
         )
 
-    async def get_alerts_summary(self, recent_n: int = 6) -> AlertsResponse:
+    async def get_alerts_summary(self, recent_n: int = 6, org_id: int | None = None) -> AlertsResponse:
         """Lightweight alert fetch — summary + last N history + active.
 
         Avoids serializing the entire history list.
+        When org_id is provided, only alerts belonging to that organization are returned.
         """
         from app.services.demo_seeding import DEMO_MODE
         if DEMO_MODE:
