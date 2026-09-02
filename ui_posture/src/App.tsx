@@ -45,6 +45,7 @@ const OnboardingChecklistPage = lazy(() => import('./pages/OnboardingChecklistPa
 const CloudOnboardingPage = lazy(() => import('./pages/CloudOnboardingPage'));
 const StatusPage = lazy(() => import('./pages/StatusPage'));
 const ArchitecturePage = lazy(() => import('./pages/ArchitecturePage'));
+const WebCamDemo = lazy(() => import('./pages/WebCamDemo'));
 const ModelCardPage = lazy(() => import('./pages/ModelCardPage'));
 const ConsentPage = lazy(() => import('./pages/ConsentPage'));
 const PilotChecklistPage = lazy(() => import('./pages/PilotChecklistPage'));
@@ -110,6 +111,7 @@ export default function App() {
               <Route path="/roi-analytics" element={<ROIAnalyticsPage />} />
               <Route path="/system-health" element={<SystemHealthPage />} />
               <Route path="/architecture" element={<ArchitecturePage />} />
+              <Route path="/webcam-demo" element={<WebCamDemo />} />
               <Route path="/model-card" element={<ModelCardPage />} />
               <Route path="/pilot-checklist" element={<PilotChecklistPage />} />
               <Route path="/onboarding" element={<OnboardingChecklistPage />} />
