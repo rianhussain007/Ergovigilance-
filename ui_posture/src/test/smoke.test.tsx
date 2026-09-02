@@ -15,19 +15,22 @@ import { ToastProvider } from '../hooks/useToast';
 import { AuthProvider } from '../auth/AuthContext';
 import { SettingsProvider } from '../hooks/useSettings';
 import { AlertsProvider } from '../hooks/useAlertsContext';
+import { I18nProvider } from '../i18n';
 import { createFetchMock } from './fixtures';
 
 function renderApp() {
   return render(
     <ThemeProvider>
       <ToastProvider>
-        <AuthProvider>
-          <SettingsProvider>
-            <AlertsProvider>
-              <App />
-            </AlertsProvider>
-          </SettingsProvider>
-        </AuthProvider>
+        <I18nProvider>
+          <AuthProvider>
+            <SettingsProvider>
+              <AlertsProvider>
+                <App />
+              </AlertsProvider>
+            </SettingsProvider>
+          </AuthProvider>
+        </I18nProvider>
       </ToastProvider>
     </ThemeProvider>,
   );
