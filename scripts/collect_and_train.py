@@ -290,6 +290,8 @@ def extract_from_videos(max_per_video=25, sample_interval=1.5):
         DATA_DIR / "diverse_training" / "youtube",
         DATA_DIR / "diverse_training" / "youtube" / "seated_work",
         DATA_DIR / "diverse_training" / "youtube" / "inspection",
+        DATA_DIR / "diverse_training" / "youtube" / "lifting_heavy",
+        DATA_DIR / "diverse_training" / "youtube" / "walking_reaching",
         DATA_DIR / "diverse_training" / "huggingface",
         DATA_DIR / "voxel51" / "videos",
         DATA_DIR / "factory_manipulation" / "videos",
