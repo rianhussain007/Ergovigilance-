@@ -45,6 +45,13 @@ except ImportError:
     COCO_17 = None
     FEATURE_COLUMNS = []
 
+# Shared task recognition engine (temporal smoothing, geometric gate, ML model)
+try:
+    from shared.task_recognition import TaskRecognitionEngine, extract_features_from_landmarks
+    _HAS_SHARED_ENGINE = True
+except ImportError:
+    _HAS_SHARED_ENGINE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -112,6 +119,9 @@ class YOLOPoseEngine:
         self._risk_model = None
         self._task_model = None
         self._initialized = False
+        # Per-worker task recognition engines (temporal smoothing + geometric gate)
+        self._task_engines: dict[int, 'TaskRecognitionEngine'] = {}
+        self._shared_engine_class = TaskRecognitionEngine if _HAS_SHARED_ENGINE else None
 
     def initialize(self) -> None:
         """Load YOLOv8-pose model and ByteTrack tracker."""
@@ -329,17 +339,44 @@ class YOLOPoseEngine:
 
             features, unavailable, _ = extract_features_from_keypoints(kps_arr, COCO_17)
 
-            # Task classification via ML model
-            if self._task_model is not None:
+            # Task classification via shared engine (temporal smoothing + geometric gate + ML)
+            if _HAS_SHARED_ENGINE:
+                # Get or create per-worker task recognition engine
+                if track_id not in self._task_engines:
+                    model_path = str(task_path) if task_path.exists() else None
+                    self._task_engines[track_id] = TaskRecognitionEngine(model_path=model_path)
+                engine = self._task_engines[track_id]
+                # Convert COCO_17 keypoints to 33-landmark format for the shared engine
+                kps_33 = np.zeros((33, 4))
+                kps_33[:, 3] = 0.5  # default visibility
+                # COCO_17 -> MediaPipe mapping
+                coco_to_mp = {0: 0, 5: 11, 6: 12, 7: 13, 8: 14, 9: 15, 10: 16,
+                              11: 23, 12: 24, 13: 25, 14: 26, 15: 27, 16: 28}
+                for coco_idx, mp_idx in coco_to_mp.items():
+                    if coco_idx < len(keypoints) and keypoints[coco_idx][2] > 0:
+                        kps_33[mp_idx, 0] = keypoints[coco_idx][0]
+                        kps_33[mp_idx, 1] = keypoints[coco_idx][1]
+                        kps_33[mp_idx, 3] = keypoints[coco_idx][2]
+                result = engine.detect(
+                    keypoints=kps_33,
+                    features={k: v for k, v in features.items() if not np.isnan(v)},
+                    image_width=frame_w,
+                    image_height=frame_h,
+                )
+                task = result["task"]
+                task_confidence = result["confidence"]
+            elif self._task_model is not None:
                 feat_vec = np.array(
                     [features.get(c, float("nan")) for c in FEATURE_COLUMNS],
                     dtype=float,
                 ).reshape(1, -1)
                 task = str(self._task_model.predict(feat_vec)[0])
+                task_confidence = 75.0
             else:
                 # Heuristic fallback
                 angles = self._calculate_angles(keypoints)
                 task = self._classify_task(angles)
+                task_confidence = 50.0
 
             # Risk scoring via ML model
             if self._risk_model is not None:
