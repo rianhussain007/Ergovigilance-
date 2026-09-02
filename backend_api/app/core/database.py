@@ -59,20 +59,53 @@ def get_connection():
     Used as a context manager: with get_connection() as conn: ...
     The adapter handles pooling, row wrapping, and placeholder conversion.
     """
-    return get_db()
-
-
-def init_local_database() -> None:
-    """Apply schema migrations and seed the database.
-
-    Schema is versioned via ``app.core.migrations`` (SQLite ``PRAGMA
-    user_version``); seeding and the credentials file remain idempotent.
-    """
-    with get_connection() as conn:
-        run_migrations(conn)
-        _seed_users(conn, SEED_USERS)
-        _seed_workers(conn, SEED_WORKERS)
-        conn.commit()
+    return get_db()
+
+
+def get_org_id_for_user(user_id: int) -> int | None:
+    """Get the organization ID for a given user."""
+    with get_connection() as conn:
+        row = conn.execute("SELECT org_id FROM users WHERE id = ?", (user_id,)).fetchone()
+        return row[0] if row and row[0] else None
+
+
+def get_user_org(user_id: int) -> dict | None:
+    """Get organization details for a given user."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT o.* FROM organizations o JOIN users u ON u.org_id = o.id WHERE u.id = ?",
+            (user_id,)
+        ).fetchone()
+        if row:
+            return dict(row)
+        return None
+
+
+def get_org_by_api_key(api_key: str) -> dict | None:
+    """Look up organization by API key for cloud core authentication."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT o.* FROM organizations o WHERE o.api_key = ?",
+            (api_key,)
+        ).fetchone()
+        if row:
+            return dict(row)
+        return None
+
+
+def init_local_database() -> None:
+    """Apply schema migrations and seed the database.
+
+
+    Schema is versioned via ``app.core.migrations`` (SQLite ``PRAGMA
+    user_version``); seeding and the credentials file remain idempotent.
+    """
+    with get_connection() as conn:
+        run_migrations(conn)
+        _seed_organizations(conn)
+        _seed_users(conn, SEED_USERS)
+        _seed_workers(conn, SEED_WORKERS)
+        conn.commit()
     _write_local_credentials_file()
 
 
@@ -137,7 +170,33 @@ def save_user_settings(user_id: int, settings_dict: dict) -> None:
         conn.commit()
 
 
-def _seed_users(conn: sqlite3.Connection, seed_users: Iterable[tuple[str, str, str]]) -> None:
+def _seed_organizations(conn) -> None:
+    """Seed demo organizations if they don't exist."""
+    now = datetime.now(timezone.utc).isoformat()
+    demo_orgs = [
+        ("Demo Factory", "demo-factory", "enterprise", "Manufacturing", "IN", 50, 500),
+        ("Acme Manufacturing", "acme-mfg", "professional", "Automotive", "US", 10, 100),
+    ]
+    for name, slug, plan, industry, country, max_cameras, max_workers in demo_orgs:
+        existing = conn.execute("SELECT id FROM organizations WHERE slug = ?", (slug,)).fetchone()
+        if existing is None:
+            api_key = f"ergo_{slug.replace('-', '_')}_key_{os.urandom(8).hex()}"
+            conn.execute(
+                "INSERT INTO organizations (name, slug, plan, industry, country, max_cameras, max_workers, api_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (name, slug, plan, industry, country, max_cameras, max_workers, api_key, now, now),
+            )
+
+    # Migrate existing users/workers/alerts to demo-factory org if not assigned
+    demo_id = conn.execute("SELECT id FROM organizations WHERE slug = 'demo-factory'").fetchone()
+    if demo_id:
+        demo_id = demo_id[0]
+        conn.execute("UPDATE users SET org_id = ? WHERE org_id IS NULL", (demo_id,))
+        conn.execute("UPDATE workers SET org_id = ? WHERE org_id IS NULL", (demo_id,))
+        conn.execute("UPDATE alerts SET org_id = ? WHERE org_id IS NULL", (demo_id,))
+        conn.execute("UPDATE audit_log SET org_id = ? WHERE org_id IS NULL", (demo_id,))
+
+
+def _seed_users(conn, seed_users: Iterable[tuple[str, str, str]]) -> None:
     now = datetime.now(timezone.utc).isoformat()
     for email, password, role in seed_users:
         existing = conn.execute("SELECT id, password_hash, role FROM users WHERE lower(email) = lower(?)", (email,)).fetchone()
