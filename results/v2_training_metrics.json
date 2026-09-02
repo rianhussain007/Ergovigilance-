@@ -1,0 +1,169 @@
+{
+  "timestamp": "2026-09-02T18:16:42.683169",
+  "n_samples": 586,
+  "risk": {
+    "cv_f1": 0.976097348978705,
+    "cv_std": 0.009987462710681703,
+    "classification_report": {
+      "HIGH": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 551.0
+      },
+      "LOW": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 23.0
+      },
+      "MEDIUM": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 12.0
+      },
+      "accuracy": 1.0,
+      "macro avg": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 586.0
+      },
+      "weighted avg": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 586.0
+      }
+    },
+    "confusion_matrix": [
+      [
+        551,
+        0,
+        0
+      ],
+      [
+        0,
+        23,
+        0
+      ],
+      [
+        0,
+        0,
+        12
+      ]
+    ],
+    "class_distribution": {
+      "HIGH": 551,
+      "MEDIUM": 12,
+      "LOW": 23
+    },
+    "class_weights": {
+      "HIGH": 0.3545069570477919,
+      "LOW": 8.492753623188406,
+      "MEDIUM": 16.27777777777778
+    }
+  },
+  "task": {
+    "cv_f1": 0.9761263218890337,
+    "cv_std": 0.006303455997417943,
+    "classification_report": {
+      "Assembly Work": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 490.0
+      },
+      "Inspection": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 7.0
+      },
+      "Lifting/Carrying": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 80.0
+      },
+      "Neutral Standing": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 1.0
+      },
+      "Seated Work": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 8.0
+      },
+      "accuracy": 1.0,
+      "macro avg": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 586.0
+      },
+      "weighted avg": {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1-score": 1.0,
+        "support": 586.0
+      }
+    },
+    "confusion_matrix": [
+      [
+        490,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        7,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        80,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        8
+      ]
+    ],
+    "class_distribution": {
+      "Assembly Work": 490,
+      "Lifting/Carrying": 80,
+      "Inspection": 7,
+      "Seated Work": 8,
+      "Neutral Standing": 1
+    },
+    "class_weights": {
+      "Assembly Work": 0.23918367346938776,
+      "Inspection": 16.742857142857144,
+      "Lifting/Carrying": 1.465,
+      "Neutral Standing": 117.2,
+      "Seated Work": 14.65
+    }
+  },
+  "caveat": "CV metrics on extracted + synthetic data. True accuracy requires held-out human-labeled ground truth."
+}
