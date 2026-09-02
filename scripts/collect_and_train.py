@@ -142,19 +142,38 @@ def classify_task(features):
     knee = features["knee_angle"]
     shoulder_elev = max(features["left_shoulder_elev"], features["right_shoulder_elev"])
     elbow = features["elbow_flexion_angle"]
+    hand_reach = features.get("hand_reach_ratio", 1.0)
+    stance = features.get("stance_width_ratio", 1.0)
 
-    if knee < 100 and trunk > 20:
+    # Lifting: bent knees + forward lean
+    if knee < 90 and trunk > 25:
         return "Lifting/Carrying"
-    elif neck > 30 and trunk < 15 and knee > 140:
-        return "Inspection"
-    elif knee > 150 and trunk < 10 and shoulder_elev < 3:
+    elif knee < 100 and trunk > 35:
+        return "Lifting/Carrying"
+
+    # Seated Work: knees moderately bent + hands close to body (desk work)
+    # From front camera, seated workers show high trunk flexion but hands are
+    # close and the overall pose is stable (low stance width ratio)
+    if 80 < knee < 150 and hand_reach < 1.2 and stance < 1.5:
         return "Seated Work"
-    elif knee > 120 and trunk < 20 and elbow < 120:
-        return "Assembly Work"
-    elif trunk < 10 and knee > 150:
+    elif knee > 140 and trunk < 15 and shoulder_elev < 5:
+        return "Seated Work"
+
+    # Inspection: looking down at object, hands raised
+    if neck > 25 and trunk < 20 and knee > 130:
+        return "Inspection"
+    elif neck > 40 and elbow > 100:
+        return "Inspection"
+
+    # Neutral Standing: upright, legs straight, no movement
+    if trunk < 10 and knee > 160:
         return "Neutral Standing"
-    else:
+
+    # Assembly Work: moderate arm flexion, upright-ish
+    if knee > 110 and elbow < 130:
         return "Assembly Work"
+
+    return "Assembly Work"
 
 
 def classify_risk(features):
@@ -269,6 +288,8 @@ def extract_from_videos(max_per_video=25, sample_interval=1.5):
     all_rows = []
     video_dirs = [
         DATA_DIR / "diverse_training" / "youtube",
+        DATA_DIR / "diverse_training" / "youtube" / "seated_work",
+        DATA_DIR / "diverse_training" / "youtube" / "inspection",
         DATA_DIR / "diverse_training" / "huggingface",
         DATA_DIR / "voxel51" / "videos",
         DATA_DIR / "factory_manipulation" / "videos",
@@ -276,10 +297,13 @@ def extract_from_videos(max_per_video=25, sample_interval=1.5):
     ]
 
     videos = []
+    seen_names = set()
     for vdir in video_dirs:
         if vdir.exists():
             for v in vdir.glob("*.mp4"):
-                videos.append(v)
+                if v.name not in seen_names:
+                    videos.append(v)
+                    seen_names.add(v.name)
 
     logger.info("Found %d videos to process", len(videos))
 
