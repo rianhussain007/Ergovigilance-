@@ -81,3 +81,21 @@ jobs:
 
       - name: Verify docker-compose config
         run: docker compose config --quiet
+
+      - name: Scan backend image (trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ergovigilance-backend:test
+          format: table
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Scan frontend image (trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ergovigilance-frontend:test
+          format: table
+          exit-code: '1'
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true

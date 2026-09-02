@@ -32,6 +32,8 @@ const NAV_SECTIONS: { title: string; tKey: string; items: { to: string; label: s
       { to: '/cloud-onboarding', label: 'Cloud Setup', tKey: 'nav.cloudSetup', icon: Rocket, roles: ['admin'] },
       { to: '/cloud-settings', label: 'Cloud Settings', tKey: 'nav.cloudSettings', icon: SlidersHorizontal, roles: ['admin'] },
       { to: '/model-dashboard', label: 'Model Dashboard', tKey: 'nav.modelDashboard', icon: Brain, roles: ['admin'] },
+      { to: '/model-card', label: 'Model Card', tKey: 'nav.modelCard', icon: Brain, roles: ['admin', 'safety_mgr'] },
+      { to: '/pilot-checklist', label: 'Pilot Checklist', tKey: 'nav.pilotChecklist', icon: ClipboardList, roles: ['admin', 'safety_mgr'] },
       { to: '/yolo-demo', label: 'YOLO Demo', tKey: 'nav.yoloDemo', icon: Scan, roles: ['admin', 'safety_mgr'] },
       { to: '/roi-analytics', label: 'ROI Analytics', tKey: 'nav.roiAnalytics', icon: TrendingUp, roles: ['admin', 'safety_mgr'] },
     ],
