@@ -88,10 +88,10 @@ class TaskRecognition:
     computed automatically from the feature history.
     """
 
-    DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "task_model_v3.pkl"
+    DEFAULT_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "task_model_v2.pkl"
     HUMAN_LABELED_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "human_labeled_task_model.pkl"
     DIVERSE_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "diverse_task_model.pkl"
-    FALLBACK_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "task_model_v2.pkl"
+    FALLBACK_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "task_model_v3.pkl"
     UPPER_BODY_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "upper_body_task_model.pkl"
 
     def __init__(self, window_size: int = 10,

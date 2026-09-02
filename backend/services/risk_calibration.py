@@ -17,7 +17,8 @@ import os
 from pathlib import Path
 from typing import Dict, Mapping, Optional
 
-_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "risk_calibration_model.pkl"
+_MODEL_PATH_DEFAULT = Path(__file__).resolve().parents[2] / "models" / "risk_model_v2.pkl"
+_MODEL_PATH_LEGACY = Path(__file__).resolve().parents[2] / "models" / "risk_calibration_model.pkl"
 _BUNDLE: Optional[dict] = None
 _TRIED = False
 
@@ -29,7 +30,9 @@ def _load() -> Optional[dict]:
     _TRIED = True
     try:
         import joblib  # optional runtime dep — returns None if unavailable
-        path = Path(os.environ.get("ERGOVIGILANCE_RISK_MODEL", "") or _MODEL_PATH)
+        path = Path(os.environ.get("ERGOVIGILANCE_RISK_MODEL", "") or _MODEL_PATH_DEFAULT)
+        if not path.exists():
+            path = _MODEL_PATH_LEGACY
         if not path.exists():
             return None
         bundle = joblib.load(path)
@@ -69,8 +72,18 @@ def predict_risk_band(features: Mapping[str, float]) -> Optional[Dict[str, objec
         classes = list(classes)
         if not classes or best >= len(classes):
             return None
+        band = classes[best]
+        # Decode integer labels via LabelEncoder when present
+        le = bundle.get("label_encoder")
+        if le is not None and hasattr(le, "inverse_transform"):
+            try:
+                band = str(le.inverse_transform([int(band)])[0])
+            except (ValueError, IndexError):
+                band = str(band)
+        else:
+            band = str(band)
         return {
-            "band": str(classes[best]),
+            "band": band,
             "confidence": round(float(proba[best]), 3),
         }
     except Exception:
