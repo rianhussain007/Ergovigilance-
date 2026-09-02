@@ -50,6 +50,7 @@ const NAV_SECTIONS: { title: string; tKey: string; items: { to: string; label: s
       { to: '/api-docs', label: 'API Docs', tKey: 'nav.apiDocs', icon: Code, roles: ['admin'] },
       { to: '/system-health', label: 'System Health', tKey: 'nav.systemHealth', icon: HeartPulse, roles: ['admin'] },
       { to: '/architecture', label: 'Architecture', tKey: 'nav.architecture', icon: Network, roles: ['admin'] },
+      { to: '/webcam-demo', label: 'Webcam Demo', tKey: 'nav.webcam', icon: Camera, roles: ['admin', 'operator'] },
       { to: '/onboarding', label: 'Onboarding', tKey: 'nav.onboarding', icon: ListChecks, roles: ['admin'] },
       { to: '/consent', label: 'Consent', tKey: 'nav.consent', icon: Shield, roles: ['safety_mgr', 'admin'] },
       { to: '/settings', label: 'Settings', tKey: 'nav.settings', icon: Settings, roles: ['operator', 'supervisor', 'safety_mgr', 'admin'] },
