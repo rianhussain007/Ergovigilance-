@@ -27,7 +27,7 @@ async def get_sessions(
     the same page are fast. Aggregation endpoints (analytics, reports, risk
     trend, safety report) consume the full list directly via session_cache
     and are NOT affected by this pagination."""
-    all_sessions = await repo.get_sessions(current_user=user)
+    all_sessions = await repo.get_sessions(current_user=user, org_id=user.org_id)
     total = len(all_sessions)
     pages = max(1, math.ceil(total / limit))
     start = (page - 1) * limit

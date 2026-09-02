@@ -47,7 +47,7 @@ async def get_alerts(
     """
     service = _require_live_service()
     require_live_session_access(user, service)
-    return await repo.get_alerts_summary(recent_n=20)
+    return await repo.get_alerts_summary(recent_n=20, org_id=user.org_id)
 
 
 @router.patch("/alerts/{alert_id}/acknowledge", response_model=AlertResponse)

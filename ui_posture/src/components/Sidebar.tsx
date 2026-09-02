@@ -3,6 +3,7 @@ import { NavLink } from 'react-router';
 import { LayoutDashboard, Radio, BarChart3, FileText, History, Settings, ChevronLeft, ChevronRight, Activity, Building2, Camera, ScrollText, Server, Clapperboard, Users, ClipboardList, UserCog, Heart, Code, Wifi, SlidersHorizontal, Brain, Scan, TrendingUp, HeartPulse, ListChecks, Rocket, Network, Shield } from 'lucide-react';
 import { motion } from 'motion/react';
 import Logo from '../components/common/Logo';
+import { OrgSwitcher } from '../components/common/OrgSwitcher';
 import { useI18n } from '@/src/i18n';
 
 // Navigation grouped into labeled sections. Each item keeps its own role gate
@@ -165,7 +166,11 @@ export default function Sidebar({ role = 'administrator', rolePaths, collapsed: 
         </div>
       )}
 
-      <div className="px-sm pt-md border-t border-slate-200 dark:border-outline-variant mt-auto">
+      <div className="px-sm pt-md border-t border-slate-200 dark:border-outline-variant mt-auto space-y-1">
+        {/* Organization Switcher */}
+        {!collapsed && (
+          <OrgSwitcher />
+        )}
         <button
           onClick={toggleCollapsed}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}

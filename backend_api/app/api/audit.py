@@ -35,6 +35,7 @@ async def get_audit_log(
     return load_audit_log(
         action_type=action_type,
         actor_email=actor_email,
+        org_id=user.org_id,
         limit=limit,
         offset=offset,
     )

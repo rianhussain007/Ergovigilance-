@@ -7,7 +7,7 @@ from collections.abc import Callable
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from app.core.database import get_user_by_id
+from app.core.database import get_connection, get_user_by_id
 from app.core.security import AuthenticatedUser, decode_access_token
 
 
@@ -24,7 +24,18 @@ def _user_from_payload(payload: dict) -> AuthenticatedUser:
     role = row["role"]
     if role != payload.get("role"):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token role is stale")
-    return AuthenticatedUser(id=row["id"], email=row["email"], role=role)
+    # Resolve org_id from user record
+    org_id = row.get("org_id") if hasattr(row, 'get') else None
+    org_slug = None
+    if org_id:
+        try:
+            with get_connection() as conn:
+                org_row = conn.execute("SELECT slug FROM organizations WHERE id = ?", (org_id,)).fetchone()
+                if org_row:
+                    org_slug = org_row[0] if hasattr(org_row, '__getitem__') else org_row['slug']
+        except Exception:
+            pass
+    return AuthenticatedUser(id=row["id"], email=row["email"], role=role, org_id=org_id, org_slug=org_slug)
 
 
 async def get_current_user(
@@ -48,6 +59,18 @@ def require_roles(*roles: str) -> Callable[[AuthenticatedUser], AuthenticatedUse
         return user
 
     return dependency
+
+
+def get_org_id(user: AuthenticatedUser) -> int | None:
+    """Get the organization ID for the current user."""
+    return user.org_id
+
+
+def require_org(user: AuthenticatedUser) -> int:
+    """Require that the user belongs to an organization."""
+    if user.org_id is None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User not associated with an organization")
+    return user.org_id
 
 
 def can_view_all_sessions(user: AuthenticatedUser) -> bool:

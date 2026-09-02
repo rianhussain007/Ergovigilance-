@@ -341,7 +341,7 @@ class LiveRepository(DashboardRepository):
                 return self._build_demo_dashboard()
         return self._build_dashboard()
 
-    async def get_sessions(self, current_user=None) -> List[SessionRecord]:
+    async def get_sessions(self, current_user=None, org_id: int | None = None) -> List[SessionRecord]:
         import os
         from datetime import datetime
         from app.services.session_cache import get_all_sessions
@@ -899,10 +899,11 @@ class LiveRepository(DashboardRepository):
             ),
         )
 
-    async def get_alerts_summary(self, recent_n: int = 6) -> AlertsResponse:
+    async def get_alerts_summary(self, recent_n: int = 6, org_id: int | None = None) -> AlertsResponse:
         """Lightweight alert fetch — summary + last N history + active.
 
         Avoids serializing the entire history list.
+        When org_id is provided, only alerts belonging to that organization are returned.
         """
         from app.services.demo_seeding import DEMO_MODE
         if DEMO_MODE:
