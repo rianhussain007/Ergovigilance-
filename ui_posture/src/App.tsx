@@ -47,6 +47,7 @@ const StatusPage = lazy(() => import('./pages/StatusPage'));
 const ArchitecturePage = lazy(() => import('./pages/ArchitecturePage'));
 const ModelCardPage = lazy(() => import('./pages/ModelCardPage'));
 const ConsentPage = lazy(() => import('./pages/ConsentPage'));
+const PilotChecklistPage = lazy(() => import('./pages/PilotChecklistPage'));
 
 function HomeRoute() {
   const { user } = useAuth();
@@ -110,6 +111,7 @@ export default function App() {
               <Route path="/system-health" element={<SystemHealthPage />} />
               <Route path="/architecture" element={<ArchitecturePage />} />
               <Route path="/model-card" element={<ModelCardPage />} />
+              <Route path="/pilot-checklist" element={<PilotChecklistPage />} />
               <Route path="/onboarding" element={<OnboardingChecklistPage />} />
               <Route path="/consent" element={<ConsentPage />} />
             </Route>
