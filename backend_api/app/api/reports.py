@@ -26,8 +26,8 @@ if not (ROOT / "backend_api").is_dir() and (Path(__file__).resolve().parents[2] 
 SESSIONS_DIR = os.environ.get("SESSIONS_DIR") or os.path.join(str(ROOT), "outputs", "sessions")
 
 
-def _get_session_files(current_user: AuthenticatedUser | None = None) -> List[dict]:
-    """Read all session files from shared cache instead of individual disk reads."""
+def _get_session_files(current_user: AuthenticatedUser | None = None, org_id: int | None = None) -> List[dict]:
+    """Read all session files from shared cache, optionally filtered by org_id."""
     from app.services.session_cache import get_all_sessions
 
     sessions = []
@@ -39,6 +39,7 @@ def _get_session_files(current_user: AuthenticatedUser | None = None) -> List[di
             "ended_at": data.get("ended_at", ""),
             "worker_id": data.get("worker_id", "unknown"),
             "created_by_user_id": data.get("created_by_user_id"),
+            "org_id": data.get("org_id"),
             "is_legacy": "created_by_user_id" not in data,
             "statistics": data.get("statistics", {}),
             "snapshots_count": len(data.get("snapshots", [])),
@@ -47,6 +48,14 @@ def _get_session_files(current_user: AuthenticatedUser | None = None) -> List[di
             "file": "",
         })
 
+    # Filter by org_id if provided
+    if org_id is not None:
+        sessions = [
+            session for session in sessions
+            if session.get("org_id") == org_id or session.get("org_id") is None
+        ]
+
+    # Filter by user access if not admin
     if current_user is not None and not can_view_all_sessions(current_user):
         sessions = [
             session for session in sessions
@@ -64,7 +73,7 @@ async def get_reports(
     user: AuthenticatedUser = Depends(get_current_user),
 ):
     """List all generated reports from real session data."""
-    sessions = _get_session_files(current_user=user)
+    sessions = _get_session_files(current_user=user, org_id=user.org_id)
     reports = []
 
     for session in sessions:

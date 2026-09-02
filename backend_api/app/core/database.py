@@ -598,6 +598,7 @@ def insert_audit_log(
 def load_audit_log(
     action_type: str | None = None,
     actor_email: str | None = None,
+    org_id: int | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> list[dict]:
@@ -606,6 +607,9 @@ def load_audit_log(
     params = []
     conditions = []
 
+    if org_id is not None:
+        conditions.append("org_id = ?")
+        params.append(org_id)
     if action_type:
         conditions.append("action_type = ?")
         params.append(action_type)
