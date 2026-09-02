@@ -12,10 +12,11 @@ import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable
-
-from app.core.config import settings
-from app.core.db_backend import get_db, is_postgres
+from typing import Iterable
+
+from app.core.config import settings
+from app.core.db_backend import get_db, is_postgres
+from app.core.migrations import run_migrations
 from app.core.security import hash_password, verify_password
 
 
