@@ -331,8 +331,15 @@ def get_user_by_id(user_id: int) -> sqlite3.Row | None:
         return conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
 
 
-def list_workers() -> list[sqlite3.Row]:
+def list_workers(org_id: int | None = None) -> list[sqlite3.Row]:
+    """List all workers, optionally filtered by organization."""
     with get_connection() as conn:
+        if org_id is not None:
+            return conn.execute(
+                "SELECT worker_id, employee_id, name, department, shift, identity_mode, consent_status, badge_id "
+                "FROM workers WHERE org_id = ? ORDER BY worker_id",
+                (org_id,)
+            ).fetchall()
         return conn.execute(
             "SELECT worker_id, employee_id, name, department, shift, identity_mode, consent_status, badge_id "
             "FROM workers ORDER BY worker_id"
@@ -396,13 +403,20 @@ def get_next_worker_id() -> str:
         return f"worker-{max_num + 1:03d}"
 
 
-def insert_worker(employee_id: str, name: str, department: str, shift: str) -> str:
+def insert_worker(employee_id: str, name: str, department: str, shift: str, org_id: int | None = None) -> str:
+    """Insert a new worker, optionally associated with an organization."""
     worker_id = get_next_worker_id()
     with get_connection() as conn:
-        conn.execute(
-            "INSERT INTO workers (worker_id, employee_id, name, department, shift) VALUES (?, ?, ?, ?, ?)",
-            (worker_id, employee_id, name, department, shift),
-        )
+        if org_id is not None:
+            conn.execute(
+                "INSERT INTO workers (worker_id, employee_id, name, department, shift, org_id) VALUES (?, ?, ?, ?, ?, ?)",
+                (worker_id, employee_id, name, department, shift, org_id),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO workers (worker_id, employee_id, name, department, shift) VALUES (?, ?, ?, ?, ?)",
+                (worker_id, employee_id, name, department, shift),
+            )
         conn.commit()
     return worker_id
 

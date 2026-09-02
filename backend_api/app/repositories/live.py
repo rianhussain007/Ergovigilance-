@@ -341,7 +341,7 @@ class LiveRepository(DashboardRepository):
                 return self._build_demo_dashboard()
         return self._build_dashboard()
 
-    async def get_sessions(self, current_user=None) -> List[SessionRecord]:
+    async def get_sessions(self, current_user=None, org_id: int | None = None) -> List[SessionRecord]:
         import os
         from datetime import datetime
         from app.services.session_cache import get_all_sessions

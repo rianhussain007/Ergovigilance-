@@ -82,9 +82,9 @@ class BadgeCheckinRequest(BaseModel):
 
 
 @router.get("/workers", response_model=List[WorkerResponse])
-async def get_workers(_: AuthenticatedUser = Depends(get_current_user)):
-    """List all workers. Available to all authenticated users."""
-    return [WorkerResponse(**dict(row)) for row in list_workers()]
+async def get_workers(user: AuthenticatedUser = Depends(get_current_user)):
+    """List all workers for the user's organization. Available to all authenticated users."""
+    return [WorkerResponse(**dict(row)) for row in list_workers(org_id=user.org_id)]
 
 
 @router.post("/workers", response_model=WorkerResponse, status_code=201)
@@ -99,7 +99,7 @@ async def create_worker(
             status_code=409,
             detail=f"Employee ID '{body.employee_id}' already belongs to worker '{existing['worker_id']}'",
         )
-    worker_id = insert_worker(body.employee_id, _normalize_name(body.name), body.department, body.shift)
+    worker_id = insert_worker(body.employee_id, _normalize_name(body.name), body.department, body.shift, org_id=user.org_id)
     row = get_worker(worker_id)
 
     # Log to audit trail
