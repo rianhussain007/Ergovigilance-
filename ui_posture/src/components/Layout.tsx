@@ -13,6 +13,8 @@ import { useAuth, type Role } from '@/src/auth/AuthContext';
 import { useAlertToasts } from '@/src/hooks/useAlertToasts';
 import OnboardingFlow from '@/src/components/common/OnboardingFlow';
 import { ProductTour, KeyboardHelpPanel, useKeyboardShortcuts, useProductTour, FloatingHelpButton } from '@/src/components/common/ProductTour';
+import SkipLink from '@/src/components/common/SkipLink';
+import { useFocusOnNavigate } from '@/src/hooks/useFocusOnNavigate';
 
 const roleConfig: Record<Role, { label: string; icon: React.ElementType }> = {
   operator: { label: 'Operator', icon: HardHat },
@@ -53,6 +55,9 @@ function UserMenu({ roleLabel, roleIcon: RoleIcon, email, onLogout }: { roleLabe
       <button
         onClick={() => setOpen(!open)}
         className="flex items-center gap-sm h-9 px-sm rounded-lg border border-outline-variant bg-surface-container text-on-surface-variant hover:text-on-surface hover:bg-surface-container-higher transition-colors"
+        aria-label={`User menu for ${email}`}
+        aria-expanded={open}
+        aria-haspopup="true"
         title={`Signed in as ${email}`}
       >
         <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/15 text-primary">
@@ -67,7 +72,7 @@ function UserMenu({ roleLabel, roleIcon: RoleIcon, email, onLogout }: { roleLabe
             <p className="text-body-sm font-bold text-on-surface">{roleLabel}</p>
             <p className="text-[11px] text-on-surface-variant truncate">{email}</p>
           </div>
-          <button onClick={onLogout} className="w-full flex items-center gap-sm px-md py-sm text-body-sm text-red-400 hover:bg-surface-container-highest transition-colors">
+          <button onClick={onLogout} aria-label="Sign out" className="w-full flex items-center gap-sm px-md py-sm text-body-sm text-red-400 hover:bg-surface-container-highest transition-colors">
             <LogOut className="w-4 h-4" />
             Logout
           </button>
@@ -127,6 +132,7 @@ export default function Layout() {
 
 
   useAlertToasts(() => setNotifOpen(true));
+  useFocusOnNavigate();
 
   // Product tour + keyboard shortcuts
   const { showTour, showHelp, startTour, dismissTour, setShowHelp, dismissHelp } = useProductTour();
@@ -187,6 +193,7 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-surface text-on-surface">
+      <SkipLink />
       <Sidebar role={role} rolePaths={rolePaths} collapsed={sidebarCollapsed} onCollapsedChange={setSidebarCollapsed} isMobile={isMobile} />
       <div className={`flex flex-col flex-1 min-w-0 transition-[margin] duration-300 ease-out ${isMobile ? 'ml-0' : sidebarCollapsed ? 'ml-16' : 'ml-64'}`}>
         <Header
@@ -199,6 +206,7 @@ export default function Layout() {
             {isMobile && (
               <button
                 onClick={() => setSidebarCollapsed(false)}
+                aria-label="Open navigation menu"
                 className="flex items-center justify-center w-9 h-9 rounded-lg bg-surface-container border border-outline-variant text-on-surface-variant hover:bg-surface-container-higher transition-colors"
                 title="Open menu"
               >
@@ -214,6 +222,8 @@ export default function Layout() {
             <div className="ml-auto flex items-center gap-sm">
               <button
                 onClick={() => setAiPanelOpen(!aiPanelOpen)}
+                aria-label="Toggle AI Assistant"
+                aria-expanded={aiPanelOpen}
                 title="AI Assistant"
                 className={`flex items-center justify-center w-9 h-9 rounded-lg transition-colors shrink-0 ${aiPanelOpen ? 'bg-primary text-on-primary' : 'bg-surface-container border border-outline-variant text-on-surface-variant hover:bg-surface-container-higher hover:text-on-surface'}`}
               >
@@ -221,6 +231,8 @@ export default function Layout() {
               </button>
               <button
                 onClick={() => setNotifOpen(!notifOpen)}
+                aria-label="Toggle alerts panel"
+                aria-expanded={notifOpen}
                 title="Alerts"
                 className={`flex items-center justify-center w-9 h-9 rounded-lg transition-colors shrink-0 ${notifOpen ? 'bg-primary text-on-primary' : 'bg-surface-container border border-outline-variant text-on-surface-variant hover:bg-surface-container-higher hover:text-on-surface'}`}
               >
@@ -230,7 +242,7 @@ export default function Layout() {
             </div>
           </div>
         </div>
-        <main className="flex-1 overflow-y-auto">
+        <main id="main-content" className="flex-1 overflow-y-auto" role="main" aria-label="Main content">
           <AnimatePresence mode="popLayout">
             <motion.div
               key={location.pathname}
@@ -249,6 +261,7 @@ export default function Layout() {
         </main>
       </div>
       <AIAssistantPanel open={aiPanelOpen} onClose={() => setAiPanelOpen(false)} />
+      <div aria-live="polite" aria-atomic="true" className="sr-only" id="a11y-announcer" />
 
       {/* Product Tour */}
       {showTour && <ProductTour onComplete={dismissTour} />}

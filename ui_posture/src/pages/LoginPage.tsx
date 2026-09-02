@@ -60,8 +60,8 @@ export default function LoginPage() {
       {/* Industrial backdrop — shared with every public page */}
       <IndustrialBackdrop accentLine />
 
-      <main className="relative w-[400px] max-w-[90vw] animate-fade-in">
-        <form onSubmit={handleSubmit} noValidate className="rounded-2xl border border-slate-200 dark:border-outline-variant/60 bg-white dark:bg-surface-container shadow-xl shadow-slate-200/50 dark:shadow-2xl dark:shadow-black/20 overflow-hidden">
+      <main className="relative w-[400px] max-w-[90vw] animate-fade-in" id="main-content">
+        <form onSubmit={handleSubmit} noValidate aria-label="Sign in to ErgoVigilance" className="rounded-2xl border border-slate-200 dark:border-outline-variant/60 bg-white dark:bg-surface-container shadow-xl shadow-slate-200/50 dark:shadow-2xl dark:shadow-black/20 overflow-hidden">
           {/* Brand header — wordmark links back to the marketing homepage */}
           <div className="px-xl pt-xl pb-md space-y-md">
             <Link to="/" className="flex items-center gap-sm group w-fit">

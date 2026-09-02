@@ -383,7 +383,7 @@ export function AlertCenter({ onClose }: { onClose?: () => void }) {
   }, []);
 
   return (
-    <div className="flex flex-col h-full bg-surface">
+    <div className="flex flex-col h-full bg-surface" role="complementary" aria-label="Alert Center">
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-outline-variant">
         <div className="flex items-center gap-3">
