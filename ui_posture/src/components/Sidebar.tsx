@@ -105,20 +105,20 @@ export default function Sidebar({ role = 'administrator', rolePaths, collapsed: 
         )}
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-sm pb-sm">
+      <nav className="flex-1 overflow-y-auto px-sm pb-sm" role="navigation" aria-label="Main navigation">
         {sections.map((section) => (
           <div key={section.title} className={collapsed ? 'mt-md' : 'mt-sm'}>
             {!collapsed && (
-              <p className="font-label-caps text-[9px] text-slate-400 dark:text-on-surface-variant/60 uppercase tracking-widest px-md mb-xs mt-md">
+              <p id={`nav-section-${section.title}`} className="font-label-caps text-[9px] text-slate-400 dark:text-on-surface-variant/60 uppercase tracking-widest px-md mb-xs mt-md" role="presentation">
                 {section.title}
               </p>
             )}
             <div className="space-y-0.5">
-              {section.items.map((item) => (
-                <NavLink
+              {section.items.map((item) => (                <NavLink
                   key={item.to}
                   to={item.to}
                   end={item.to === '/'}
+                  aria-label={item.label}
                   className={({ isActive }) =>
                     `w-full flex items-center gap-md rounded-xl text-body-sm font-medium transition-all duration-200 relative group ${
                       isActive
@@ -164,6 +164,8 @@ export default function Sidebar({ role = 'administrator', rolePaths, collapsed: 
       <div className="px-sm pt-md border-t border-slate-200 dark:border-outline-variant mt-auto">
         <button
           onClick={toggleCollapsed}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-expanded={!collapsed}
           className="w-full flex items-center justify-center px-md py-2.5 rounded-xl text-slate-400 dark:text-on-surface-variant hover:bg-slate-100 dark:hover:bg-surface-container-highest hover:text-slate-700 dark:hover:text-on-surface transition-all duration-150 gap-md"
         >
           {collapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}

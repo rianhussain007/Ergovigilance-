@@ -164,7 +164,7 @@ export function SearchModal() {
   if (!open) return null;
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] flex justify-center items-start pt-[100px]" role="dialog" aria-modal="true">
+    <div className="fixed inset-0 z-[9999] flex justify-center items-start pt-[100px]" role="dialog" aria-modal="true" aria-label="Search pages and workers">
       <div className="fixed inset-0 bg-black/70" onClick={handleClose} />
       <div className="relative w-[720px] max-w-[90vw] min-w-[400px] shrink-0 bg-surface-container border border-outline-variant rounded-xl shadow-2xl overflow-hidden">
         {/* Search input */}
@@ -176,6 +176,7 @@ export function SearchModal() {
             onChange={(e) => handleQueryChange(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Search sessions, workers, reports, pages..."
+            aria-label="Search"
             className="flex-1 bg-transparent text-[16px] text-on-surface placeholder:text-outline focus:outline-none h-full min-w-0"
             spellCheck={false}
             autoComplete="off"
