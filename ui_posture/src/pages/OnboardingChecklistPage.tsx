@@ -94,7 +94,9 @@ export default function OnboardingChecklistPage() {
   const handleStartTestSession = async () => {
     setLoading(true); setError(null);
     try {
-      const data = await apiFetch('/api/sessions/start', { method: 'POST' });
+      const res = await apiFetch('/api/sessions/start', { method: 'POST' });
+      if (!res.ok) throw new Error('Session start failed');
+      const data = await res.json();
       setSessionResult({ id: data.session_id || 'demo', risk: 'LOW' });
       setStep(4);
     } catch {
