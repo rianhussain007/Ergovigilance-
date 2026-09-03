@@ -1,138 +1,164 @@
-
-## [1.0.0] - 2026-09-02
-
-### Initial Release
-
-#### Dashboard & UI
-- 38-page React dashboard with dark theme and glassmorphism design
-- Product Tour with 13-step interactive guide
-- Bilingual support (English, Hindi, Chinese)
-- WCAG 2.1 AA accessibility (skip links, ARIA, focus management)
-- GDPR/CCPA consent management system
-- System Health monitoring with live service status
-- Architecture diagram page for technical buyers
-- Model Card page with honest per-class metrics
-- On-Site Pilot Checklist with progress tracking
-
-#### Computer Vision & ML
-- MediaPipe Tasks API (v1.0) pose detection with 33 landmarks
-- YOLO cloud core with RTSP ingestion (4,719 lines)
-- v2 risk model: 98.2% CV F1 across HIGH/MEDIUM/LOW
-- v2 task model: 97.1% CV F1 across 4 balanced classes
-- RULA/REBA-informed risk scoring
-- Temporal smoothing with confidence-weighted sliding window
-- Geometric posture gate for seated work detection
-- 780 training samples from 56 factory videos
-
-#### Webcam Demo
-- Live webcam pose detection with skeleton overlay
-- Risk-colored overlay (green/amber/red)
-- Real-time FPS and inference metrics
-- Side panel with risk score, task detection, key features
-
-#### Backend API
-- FastAPI with 50+ REST endpoints
-- JWT authentication with MFA/TOTP
-- RBAC (admin, supervisor, safety_mgr, operator)
-- PostgreSQL + SQLite dual-backend support
-- SOC2 audit logging with HMAC chain integrity
-- Rate limiting per role
-- Session lifecycle management
-- PDF/CSV report export
-- WebSocket real-time updates
-
-#### YOLO Cloud Core
-- FastAPI service on port 8100
-- RTSP camera stream management
-- Email notifications (SMTP)
-- Slack webhook integration
-- Webhook system for external integrations
-- Model registry for YOLO models
-- Tenant-aware middleware
-- Rate limiting
-- Daily/weekly PDF reports
-
-#### Deployment
-- Docker Compose (db, backend, frontend, cloud-core)
-- Dockerfile with multi-worker uvicorn
-- Nginx reverse proxy with security headers
-- K8s manifests
-- Trivy container scanning in CI
-- GitHub Actions CI (lint, build, audit, Docker)
-- .env.production.example with all config options
-
-#### Security
-- MFA/TOTP with backup codes
-- SOC2 audit trail with HMAC chain
-- Security headers (CSP, X-Frame-Options, etc.)
-- Per-role rate limiting
-- GDPR consent + data export + retention
-- DPA template for enterprise procurement
-
-#### Testing
-- 17 backend E2E smoke tests
-- 24 cloud core unit tests
-- 7 frontend smoke tests
-- 25-endpoint integration smoke test
-- Load testing script
-
-#### Documentation
-- LICENSE (MIT)
-- CHANGELOG.md
-- Security Questionnaire (118-line FAQ)
-- DPA template (173-line GDPR-compliant)
-- Pilot Deployment Checklist
-- Model Card with honest metrics
-- 20+ documentation files
 # Changelog
 
 All notable changes to ErgoVigilance will be documented in this file.
 
-## [0.9.0-pilot] - 2026-09-02
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-### Enterprise Features
-- PostgreSQL support with SQLite fallback (db_backend adapter)
-- MFA/TOTP for admin accounts with backup codes
-- SOC2 audit logging with HMAC chain integrity
-- Per-role rate limiting (admin 3x, operator 1x)
-- Security headers (HSTS, CSP, X-Frame-Options, Referrer-Policy)
-- Input sanitization (XSS, SQL injection, path traversal)
-- API versioning (URL/Header/Query negotiation)
-- Structured JSON logging for ELK/Datadog/Splunk
-- Response caching with TTL
-- Request ID tracking for distributed tracing
-- Graceful shutdown with in-flight request draining
-- Auto-recovery with health monitoring
-- Circuit breakers (Ollama, SMTP, Webhooks)
+## [1.0.0] - 2026-09-03
 
-### Privacy & Compliance
-- GDPR/CCPA consent management system
-- Worker data export (Article 20 portability)
-- Tenant isolation middleware
-- WCAG 2.1 AA accessibility improvements
+### 🎉 Initial Release
 
-### Deployment
-- Kubernetes manifests (Deployments, HPA, Ingress, NetworkPolicy)
-- Backup/restore scripts with retention
-- Grafana dashboard JSON
-- Load testing script (concurrent user simulation)
-- Deployment smoke test (25+ endpoints)
+ErgoVigilance v1.0.0 is a production-ready AI-powered ergonomic risk monitoring platform with dual-core architecture (MediaPipe on-premise + YOLO cloud).
 
-### Frontend
-- Enterprise monitoring cards on System Health page
-- Camera capture for face enrollment
-- Rate limit info headers (X-RateLimit-*)
-- Product tour and keyboard shortcuts
+---
 
-### Bug Fixes
-- Logo SVG viewBox widened to prevent cut-off 'e'
-- Rate limiter exemptions for health endpoints
+### ✨ Added
 
-## [0.8.0-alpha] - 2026-08-28
+#### Frontend (39 pages)
+- **Dashboard** — Executive dashboard with real-time risk scores, worker status, department heatmaps
+- **Live Monitoring** — Real-time 33-point pose tracking with skeleton overlay and risk coloring
+- **Webcam Demo** — Live webcam demo with pose detection and risk scores
+- **YOLO Demo** — YOLO-based pose detection demo
+- **Analytics** — Cross-session analytics with trend charts and department comparisons
+- **ROI Analytics** — Cost savings calculator and business case builder
+- **Reports** — Auto-generated PDF/CSV compliance reports
+- **Sessions** — Session history with replay and annotation
+- **Workers** — Employee management with profiles, consent tracking, risk history
+- **Users** — User management with roles (Admin, Safety Manager, Supervisor, Operator)
+- **Settings** — System configuration with notification preferences
+- **Cloud Cameras** — RTSP camera management for cloud tier
+- **Cloud Settings** — YOLO model configuration, confidence thresholds, RTSP defaults
+- **System Health** — Real-time service status monitoring
+- **API Documentation** — Interactive API docs with code examples
+- **Model Dashboard** — ML model performance metrics
+- **Architecture** — System architecture diagram
+- **Deployment** — Deployment status and configuration
+- **Audit Trail** — SOC2-compliant audit log
+- **Consent Management** — Worker consent tracking
+- **Onboarding** — 5-step guided setup wizard
+- **Pilot Checklist** — Factory pilot deployment guide
+- **Pilot Requests** — Demo request management
+- **Pricing** — Tier comparison with Stripe checkout
+- **Request Pilot** — Demo request form
+- **Landing Page** — Marketing page with product tour
 
-### Initial SaaS Platform
-- YOLO cloud core for CCTV RTSP monitoring
-- Multi-tenant camera management
-- SaaS pricing and billing (Stripe)
-- i18n (English, Hindi, Chinese)
-- Architecture page for technical buyers
+#### Backend API (45+ endpoints)
+- **Authentication** — JWT auth with MFA/TOTP support
+- **Authorization** — RBAC with 4 roles (Admin, Safety Manager, Supervisor, Operator)
+- **Workers** — CRUD with org-scoped isolation
+- **Sessions** — Start/stop/replay with risk timeline
+- **Alerts** — Real-time alerts with acknowledge/resolve workflow
+- **Reports** — PDF/CSV generation with daily/weekly summaries
+- **Dashboard** — Aggregated metrics and trends
+- **Search** — Full-text search across workers, sessions, alerts
+- **Audit** — SOC2-compliant audit trail
+- **Billing** — Stripe checkout, subscriptions, webhooks
+- **Organizations** — Multi-tenant isolation with API keys
+- **Signup** — Self-service organization creation
+- **Health** — `/health` and `/healthz` endpoints
+- **WebSocket** — Real-time data streaming
+
+#### YOLO Cloud Core (4,700+ lines)
+- **RTSP Ingestion** — Connect IP cameras via RTSP streams
+- **Pose Engine** — YOLOv8-pose inference with GPU acceleration
+- **Risk Scoring** — RULA/REBA-informed risk classification
+- **Task Recognition** — 5-class task identification (Assembly, Inspection, Lifting, Seated, Neutral)
+- **Alerts** — Email (SMTP) and Slack webhook notifications
+- **Reports** — Daily/weekly PDF reports
+- **Webhooks** — Custom webhook integrations
+- **Model Registry** — Versioned model management
+- **Organization Auth** — API key authentication for multi-tenant
+
+#### MediaPipe On-Premise Engine
+- **Pose Detection** — 33-point MediaPipe pose landmarks
+- **Risk Scoring** — HistGradientBoosting classifier (88.6% F1)
+- **Task Recognition** — 5-class task classifier (86.4% F1)
+- **Temporal Smoothing** — Confidence-weighted sliding window
+- **Geometric Gate** — Seated work detection via knee angle
+- **Dwell Time** — Task duration tracking
+
+#### Machine Learning
+- **Risk Model** — HistGradientBoosting, 88.6% CV F1
+  - HIGH: 100% F1
+  - LOW: 88.5% F1
+  - MEDIUM: 58.3% F1
+- **Task Model** — HistGradientBoosting, 86.4% CV F1
+  - Assembly Work: 99.6% F1
+  - Inspection: 99.6% F1
+  - Lifting/Carrying: 100% F1
+  - Seated Work: 96.4% F1
+  - Neutral Standing: 94.8% F1
+- **Training Data** — 1,937 samples from 41 videos
+- **Retraining Pipeline** — Automated model improvement
+
+#### Multi-Tenancy
+- **Organizations** — Per-factory data isolation
+- **API Keys** — Org-scoped cloud core authentication
+- **Org Switcher** — Admin UI for switching between factories
+- **Tenant Filtering** — All endpoints filter by org_id
+
+#### Security
+- **JWT + MFA** — Token-based auth with TOTP support
+- **RBAC** — 4 roles with granular permissions
+- **CSP Headers** — Content Security Policy
+- **Rate Limiting** — API and login rate limits
+- **Audit Trail** — SOC2-compliant logging
+- **GDPR** — Consent management, data export, retention
+
+#### Deployment
+- **Docker Compose** — 4 services (frontend, backend, cloud-core, nginx)
+- **Nginx** — Production config with security headers
+- **CI/CD** — GitHub Actions pipeline
+- **Kubernetes** — K8s manifests
+- **Trivy** — Container security scanning
+
+#### Documentation
+- **DEPLOYMENT.md** — Enterprise deployment guide
+- **MARKETING_ONE_PAGER.md** — Sales one-pager
+- **PRODUCT_DEMO_SCRIPT.md** — 2-minute demo script
+- **CHANGELOG.md** — This file
+- **LICENSE** — MIT License
+
+---
+
+### 🔧 Fixed
+
+- **SQLite transactions** — Added commit/rollback on context manager exit
+- **Vite proxy** — Changed from port 8001 to 8000 to match uvicorn
+- **Onboarding checklist** — Replaced static with 5-step guided wizard
+- **TypeScript errors** — Fixed apiFetch Response handling
+- **MediaPipe 1.0** — Updated to Tasks API for video extraction
+
+---
+
+### 📊 Performance
+
+- **Risk Model**: 76.9% → 88.6% F1 (+11.7%)
+- **Task Model**: 70.8% → 86.4% F1 (+15.6%)
+- **Training Data**: 705 → 1,937 samples (+175%)
+- **Frontend**: 39 pages, <2s initial load
+- **Backend**: 45+ endpoints, <100ms response time
+
+---
+
+## [0.9.0] - 2026-08-28
+
+### Added
+- Initial beta release
+- Basic pose detection
+- Simple risk scoring
+- Worker management
+
+---
+
+## [0.1.0] - 2026-06-01
+
+### Added
+- Project inception
+- MediaPipe integration
+- Basic dashboard
+
+---
+
+*For more details, see the [README](README.md) and [DEPLOYMENT](DEPLOYMENT.md).*
