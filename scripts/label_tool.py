@@ -47,7 +47,33 @@ def load_frames(data_dir: Path) -> list[dict[str, Any]]:
     data_dir = data_dir.resolve()
     frames = []
 
-    # Try real_features.csv first (has task labels)
+    # Preferred: label_queue.csv built by scripts/build_label_queue.py covering
+    # EVERY extracted frame (frames/ + frames_diverse/), sorted HIGH-risk first.
+    queue_path = data_dir / "label_queue.csv"
+    if queue_path.exists():
+        with open(queue_path, "r") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                subdir = row.get("subdir", "frames") or "frames"
+                frame_path = data_dir / subdir / row.get("frame", "")
+                if frame_path.exists():
+                    rel_path = str(frame_path.relative_to(ROOT))
+                    frames.append({
+                        "path": rel_path,
+                        "subdir": subdir,
+                        "video": row.get("video", ""),
+                        "frame_name": row.get("frame", ""),
+                        "auto_task": row.get("task_label", "Unknown"),
+                        "auto_risk": row.get("risk_level", "LOW"),
+                        "confidence": float(row.get("confidence", 0) or 0),
+                        "human_task": "",
+                        "human_risk": "",
+                        "quality": "",
+                        "notes": "",
+                    })
+        return frames
+
+    # Fallback: try real_features.csv first (has task labels)
     csv_path = data_dir / "real_features.csv"
     if csv_path.exists():
         with open(csv_path, "r") as f:
@@ -58,25 +84,29 @@ def load_frames(data_dir: Path) -> list[dict[str, Any]]:
                     rel_path = str(frame_path.relative_to(ROOT))
                     frames.append({
                         "path": rel_path,
+                        "subdir": "frames",
                         "video": row.get("video", ""),
                         "frame_name": row.get("frame", ""),
                         "auto_task": row.get("task_label", "Unknown"),
                         "auto_risk": row.get("risk_level", "LOW"),
-                        "confidence": float(row.get("confidence", 0)),
+                        "confidence": float(row.get("confidence", 0) or 0),
                         "human_task": "",
                         "human_risk": "",
                         "quality": "",
                         "notes": "",
                     })
 
-    # Fallback: scan frames directory
+    # Last fallback: scan the frames directory
     if not frames:
-        frames_dir = data_dir / "frames"
-        if frames_dir.exists():
+        for subdir in ("frames", "frames_diverse"):
+            frames_dir = data_dir / subdir
+            if not frames_dir.exists():
+                continue
             for img in sorted(frames_dir.glob("*.jpg")):
                 rel_path = str(img.relative_to(ROOT))
                 frames.append({
                     "path": rel_path,
+                    "subdir": subdir,
                     "video": "",
                     "frame_name": img.name,
                     "auto_task": "Unknown",
@@ -94,7 +124,7 @@ def load_frames(data_dir: Path) -> list[dict[str, Any]]:
 def save_labels(frames: list[dict], output_path: Path) -> None:
     """Save labeled frames to CSV."""
     fieldnames = [
-        "path", "video", "frame_name",
+        "subdir", "path", "video", "frame_name",
         "auto_task", "auto_risk", "confidence",
         "human_task", "human_risk", "quality", "notes",
     ]

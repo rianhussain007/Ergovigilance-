@@ -117,6 +117,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const data = await res.json();
     const next = { token: data.token, user: data.user as AuthUser, demo: true };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    // Every "Try Demo" must start with the guided tour — never carry over a
+    // dismissal from a previous demo or real session.
+    localStorage.removeItem('ergovigilance_tour_dismissed_at');
     setIsDemoMode(true);
     setAuth(next);
   };

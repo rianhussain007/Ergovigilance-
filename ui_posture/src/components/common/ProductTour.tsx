@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router';
+import { useAuth } from '@/src/auth/AuthContext';
+import { rolePaths, isPathAllowed } from '@/src/auth/routes';
 import {
   ChevronRight, ChevronLeft, X, HelpCircle, Keyboard,
   BarChart3, Radio, AlertTriangle, FileText, Settings, Camera,
@@ -72,7 +74,7 @@ const TOUR_STEPS: TourStep[] = [
     title: 'AI Task Recognition',
     description:
       'The system classifies worker actions (assembly, lifting, reaching) and adjusts risk thresholds per task type.',
-    detail: '7-class task model with real-time confidence scoring.',
+    detail: '5-class task model with real-time confidence scoring.',
   },
   {
     id: 'posture-status',
@@ -193,18 +195,27 @@ export function useProductTour() {
 export function ProductTour({ onComplete }: { onComplete: () => void }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(0);
   const [spotlightRect, setSpotlightRect] = useState<DOMRect | null>(null);
   const [navigating, setNavigating] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
   const completedRef = useRef(false);
 
+  // Drop steps whose route the current role cannot visit. Navigating to a
+  // forbidden route would bounce back to /dashboard and leave the tour stuck
+  // in a redirect loop (e.g. /cloud-cameras is admin-only).
+  const steps = useMemo(() => {
+    const allowed = rolePaths[user?.role ?? 'admin'] ?? rolePaths.admin;
+    return TOUR_STEPS.filter((s) => !s.route || isPathAllowed(s.route, allowed));
+  }, [user]);
+
   // Memoize the step to prevent useEffect re-runs on every render.
-  // TOUR_STEPS[currentStep] creates a new object reference each render;
+  // steps[currentStep] creates a new object reference each render;
   // memoizing by currentStep index avoids that.
-  const step = useMemo(() => TOUR_STEPS[currentStep], [currentStep]);
+  const step = useMemo(() => steps[Math.min(currentStep, steps.length - 1)], [steps, currentStep]);
   const isFirst = currentStep === 0;
-  const isLast = currentStep === TOUR_STEPS.length - 1;
+  const isLast = currentStep === steps.length - 1;
 
   // Navigate to the step's route if needed
   useEffect(() => {
@@ -315,7 +326,7 @@ export function ProductTour({ onComplete }: { onComplete: () => void }) {
 
       {/* Step counter */}
       <div className="absolute top-6 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/70 backdrop-blur-sm px-4 py-2 rounded-full border border-white/10 z-10 pointer-events-none">
-        {TOUR_STEPS.map((_, i) => (
+        {steps.map((_, i) => (
           <div
             key={i}
             className={`w-2 h-2 rounded-full transition-all duration-300 ${
@@ -323,7 +334,7 @@ export function ProductTour({ onComplete }: { onComplete: () => void }) {
             }`}
           />
         ))}
-        <span className="text-xs text-white/60 ml-2">{currentStep + 1}/{TOUR_STEPS.length}</span>
+        <span className="text-xs text-white/60 ml-2">{currentStep + 1}/{steps.length}</span>
       </div>
 
       {/* Close button */}

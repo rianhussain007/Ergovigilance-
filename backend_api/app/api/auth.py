@@ -24,8 +24,13 @@ from app.core.security import (
 from app.core.config import settings
 
 import os
+import logging
+
+from app.services.live_monitor import get_live_service_or_none
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 # Brute-force protection thresholds
 LOGIN_MAX_FAILURES_PER_IP = 10
@@ -137,6 +142,17 @@ async def demo_login():
     """
     # Activate demo mode so the repository layer serves synthetic data
     os.environ["DEMO_MODE"] = "true"
+
+    # Reset any in-flight monitoring session so every Try Demo starts clean
+    # (an active session from a previous visitor would otherwise keep running
+    # and leak stale frames/alerts into the new demo).
+    try:
+        service = get_live_service_or_none()
+        if service is not None and service.is_running():
+            logger.info("Stopping leftover session before demo login")
+            service.stop_session()
+    except Exception:
+        logger.exception("Failed to reset active session during demo login")
 
     # Use the seeded operator account
     row = get_user_by_email("operator@example.local")
