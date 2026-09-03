@@ -15,6 +15,7 @@ import OnboardingFlow from '@/src/components/common/OnboardingFlow';
 import { ProductTour, KeyboardHelpPanel, useKeyboardShortcuts, useProductTour, FloatingHelpButton } from '@/src/components/common/ProductTour';
 import SkipLink from '@/src/components/common/SkipLink';
 import { useFocusOnNavigate } from '@/src/hooks/useFocusOnNavigate';
+import { rolePaths, isPathAllowed } from '@/src/auth/routes';
 
 const roleConfig: Record<Role, { label: string; icon: React.ElementType }> = {
   operator: { label: 'Operator', icon: HardHat },
@@ -23,19 +24,6 @@ const roleConfig: Record<Role, { label: string; icon: React.ElementType }> = {
   admin: { label: 'Admin', icon: UserCog },
 };
 
-const rolePaths: Record<Role, string[]> = {
-  operator: ['/', '/dashboard', '/monitoring', '/video-review', '/analytics', '/reports', '/sessions', '/workers', '/settings'],
-  supervisor: ['/', '/dashboard', '/monitoring', '/video-review', '/analytics', '/reports', '/sessions', '/cameras', '/workers', '/settings'],
-  safety_mgr: ['/', '/dashboard', '/monitoring', '/video-review', '/analytics', '/reports', '/sessions', '/cameras', '/audit', '/manager', '/workers', '/consent', '/settings'],
-  admin: ['/', '/dashboard', '/monitoring', '/video-review', '/analytics', '/reports', '/sessions', '/cameras', '/cloud-cameras', '/cloud-settings', '/model-dashboard', '/yolo-demo', '/roi-analytics', '/system-health', '/onboarding', '/consent', '/audit', '/deployment', '/manager', '/workers', '/users', '/pilot-requests', '/api-docs', '/model-card', '/pilot-checklist', '/settings'],
-};
-
-/** Exact match for static routes; /replay/:sessionId allowed for roles with /sessions access. */
-function isPathAllowed(pathname: string, allowedPaths: string[]): boolean {
-  if (allowedPaths.includes(pathname)) return true;
-  if (pathname.startsWith('/replay/') && allowedPaths.includes('/sessions')) return true;
-  return false;
-}
 
 function UserMenu({ roleLabel, roleIcon: RoleIcon, email, onLogout }: { roleLabel: string; roleIcon: React.ElementType; email: string; onLogout: () => void }) {
   const [open, setOpen] = useState(false);
@@ -139,12 +127,13 @@ export default function Layout() {
 
   // Auto-start tour for demo mode users on first visit
   useEffect(() => {
-    // Always show the tour in demo mode — it's the first impression for every visitor.
-    // Skip only if user explicitly ended it this session (within last 5 seconds).
+    // "Try Demo" clears the dismissal key before login (see AuthContext), so
+    // every demo entry starts the guided tour. We only suppress a re-show when
+    // the user dismissed the tour moments ago (e.g. a page refresh right after
+    // ending it) — short session window, NOT 24h.
     if (isDemoMode) {
       const lastDismissed = localStorage.getItem('ergovigilance_tour_dismissed_at');
-      // Only auto-show tour if it was never dismissed this session (24h window)
-      const recentlyDismissed = lastDismissed && (Date.now() - Number(lastDismissed)) < 86400000;
+      const recentlyDismissed = lastDismissed && (Date.now() - Number(lastDismissed)) < 300000;
       if (!recentlyDismissed) {
         const timer = setTimeout(() => startTour(), 800);
         return () => clearTimeout(timer);

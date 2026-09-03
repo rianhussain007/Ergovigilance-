@@ -991,7 +991,7 @@ function InteractiveDemoSection() {
             {[
               { version: 'v1.0.0', date: 'Sep 2026', title: 'Initial Release', items: ['34-page React dashboard', 'YOLO cloud core with RTSP ingestion', 'MediaPipe on-premise engine', 'RULA/REBA risk scoring', 'Real-time pose tracking', 'PDF/CSV report export', 'Worker management', 'Alert system with email/Slack'] },
               { version: 'v0.9.0', date: 'Aug 2026', title: 'Cloud Platform', items: ['YOLOv8-pose cloud inference', 'Multi-camera RTSP support', 'API key authentication', 'PostgreSQL persistent storage', 'Webhook alert delivery', 'Model versioning & rollback', 'Data retention policies', 'Public status page'] },
-              { version: 'v0.8.0', date: 'Aug 2026', title: 'ML Pipeline', items: ['10 training scripts', 'Risk classifier (94.1% F1)', 'Task classifier (97.6% F1)', '7-class task recognition', 'Feature extraction from COCO_17 keypoints', 'Synthetic data generation', 'Model comparison dashboard'] },
+              { version: 'v0.8.0', date: 'Aug 2026', title: 'ML Pipeline', items: ['10 training scripts', 'Risk classifier (88.6% F1)', 'Task classifier (86.4% F1)', '5-class task recognition', 'Feature extraction from COCO_17 keypoints', 'Synthetic data generation', 'Model comparison dashboard'] },
             ].map((release, i) => (
               <AnimatedSection key={release.version} delay={i * 100}>
                 <div className="bg-white/[0.03] border border-white/10 rounded-xl p-6 hover:border-white/15 transition-colors">

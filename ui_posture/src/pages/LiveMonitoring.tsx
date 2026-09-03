@@ -395,7 +395,7 @@ function TelemetrySidebar({
       {/* ── Risk Trajectory — temporal risk patterns ── */}
       <RiskTrajectoryTile contextSnapshot={contextSnapshot} active={active} />
 
-      {/* ── Current Task (trained 7-class model) ── */}
+      {/* ── Current Task (trained 5-class model) ── */}
       {(() => {
         const conf = liveStatus.taskConfidence ?? liveStatus.confidence ?? 0;
         const confPct = Math.round(conf * 100);

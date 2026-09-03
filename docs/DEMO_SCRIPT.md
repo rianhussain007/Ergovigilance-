@@ -142,8 +142,9 @@
 
 **Script:**
 > "We believe in AI transparency. Here you can see exactly how the models work:
-> - 97.6% task classification accuracy
-> - 94.1% risk scoring accuracy  
+> - 88.6% risk classification F1
+> - 86.4% task classification F1
+> - 87.6% agreement with human assessors on 500 labeled frames (validation)
 > - Side-by-side comparison with the on-premise system
 > - Confusion matrices showing where the AI excels
 > 
@@ -163,7 +164,7 @@
 > "ErgoVigilance is:
 > - **Real-time** — Detects unsafe posture in milliseconds
 > - **Scalable** — From 1 camera to 100+ across multiple factories
-> - **Trusted** — 97.6% accuracy, transparent AI
+> - **Trusted** — transparent, auditable models with published validation results
 > - **Privacy-first** — Worker data used ONLY for safety
 > - **Easy to deploy** — Just point us at your CCTV cameras
 > 
