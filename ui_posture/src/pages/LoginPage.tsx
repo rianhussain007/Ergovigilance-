@@ -173,9 +173,9 @@ export default function LoginPage() {
 
             <div className="pt-md border-t border-slate-100 dark:border-outline-variant/60">
               <p className="text-center text-body-sm text-slate-500 dark:text-on-surface-variant">
-                Don’t have access yet?{' '}
-                <Link to="/request-pilot" className="inline-flex items-center gap-0.5 font-semibold text-blue-600 dark:text-primary hover:underline">
-                  Request a pilot <ArrowRight className="h-3.5 w-3.5" />
+                Don’t have an account?{' '}
+                <Link to="/signup" className="inline-flex items-center gap-0.5 font-semibold text-blue-600 dark:text-primary hover:underline">
+                  Create one free <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
               </p>
             </div>

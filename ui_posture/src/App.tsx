@@ -16,6 +16,7 @@ const RequestPilot = lazy(() => import('./pages/RequestPilot'));
 const ValidationPage = lazy(() => import('./pages/ValidationPage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
+const SignupPage = lazy(() => import('./pages/SignupPage'));
 const DashboardPage = lazy(() => import('./pages/DashboardPage'));
 const LiveMonitoring = lazy(() => import('./pages/LiveMonitoring'));
 const VideoReviewPage = lazy(() => import('./pages/VideoReviewPage'));
@@ -83,6 +84,7 @@ export default function App() {
             <Route path="/validation" element={<ValidationPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/signup" element={<SignupPage />} />
             <Route element={<Layout />}>
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/monitoring" element={<LiveMonitoring />} />
