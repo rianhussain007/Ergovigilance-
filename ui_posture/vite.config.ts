@@ -23,23 +23,23 @@ export default defineConfig(() => {
                 // on some Windows setups, and uvicorn binds IPv4 127.0.0.1 only, which
                 // made the proxy throw ECONNREFUSED and the UI show "Failed to fetch".
                 '/api': {
-                    target: 'http://127.0.0.1:8001',
+                    target: 'http://127.0.0.1:8000',
                     changeOrigin: true,
                 },
                 '/health': {
-                    target: 'http://127.0.0.1:8001',
+                    target: 'http://127.0.0.1:8000',
                     changeOrigin: true,
                 },
                 '/healthz': {
-                    target: 'http://127.0.0.1:8001',
+                    target: 'http://127.0.0.1:8000',
                     changeOrigin: true,
                 },
                 '/readyz': {
-                    target: 'http://127.0.0.1:8001',
+                    target: 'http://127.0.0.1:8000',
                     changeOrigin: true,
                 },
                 '/video/': {
-                    target: 'http://127.0.0.1:8001',
+                    target: 'http://127.0.0.1:8000',
                     changeOrigin: true,
                     // Disable buffering for MJPEG streams — without this,
                     // the proxy holds the entire response in memory and the
@@ -58,7 +58,7 @@ export default defineConfig(() => {
                     },
                 },
                 '/ws': {
-                    target: 'http://127.0.0.1:8001',
+                    target: 'http://127.0.0.1:8000',
                     ws: true,
                 },
                 '/cloud-api': {

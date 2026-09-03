@@ -47,10 +47,12 @@ from app.api.audit_log import router as audit_log_router
 from app.api.consent import router as consent_router
 from app.api.webcam import router as webcam_router
 from app.api.organizations import router as org_router
+from app.api.signup import router as signup_router
 
 api_router = APIRouter()
 
 api_router.include_router(auth_router, prefix="/api", tags=["Auth"])
+api_router.include_router(signup_router, prefix="/api", tags=["Auth"])
 api_router.include_router(dashboard_router, prefix="/api", tags=["Dashboard"])
 api_router.include_router(sessions_router, prefix="/api", tags=["Sessions"])
 api_router.include_router(reports_router, prefix="/api", tags=["Reports"])
