@@ -29,7 +29,7 @@ async def predict_next_window(
     Uses the recent live timeline (last ~150 processed frames). Requires an
     active session; otherwise returns a clear idle state.
     """
-    from app.services.live_monitor import get_live_service_or_none
+    from backend.services.live_monitor import get_live_service_or_none
     from backend.services.predictive import get_risk_forecaster
 
     service = get_live_service_or_none()
@@ -58,7 +58,7 @@ async def predict_session_forecast(
     timeline (Postgres or files). Otherwise the live session's recent frames
     are used.
     """
-    from app.services.live_monitor import get_live_service_or_none
+    from backend.services.live_monitor import get_live_service_or_none
     from backend.services.predictive import get_risk_forecaster
 
     if session_id:
@@ -88,7 +88,7 @@ async def predict_session_forecast(
 
 def _load_session_early_frames(session_id: str, user: AuthenticatedUser) -> list | None:
     """Load the first portion of a persisted session's timeline (role-gated)."""
-    from app.services.session_cache import get_all_sessions
+    from backend.services.session_cache import get_all_sessions
 
     match = None
     for s in get_all_sessions():

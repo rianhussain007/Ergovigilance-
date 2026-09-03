@@ -63,8 +63,8 @@ async def get_live_context(
     """
     try:
         # Import here to avoid circular imports at module level
-        from app.services.session_cache import SessionCache
-        from app.services.live_monitor import LiveMonitoringService
+        from backend.services.session_cache import SessionCache
+        from backend.services.live_monitor import LiveMonitoringService
 
         cache = SessionCache()
         live = LiveMonitoringService()

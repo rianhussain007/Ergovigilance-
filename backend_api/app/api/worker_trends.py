@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Response
 from app.core.auth import get_current_user
 from app.core.security import AuthenticatedUser
 from app.schemas.api import WorkerTrendsResponse
-from app.services.worker_trends import compute_worker_trends
+from backend.services.worker_trends import compute_worker_trends
 
 logger = logging.getLogger(__name__)
 

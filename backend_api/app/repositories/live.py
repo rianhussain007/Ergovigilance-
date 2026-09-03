@@ -44,7 +44,7 @@ from app.schemas.api import (
     DepartmentHeatmapEntry,
     RiskLevel,
 )
-from app.services.live_monitor import get_live_service
+from backend.services.live_monitor import get_live_service
 
 # ── Module-level camera detection cache ─────────────────────────────
 # LiveRepository is instantiated per request (FastAPI Depends()), so
@@ -324,7 +324,7 @@ class LiveRepository(DashboardRepository):
         )
 
     async def get_dashboard(self) -> DashboardResponse:
-        from app.services.demo_seeding import DEMO_MODE
+        from backend.services.demo_seeding import DEMO_MODE
         if DEMO_MODE:
             try:
                 return self._build_dashboard()
@@ -333,7 +333,7 @@ class LiveRepository(DashboardRepository):
         return self._build_dashboard()
 
     async def get_latest_session(self) -> DashboardResponse:
-        from app.services.demo_seeding import DEMO_MODE
+        from backend.services.demo_seeding import DEMO_MODE
         if DEMO_MODE:
             try:
                 return self._build_dashboard()
@@ -344,7 +344,7 @@ class LiveRepository(DashboardRepository):
     async def get_sessions(self, current_user=None, org_id: int | None = None) -> List[SessionRecord]:
         import os
         from datetime import datetime
-        from app.services.session_cache import get_all_sessions
+        from backend.services.session_cache import get_all_sessions
 
         records = []
 
@@ -475,7 +475,7 @@ class LiveRepository(DashboardRepository):
         if filepath is None:
             # Fallback — search by session_id from cache instead of full filesystem scan
             import glob as glob_module
-            from app.services.session_cache import get_all_sessions
+            from backend.services.session_cache import get_all_sessions
             for cached in get_all_sessions():
                 if cached.get("session_id") == session_id:
                     ts_part_cached = cached.get("session_timestamp", session_id).replace("session_", "")
@@ -769,7 +769,7 @@ class LiveRepository(DashboardRepository):
             logger.error("Failed to load persisted alerts: %s", exc)
 
         # ── Scan session files for counts + per-worker risk + issue ──
-        from app.services.session_cache import get_all_sessions
+        from backend.services.session_cache import get_all_sessions
         cached = get_all_sessions()
         session_count = len(cached)
         # worker_id -> (timestamp, highest_risk_level)
@@ -833,7 +833,7 @@ class LiveRepository(DashboardRepository):
                 level=level,
             ))
 
-        from app.services.manager_metrics import compute_manager_metrics
+        from backend.services.manager_metrics import compute_manager_metrics
         metrics = compute_manager_metrics(cached)
 
         result = ManagerSummary(
@@ -856,7 +856,7 @@ class LiveRepository(DashboardRepository):
         return []
 
     async def get_alerts_full(self) -> AlertsResponse:
-        from app.services.demo_seeding import DEMO_MODE, generate_demo_data
+        from backend.services.demo_seeding import DEMO_MODE, generate_demo_data
         if DEMO_MODE:
             demo = generate_demo_data()
             active = [AlertResponse(**a) for a in demo["alerts"] if a["state"] == "ACTIVE"]
@@ -905,7 +905,7 @@ class LiveRepository(DashboardRepository):
         Avoids serializing the entire history list.
         When org_id is provided, only alerts belonging to that organization are returned.
         """
-        from app.services.demo_seeding import DEMO_MODE
+        from backend.services.demo_seeding import DEMO_MODE
         if DEMO_MODE:
             return await self.get_alerts_full()
         service = get_live_service()

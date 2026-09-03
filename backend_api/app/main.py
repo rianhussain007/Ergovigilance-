@@ -29,8 +29,8 @@ from app.api.router import api_router
 from app.api.ops import router as ops_router
 from app.api.ops import http_metrics_middleware as metrics_middleware
 from app.api.websocket import router as ws_router
-from app.services.live_monitor import init_live_service
-from app.services.retention import run_retention
+from backend.services.live_monitor import init_live_service
+from backend.services.retention import run_retention
 from app.core.database import init_local_database
 from backend.services.assistant import load_corpus
 
@@ -86,7 +86,7 @@ async def _digest_loop():
         return
     while True:
         try:
-            from app.services.report_digest import generate_digest
+            from backend.services.report_digest import generate_digest
             result = await asyncio.to_thread(generate_digest, 24.0, True)
             if result["saved"]:
                 logger.info("Risk digest written: %s", result["path"])
@@ -153,7 +153,7 @@ async def lifespan(app: FastAPI):
                 "Recovered %d interrupted session(s) from crash checkpoints",
                 len(recovered),
             )
-            from app.services.session_cache import invalidate_session_cache
+            from backend.services.session_cache import invalidate_session_cache
             invalidate_session_cache()
     except Exception as exc:
         logger.warning("Session checkpoint recovery failed (non-fatal): %s", exc)
@@ -169,7 +169,7 @@ async def lifespan(app: FastAPI):
     # guard their own errors, so a failure just falls back to lazy probing.
     # Run them in parallel — the camera probe is the slower one.
     from app.repositories.live import warm_camera_cache
-    from app.services.session_cache import prewarm_session_cache
+    from backend.services.session_cache import prewarm_session_cache
     from app.api.recordings import prewarm_recordings_cache
 
     threading.Thread(target=warm_camera_cache, daemon=True, name="camera-prewarm").start()
@@ -212,7 +212,7 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.warning("Error closing Playwright browser: %s", exc)
 
-    from app.services.live_monitor import get_live_service
+    from backend.services.live_monitor import get_live_service
     try:
         service = get_live_service()
         if service.is_running():
@@ -412,7 +412,7 @@ async def health():
     status = health_status()
     status["latency_ms"] = round((_time.time() - t0) * 1000, 1)
     try:
-        from app.services.live_monitor import get_live_service
+        from backend.services.live_monitor import get_live_service
         service = get_live_service()
         status["live_session"] = service.is_running()
     except RuntimeError:
@@ -435,5 +435,5 @@ async def root():
 @app.get("/api/demo-mode", tags=["System"])
 async def demo_mode_status():
     """Report whether the server is running in DEMO_MODE."""
-    from app.services.demo_seeding import DEMO_MODE
+    from backend.services.demo_seeding import DEMO_MODE
     return {"demo_mode": DEMO_MODE}

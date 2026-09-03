@@ -50,7 +50,7 @@ def _load_filtered_sessions(user: AuthenticatedUser) -> list[dict]:
       - supervisor / safety_mgr / admin → all sessions (including legacy unowned)
       - operator → only sessions where created_by_user_id matches
     """
-    from app.services.session_cache import get_all_sessions
+    from backend.services.session_cache import get_all_sessions
     sessions = [_sanitize_session(s) for s in get_all_sessions()]
     if not can_view_all_sessions(user):
         sessions = [

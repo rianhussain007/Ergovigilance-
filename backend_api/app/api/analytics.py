@@ -47,7 +47,7 @@ def _sanitize_session(s: dict) -> dict:
 
 
 def _load_sessions(user: AuthenticatedUser) -> list[dict]:
-    from app.services.session_cache import get_all_sessions
+    from backend.services.session_cache import get_all_sessions
     sessions = [_sanitize_session(s) for s in get_all_sessions()]
     if not can_view_all_sessions(user):
         sessions = [s for s in sessions if s.get("created_by_user_id") == user.id]
