@@ -18,12 +18,12 @@ from app.core.security import (
     decode_access_token,
     verify_stream_token,
 )
-from app.services.live_monitor import get_live_service
+from backend.services.live_monitor import get_live_service
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-from app.services.pose_overlay import draw_skeleton, draw_person_boxes
+from backend.services.pose_overlay import draw_skeleton, draw_person_boxes
 
 # Serve the MJPEG stream at the camera's native rate (~30 fps). The pose
 # pipeline is throttled separately (POSE_PROCESS_FPS) — the VIDEO path is

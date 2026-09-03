@@ -63,7 +63,7 @@ export default function SystemHealthPage() {
         {
           name: 'Backend API',
           status: backendUp ? (backend.status === 'healthy' ? 'healthy' : 'degraded') : 'down',
-          port: 8001,
+          port: 8000,
           uptime: backend.uptime || '-',
           latency_ms: backend.latency_ms || backend.db_latency_ms || 0,
           last_check: new Date().toISOString(),
@@ -127,7 +127,7 @@ export default function SystemHealthPage() {
       // All services down
       setMetrics({
         services: [
-          { name: 'Backend API', status: 'down', port: 8001, uptime: '-', latency_ms: 0, last_check: new Date().toISOString() },
+          { name: 'Backend API', status: 'down', port: 8000, uptime: '-', latency_ms: 0, last_check: new Date().toISOString() },
           { name: 'YOLO Cloud Core', status: 'down', port: 8100, uptime: '-', latency_ms: 0, last_check: new Date().toISOString() },
           { name: 'Frontend', status: 'healthy', port: 3000, uptime: '-', latency_ms: 0, last_check: new Date().toISOString() },
           { name: 'Database (SQLite)', status: 'down', port: 0, uptime: '-', latency_ms: 0, last_check: new Date().toISOString() },

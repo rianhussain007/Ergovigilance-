@@ -38,20 +38,20 @@ from backend.context.engine import ContextIntelligenceEngine
 from backend.services.features import unavailable_features_from_keypoints, lower_body_confidence
 from backend.services.pose_engine import PoseEngine
 
-from app.services.pose_overlay import compute_region_levels, draw_skeleton, draw_person_boxes
+from backend.services.pose_overlay import compute_region_levels, draw_skeleton, draw_person_boxes
 
 try:
-    from app.services.person_detector import detect_persons
+    from backend.services.person_detector import detect_persons
 except ImportError:  # pragma: no cover - alternate layout
     from backend_api.app.services.person_detector import detect_persons
 
 try:
-    from app.services.worker_faces import identify_persons_in_frame
+    from backend.services.worker_faces import identify_persons_in_frame
 except ImportError:  # pragma: no cover - alternate layout
     from backend_api.app.services.worker_faces import identify_persons_in_frame
 
 try:
-    from app.services.liveness import FaceLivenessTracker
+    from backend.services.liveness import FaceLivenessTracker
 except ImportError:  # pragma: no cover - alternate layout
     from backend_api.app.services.liveness import FaceLivenessTracker
 

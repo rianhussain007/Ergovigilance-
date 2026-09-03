@@ -27,7 +27,7 @@ SESSIONS_DIR = os.environ.get("SESSIONS_DIR") or os.path.join(str(ROOT), "output
 
 def _load_filtered_sessions(user: AuthenticatedUser) -> list[dict]:
     """Load session JSON files and filter by user visibility."""
-    from app.services.session_cache import get_all_sessions
+    from backend.services.session_cache import get_all_sessions
     sessions = list(get_all_sessions())
     if not can_view_all_sessions(user):
         sessions = [

@@ -50,22 +50,22 @@ from backend.recommendations.engine import RecommendationEngine
 # Re-exported here for backward compatibility.
 from backend.core.types import LiveState  # noqa: F401
 try:
-    from app.services.pose_overlay import draw_skeleton
+    from backend.services.pose_overlay import draw_skeleton
 except ImportError:  # pragma: no cover - local layout where only the repo root is on sys.path
     from backend_api.app.services.pose_overlay import draw_skeleton
 
 try:
-    from app.services.person_detector import detect_persons, PERSON_DETECT_INTERVAL_S
+    from backend.services.person_detector import detect_persons, PERSON_DETECT_INTERVAL_S
 except ImportError:  # pragma: no cover - local layout where only the repo root is on sys.path
     from backend_api.app.services.person_detector import detect_persons, PERSON_DETECT_INTERVAL_S
 
 try:
-    from app.services.worker_faces import identify_persons_in_frame
+    from backend.services.worker_faces import identify_persons_in_frame
 except ImportError:  # pragma: no cover - local layout where only the repo root is on sys.path
     from backend_api.app.services.worker_faces import identify_persons_in_frame
 
 try:
-    from app.services.liveness import FaceLivenessTracker
+    from backend.services.liveness import FaceLivenessTracker
 except ImportError:  # pragma: no cover - local layout where only the repo root is on sys.path
     from backend_api.app.services.liveness import FaceLivenessTracker
 
@@ -658,7 +658,7 @@ class LiveMonitoringService:
                 # (Tier 1) — the file stays authoritative for replay/evidence.
                 self._mirror_to_postgres(saved_path, session_id)
             # Invalidate session cache so new session appears immediately
-            from app.services.session_cache import invalidate_session_cache
+            from backend.services.session_cache import invalidate_session_cache
             invalidate_session_cache()
             # Recordings are written above; invalidate so the listing refreshes.
             try:
