@@ -313,7 +313,7 @@ export default function ApiDocsPage() {
                 <pre className="bg-black/40 rounded-lg p-3 text-xs text-slate-300 font-mono border border-white/5">
 {`curl -X POST http://localhost:8000/api/auth/login \\
   -H "Content-Type: application/json" \\
-  -d '{"email": "admin@example.com", "password": "your-password"}'`}
+  -d '{"email": "admin@example.local", "password": "AdminPass123!"}'`}
                 </pre>
               </div>
               <div>

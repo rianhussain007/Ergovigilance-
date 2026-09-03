@@ -132,7 +132,7 @@ def cache_response(ttl: int = CACHE_DEFAULT_TTL, key_prefix: str = ""):
             cache_key = response_cache._make_key(
                 method="GET",
                 path=f"{key_prefix}:{func.__name__}",
-                params={k: v for k, v in kwargs.items() if v is not None},
+                params={k: v for k, v in kwargs.items() if v is not None and not hasattr(v, '__dict__') and not callable(getattr(v, '__call__', None))},
             )
 
             # Check cache
