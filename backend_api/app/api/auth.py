@@ -13,11 +13,20 @@ from app.core.database import (
     insert_audit_log,
     record_login_attempt,
 )
+from app.core.mfa import (
+    MFAUnavailableError,
+    get_mfa_status,
+    pyotp_available,
+    verify_totp,
+)
 from app.core.security import (
     AuthenticatedUser,
     DUMMY_PASSWORD_HASH,
     JWT_TTL_SECONDS,
+    MFA_PENDING_TTL_SECONDS,
+    consume_pending_mfa_token,
     create_access_token,
+    create_pending_mfa_token,
     verify_password,
 )
 from app.core.config import settings
@@ -59,6 +68,26 @@ class LoginResponse(BaseModel):
     user: LoginUser
 
 
+class MFAChallenge(BaseModel):
+    """Password half succeeded; a TOTP code is still required.
+
+    Carries no access token — ``pending_token`` can only be redeemed by
+    POST /auth/login/mfa and is rejected by ``get_current_user``.
+    """
+
+    mfa_required: bool = True
+    pending_token: str
+    expires_in: int
+    email: str
+
+
+class MFALoginRequest(BaseModel):
+    pending_token: str
+    # Optional so a MISSING code produces our 401 + audit entry rather than a
+    # 422 validation error that never reaches the auth path.
+    code: str = ""
+
+
 def _client_ip(request: Request) -> str:
     """Best-effort client IP.
 
@@ -87,7 +116,7 @@ def _audit(actor_id, actor_email, action_type, target_type, target_id, details=N
     )
 
 
-@router.post("/auth/login", response_model=LoginResponse)
+@router.post("/auth/login", response_model=LoginResponse | MFAChallenge)
 async def login(request: Request, body: LoginRequest):
     email = body.email.strip()
     ip = _client_ip(request)
@@ -113,6 +142,24 @@ async def login(request: Request, body: LoginRequest):
     clear_login_failures(email=email)  # user proved ownership — drop their failed rows
     user = AuthenticatedUser(id=row["id"], email=row["email"], role=row["role"])
 
+    # ── Second factor (opt-in) ──────────────────────────────────────────
+    # The password is proved at this point, but an MFA-enrolled account must not
+    # receive an access token until the TOTP code is verified.
+    if get_mfa_status(user.id).get("enabled"):
+        if not pyotp_available():
+            # Fail CLOSED: an enabled second factor that cannot be checked must
+            # block the login rather than silently downgrade it to one factor.
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="MFA unavailable",
+            )
+        return MFAChallenge(
+            mfa_required=True,
+            pending_token=create_pending_mfa_token(user),
+            expires_in=MFA_PENDING_TTL_SECONDS,
+            email=user.email,
+        )
+
     # Log to audit trail
     insert_audit_log(
         id=f"AUD-{uuid.uuid4().hex[:8].upper()}",
@@ -124,6 +171,84 @@ async def login(request: Request, body: LoginRequest):
         target_id=None,
         timestamp=datetime.now(timezone.utc).isoformat(),
         details=None,
+    )
+
+    now = int(time.time())
+    return LoginResponse(
+        token=create_access_token(user),
+        expires_in=JWT_TTL_SECONDS,
+        expires_at=datetime.fromtimestamp(now + JWT_TTL_SECONDS, tz=timezone.utc).isoformat(),
+        user=LoginUser(id=user.id, email=user.email, role=user.role),
+    )
+
+
+@router.post("/auth/login/mfa", response_model=LoginResponse)
+async def login_with_mfa(request: Request, body: MFALoginRequest):
+    """Complete a login by presenting the TOTP code for a pending challenge.
+
+    The pending token is consumed on FIRST presentation, so a challenge can be
+    used exactly once — otherwise a holder could grind 6-digit codes for the
+    whole 300 s window.
+    """
+    ip = _client_ip(request)
+
+    try:
+        payload = consume_pending_mfa_token(body.pending_token)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired MFA challenge",
+        ) from exc
+
+    user = AuthenticatedUser(
+        id=int(payload["sub"]), email=payload["email"], role=payload["role"]
+    )
+
+    def _audit_mfa_failure(reason: str) -> None:
+        insert_audit_log(
+            id=f"AUD-{uuid.uuid4().hex[:8].upper()}",
+            actor_id=user.id,
+            actor_email=user.email,
+            actor_role=user.role,
+            action_type="mfa_login_failed",
+            target_type=None,
+            target_id=None,
+            timestamp=datetime.now(timezone.utc).isoformat(),
+            details=reason,
+        )
+        record_login_attempt(user.email, ip, success=False)
+
+    code = body.code.strip()
+    if not code:
+        _audit_mfa_failure("missing TOTP code")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid MFA code"
+        )
+
+    try:
+        code_ok = verify_totp(user.id, code)
+    except MFAUnavailableError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="MFA unavailable"
+        ) from exc
+
+    if not code_ok:
+        _audit_mfa_failure("invalid TOTP code")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid MFA code"
+        )
+
+    record_login_attempt(user.email, ip, success=True)
+    insert_audit_log(
+        id=f"AUD-{uuid.uuid4().hex[:8].upper()}",
+        actor_id=user.id,
+        actor_email=user.email,
+        actor_role=user.role,
+        action_type="user_login",
+        target_type=None,
+        target_id=None,
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        details="MFA verified",
     )
 
     now = int(time.time())

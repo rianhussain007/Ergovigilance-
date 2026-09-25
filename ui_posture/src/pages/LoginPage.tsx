@@ -1,14 +1,14 @@
 import { FormEvent, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router';
 import { Activity, Lock, Eye, EyeOff, Loader2, AlertTriangle, ArrowRight, Play } from 'lucide-react';
-import { useAuth } from '@/src/auth/AuthContext';
+import { useAuth, MfaRequiredError } from '@/src/auth/AuthContext';
 import { IndustrialBackdrop } from '@/src/components/common';
 import Logo from '../components/common/Logo';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function LoginPage() {
-  const { user, login, demoLogin } = useAuth();
+  const { user, login, completeMfaLogin, demoLogin } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('operator@example.local');
   const [password, setPassword] = useState('OperatorPass123!');
@@ -17,8 +17,45 @@ export default function LoginPage() {
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [serverError, setServerError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  // Set once the backend answers {mfa_required}: holds the single-use challenge.
+  const [pendingToken, setPendingToken] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaLoading, setMfaLoading] = useState(false);
 
   if (user) return <Navigate to="/dashboard" replace />;
+
+  const cancelMfa = () => {
+    setPendingToken(null);
+    setMfaCode('');
+    setServerError(null);
+    setFieldError(null);
+  };
+
+  const handleMfaSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!pendingToken) return;
+    const code = mfaCode.trim();
+    if (!code) {
+      setFieldError('Enter the 6-digit code from your authenticator app.');
+      return;
+    }
+    setFieldError(null);
+    setServerError(null);
+    setMfaLoading(true);
+    try {
+      await completeMfaLogin(pendingToken, code);
+      navigate('/dashboard', { replace: true });
+    } catch (err) {
+      // The challenge is single-use, so a failed attempt cannot be retried —
+      // start the sign-in over rather than silently leaving a dead token up.
+      setServerError(
+        err instanceof Error ? err.message : 'Verification failed. Please sign in again.',
+      );
+      cancelMfa();
+    } finally {
+      setMfaLoading(false);
+    }
+  };
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -42,6 +79,14 @@ export default function LoginPage() {
       await login(trimmed, password);
       navigate('/dashboard', { replace: true });
     } catch (err) {
+      if (err instanceof MfaRequiredError) {
+        // Password accepted; switch to the code step. No token is stored here.
+        setServerError(null);
+        setFieldError(null);
+        setMfaCode('');
+        setPendingToken(err.pendingToken);
+        return;
+      }
       setServerError(err instanceof Error ? err.message : 'Sign in failed. Please try again.');
     } finally {
       setLoading(false);
@@ -61,19 +106,67 @@ export default function LoginPage() {
       <IndustrialBackdrop accentLine />
 
       <main className="relative w-[400px] max-w-[90vw] animate-fade-in" id="main-content">
-        <form onSubmit={handleSubmit} noValidate aria-label="Sign in to ErgoVigilance" className="rounded-2xl border border-slate-200 dark:border-outline-variant/60 bg-white dark:bg-surface-container shadow-xl shadow-slate-200/50 dark:shadow-2xl dark:shadow-black/20 overflow-hidden">
+        <form
+          onSubmit={pendingToken ? handleMfaSubmit : handleSubmit}
+          noValidate
+          aria-label={pendingToken ? 'Enter your two-factor code' : 'Sign in to ErgoVigilance'}
+          className="rounded-2xl border border-slate-200 dark:border-outline-variant/60 bg-white dark:bg-surface-container shadow-xl shadow-slate-200/50 dark:shadow-2xl dark:shadow-black/20 overflow-hidden"
+        >
           {/* Brand header — wordmark links back to the marketing homepage */}
           <div className="px-xl pt-xl pb-md space-y-md">
             <Link to="/" className="flex items-center gap-sm group w-fit">
               <Logo className="h-11 w-auto" variant="light" />
             </Link>
             <div>
-              <h1 className="text-headline-md font-bold text-slate-900 dark:text-on-surface">Sign in</h1>
-              <p className="text-body-sm text-slate-500 dark:text-on-surface-variant mt-1">Sign in with your assigned role.</p>
+              <h1 className="text-headline-md font-bold text-slate-900 dark:text-on-surface">
+                {pendingToken ? 'Two-factor check' : 'Sign in'}
+              </h1>
+              <p className="text-body-sm text-slate-500 dark:text-on-surface-variant mt-1">
+                {pendingToken
+                  ? 'Your password was accepted. Enter your code to finish.'
+                  : 'Sign in with your assigned role.'}
+              </p>
             </div>
           </div>
 
           <div className="px-xl pb-xl space-y-md">
+            {pendingToken ? (
+              <div className="space-y-xs">
+                <label htmlFor="login-mfa-code" className="block font-label-caps text-[10px] uppercase tracking-widest text-slate-400 dark:text-on-surface-variant">
+                  Authenticator code
+                </label>
+                <input
+                  id="login-mfa-code"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  autoFocus
+                  maxLength={6}
+                  placeholder="123456"
+                  value={mfaCode}
+                  onChange={(e) => {
+                    setMfaCode(e.target.value.replace(/\D/g, ''));
+                    if (fieldError) setFieldError(null);
+                  }}
+                  className={inputClass(!!fieldError)}
+                  aria-invalid={!!fieldError}
+                  aria-describedby={fieldError ? 'login-field-error' : undefined}
+                />
+                <div className="flex justify-between items-center pt-xs">
+                  <p className="text-body-sm text-slate-500 dark:text-on-surface-variant">
+                    Open your authenticator app for the current 6-digit code.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={cancelMfa}
+                    className="text-body-sm text-blue-600 dark:text-primary hover:underline shrink-0 ml-sm"
+                  >
+                    Start over
+                  </button>
+                </div>
+              </div>
+            ) : (
+            <>
             <div className="space-y-xs">
               <label htmlFor="login-email" className="block font-label-caps text-[10px] uppercase tracking-widest text-slate-400 dark:text-on-surface-variant">
                 Email
@@ -127,6 +220,8 @@ export default function LoginPage() {
                 </Link>
               </div>
             </div>
+            </>
+            )}
 
             {/* Error region — inline under the form; role=alert announces to
                 screen readers. Server messages are the backend's own generic
@@ -144,11 +239,13 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || mfaLoading}
               className="w-full h-12 rounded-xl bg-blue-600 dark:bg-primary text-white dark:text-on-primary text-body-sm font-semibold hover:bg-blue-700 dark:hover:shadow-lg dark:hover:shadow-primary/25 disabled:opacity-60 disabled:hover:shadow-none flex items-center justify-center gap-sm transition-all active:scale-[0.98]"
             >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
-              {loading ? 'Signing in…' : 'Sign In'}
+              {loading || mfaLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}
+              {pendingToken
+                ? (mfaLoading ? 'Verifying…' : 'Verify Code')
+                : (loading ? 'Signing in…' : 'Sign In')}
             </button>
 
             <button

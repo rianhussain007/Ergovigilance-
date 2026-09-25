@@ -135,6 +135,80 @@ def create_stream_token(user_id: int, role: str) -> str:
     return f"{body}.{_b64url_encode(signature)}"
 
 
+# ── MFA challenge tokens ───────────────────────────────────────────────
+# A pending token proves the password half of the login, is valid for a few
+# minutes, and is SINGLE USE: presenting it consumes it. That is what stops an
+# attacker who intercepted a challenge (or who simply has a valid password)
+# from grinding TOTP codes — without single-use they could retry against one
+# token for its whole lifetime.
+MFA_PENDING_TTL_SECONDS = 300
+
+# jti -> expiry epoch for challenges that have been issued but not yet redeemed.
+# Process-local by design: a challenge is minted and redeemed within one login
+# flow, so it does not need to survive a restart or be shared across workers.
+_pending_challenges: dict[str, int] = {}
+_PENDING_REGISTRY_MAX = 10_000
+
+
+def _prune_pending(now: int) -> None:
+    """Drop expired challenges, and the oldest beyond the size cap."""
+    for jti, exp in list(_pending_challenges.items()):
+        if exp <= now:
+            _pending_challenges.pop(jti, None)
+    while len(_pending_challenges) > _PENDING_REGISTRY_MAX:
+        oldest = min(_pending_challenges, key=_pending_challenges.__getitem__)
+        _pending_challenges.pop(oldest, None)
+
+
+def create_pending_mfa_token(user: "AuthenticatedUser") -> str:
+    """Mint a single-use token that can ONLY complete an MFA login."""
+    now = int(time.time())
+    jti = secrets.token_urlsafe(16)
+    header = {"alg": JWT_ALGORITHM, "typ": "JWT"}
+    payload: dict[str, Any] = {
+        "sub": str(user.id),
+        "email": user.email,
+        "role": user.role,
+        "mfa_pending": True,
+        "jti": jti,
+        "iat": now,
+        "exp": now + MFA_PENDING_TTL_SECONDS,
+    }
+    signing_input = ".".join([
+        _b64url_encode(json.dumps(header, separators=(",", ":")).encode("utf-8")),
+        _b64url_encode(json.dumps(payload, separators=(",", ":")).encode("utf-8")),
+    ])
+    signature = hmac.new(JWT_SECRET.encode("utf-8"), signing_input.encode("ascii"), hashlib.sha256).digest()
+
+    _prune_pending(now)
+    _pending_challenges[jti] = int(payload["exp"])
+    return f"{signing_input}.{_b64url_encode(signature)}"
+
+
+def consume_pending_mfa_token(token: str) -> dict[str, Any]:
+    """Validate and consume a pending MFA challenge.
+
+    Returns its payload on first use and REMOVES the challenge, so a second
+    attempt with the same token fails. Raises ``ValueError`` for anything that
+    is not a live, unredeemed challenge — callers turn that into 401.
+    """
+    try:
+        payload = decode_access_token(token)
+    except ValueError as exc:
+        raise ValueError("Invalid or expired MFA challenge") from exc
+
+    if not payload.get("mfa_pending"):
+        raise ValueError("Token is not an MFA challenge")
+
+    jti = payload.get("jti")
+    if not isinstance(jti, str) or jti not in _pending_challenges:
+        raise ValueError("MFA challenge already used or unknown")
+
+    # Single use: remove BEFORE handing the payload back.
+    del _pending_challenges[jti]
+    return payload
+
+
 def verify_stream_token(token: str) -> dict[str, Any] | None:
     """Validate a stream-scoped token. Returns its payload, or None if invalid/expired."""
     try:

@@ -219,10 +219,11 @@ def main() -> int:
         "real detection cannot produce 8 tracks per feed to measure",
         "4-hour continuous run — this is a short calibration run; the harness "
         "supports --seconds 14400 but the full-duration run was not executed",
-        "clip writing under load — pre-alert alert clips ARE implemented "
-        "(per-camera ring buffer, saved on HIGH) and are verified by "
-        "scripts/verify_slouch_chain.py, but this soak runs no alert chain so "
-        "it does not measure clip capture cost or clip completeness",
+        "clip encode cost as a share of frame latency — pre-alert clips ARE "
+        "written during this soak (alerts do fire here and the per-camera ring "
+        "buffer is saved on HIGH; clip frame counts measured separately in "
+        "docs/TRL6_EVIDENCE.md), but the JPEG encode + file write happens inside "
+        "the frame latency window and is not broken out as its own number",
         "ByteTrack-specific counters — ByteTrack cannot be imported in this "
         "ultralytics build; counters come from the active _SimpleTracker",
         "accuracy / detection quality of any kind",
@@ -315,6 +316,23 @@ def main() -> int:
         "spec_comparison": {
             "spec": "4 feeds x 8 workers x 10 FPS, p95 < 500 ms, continuous 4 h",
             "measured_streams": stream_count,
+            # A 1- or 2-stream run is a CAPACITY PROBE, not a spec run: it asks
+            # whether this host holds the p95 budget at that pool size. Naming the
+            # class here is what lets a report say "1-2 streams within budget, 4
+            # streams breach" instead of quoting one shortfall factor (e.g. 7.4x)
+            # that silently mixes two different questions.
+            "run_class": "capacity-probe" if stream_count < 4 else "spec-load",
+            "run_class_note": (
+                f"{stream_count} concurrent stream(s) on a CPU-only host. The spec's "
+                "load point is 4 feeds, so this run establishes capacity at this pool "
+                "size and is NOT a spec pass/fail."
+                if stream_count < 4
+                else "Spec load point (4 concurrent feeds): a BREACH here is a real "
+                "miss at the spec's own concurrency."
+            ),
+            # Shortfall against the 10 FPS/feed target is only a spec statement
+            # when the run actually reproduces the spec's concurrency.
+            "fps_shortfall_is_spec_meaningful": stream_count >= 4,
             "measured_fps_per_stream_mean": (
                 round(statistics.fmean(fps_samples), 2) if fps_samples else 0
             ),
@@ -351,6 +369,24 @@ def main() -> int:
         f"{'WITHIN' if lat['within_budget'] else 'BREACH'}; "
         f"{lat['over_budget_frames_total']}/{lat['frames_scored_total']} scored frames over budget"
     )
+    sc = summary["spec_comparison"]
+    # The split line: what THIS pool size says, kept separate from the spec.
+    print(
+        f"          scale: {sc['measured_streams']} stream(s) = {sc['run_class']} -> "
+        f"{'WITHIN' if sc['p95_within_budget'] else 'BREACH'} budget at this pool size "
+        f"({sc['measured_fps_per_stream_mean']} FPS/stream)"
+    )
+    if sc["fps_shortfall_is_spec_meaningful"]:
+        print(
+            f"          spec FPS gap: {sc['fps_shortfall_factor']}x short of "
+            f"{sc['target_fps_per_stream']} FPS/stream at spec load"
+        )
+    else:
+        print(
+            f"          {sc['fps_shortfall_factor']}x shortfall vs the "
+            f"{sc['target_fps_per_stream']} FPS target is NOT a spec number at "
+            f"{sc['measured_streams']} streams — capacity probe only"
+        )
     if summary["frame_drops"]["applicable"]:
         print(
             f"          drops {summary['frame_drops']['dropped_frames_total']} of "

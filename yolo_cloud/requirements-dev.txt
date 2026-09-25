@@ -1,0 +1,7 @@
+# Development / CI tooling on top of the cloud core's runtime requirements.
+# Mirrors backend_api/requirements-dev.txt so both CI jobs install the same way.
+-r requirements.txt
+
+# The runtime requirements do not ship a test runner — without this the cloud
+# CI job has no `pytest` binary and the job cannot gate anything.
+pytest>=8.0.0,<9.0.0

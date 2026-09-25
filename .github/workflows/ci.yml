@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [master]
 
+# NOTE ON PATHS: the `file:` input of docker/build-push-action resolves against
+# the WORKSPACE (the checkout root), not against `context:`. Every `file:` below
+# is therefore written workspace-relative, which is the one canonical form —
+# mixing a context-relative `file:` silently builds the wrong image or fails.
+
 jobs:
   # ── Backend tests ──────────────────────────────────────────────
   backend:
@@ -20,13 +25,32 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: backend_api/requirements.txt
+          cache-dependency-path: |
+            backend_api/requirements.txt
+            backend_api/requirements-dev.txt
 
+      # requirements-dev.txt starts with `-r requirements.txt`, so this installs
+      # the runtime deps AND the CI tooling (pytest, httpx2, pip-audit). The old
+      # `pip install -r requirements.txt` left no pytest, so the job could not
+      # actually run the suite.
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
 
+      # Advisory for now: surface advisories without failing the gate while a
+      # baseline is being established. Remove `continue-on-error` to enforce.
+      - name: Dependency audit (advisory)
+        continue-on-error: true
+        run: pip-audit
+
+      # `tests` is relative to working-directory (backend_api/tests). The old
+      # `../tests/` pointed at the repo-root legacy folder (3 files) and, being
+      # outside backend_api/tests/, never loaded its conftest — so DEBUG stayed
+      # false and collection died on AUTH_JWT_SECRET.
+      # No explicit `-q` here: pytest.ini addopts already supplies it, and a
+      # second one becomes `-qq`, which suppresses the final count line — the
+      # one line that makes the gate readable in the CI log.
       - name: Run backend tests
-        run: python -m pytest ../tests/ -q --tb=short
+        run: python -m pytest tests --tb=short
 
   # ── Cloud core tests ───────────────────────────────────────────
   cloud-core:
@@ -41,13 +65,25 @@ jobs:
         with:
           python-version: "3.13"
           cache: pip
-          cache-dependency-path: yolo_cloud/requirements.txt
+          cache-dependency-path: |
+            yolo_cloud/requirements.txt
+            yolo_cloud/requirements-dev.txt
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-dev.txt
 
+      # Runs ALL 96 cloud tests. The previous command was both wrong-target and
+      # self-masking: `../tests/ -k "cloud"` collected the repo-root legacy
+      # folder and filtered it, and `|| true` meant a red suite still reported
+      # green — that is how this job gated nothing.
+      #
+      # No test needs a GPU or the YOLO weights: model loading is lazy
+      # (YOLOPoseEngine.initialize()) and the suite was verified green with
+      # YOLO_MODEL pointed at a nonexistent file. Verified 96/96 locally, so
+      # nothing is skipped here — any future GPU/weights-dependent test must be
+      # skipped explicitly with `pytest.mark.skipif(reason=...)`, never masked.
       - name: Run cloud core tests
-        run: python -m pytest ../tests/ -k "cloud" -q --tb=short || true
+        run: python -m pytest tests -q --tb=short
 
   # ── Frontend build + typecheck ─────────────────────────────────
   frontend:
@@ -84,11 +120,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # There is no Dockerfile at the repo root — the frontend image is defined
+      # by ui_posture/Dockerfile (the path docker-compose.yml builds with).
       - name: Build frontend image
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: Dockerfile
+          file: ui_posture/Dockerfile
           push: false
           tags: ergovigilance-frontend:latest
           cache-from: type=gha

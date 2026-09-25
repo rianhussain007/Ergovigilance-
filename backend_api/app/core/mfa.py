@@ -25,6 +25,23 @@ from pathlib import Path
 DB_PATH = Path(os.getenv("AUTH_DB_PATH", "local_auth.db"))
 
 
+class MFAUnavailable(RuntimeError):
+    """Raised when MFA cannot be checked but is required for this account.
+
+    Callers translate this into HTTP 503. It is deliberately an exception and
+    not a ``False`` return: a missing ``pyotp`` must not look like a wrong code.
+    """
+
+
+# Alias kept short for the common import site.
+MFAUnavailableError = MFAUnavailable
+
+
+def pyotp_available() -> bool:
+    """Whether the TOTP dependency is installed."""
+    return pyotp is not None
+
+
 def _get_db() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -91,10 +108,15 @@ def generate_mfa_secret(user_id: int) -> dict:
 
 
 def verify_totp(user_id: int, code: str) -> bool:
-    """Verify a TOTP code for a user."""
-    if pyotp is None:
-        return True  # Fail open if pyotp not installed
+    """Verify a TOTP code for a user.
 
+    Fails CLOSED when ``pyotp`` is missing but the account HAS MFA enabled: a
+    second factor that cannot be checked must never be silently skipped, so we
+    raise :class:`MFAUnavailableError` and the caller turns that into a 503.
+
+    Users without MFA enrolled still pass through unchanged — MFA is opt-in, so
+    an absent dependency can never block an ordinary login.
+    """
     conn = _get_db()
     row = conn.execute(
         "SELECT secret, enabled FROM mfa_settings WHERE user_id = ?", (user_id,)
@@ -102,7 +124,12 @@ def verify_totp(user_id: int, code: str) -> bool:
     conn.close()
 
     if not row or not row["enabled"]:
-        return True  # MFA not enabled — pass through
+        return True  # MFA not enabled — pass through (opt-in)
+
+    if pyotp is None:
+        raise MFAUnavailableError(
+            "pyotp is not installed but this account has MFA enabled"
+        )
 
     totp = pyotp.TOTP(row["secret"])
     # Allow 1 time step tolerance (30 seconds) for clock drift

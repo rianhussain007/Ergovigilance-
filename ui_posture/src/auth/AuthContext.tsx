@@ -17,9 +17,27 @@ interface AuthContextValue {
   token: string | null;
   user: AuthUser | null;
   login: (email: string, password: string) => Promise<void>;
+  completeMfaLogin: (pendingToken: string, code: string) => Promise<void>;
   demoLogin: () => Promise<void>;
   logout: () => void;
   isDemoMode: boolean;
+}
+
+/**
+ * Thrown by {@link AuthContextValue.login} when the password was correct but
+ * the account has MFA enrolled. Carries the single-use challenge token the
+ * code step must redeem — no access token is issued at this point.
+ */
+export class MfaRequiredError extends Error {
+  readonly pendingToken: string;
+  readonly expiresInSeconds: number;
+
+  constructor(pendingToken: string, expiresInSeconds: number) {
+    super('Two-factor code required');
+    this.name = 'MfaRequiredError';
+    this.pendingToken = pendingToken;
+    this.expiresInSeconds = expiresInSeconds;
+  }
 }
 
 const STORAGE_KEY = 'ergovigilance_auth';
@@ -102,6 +120,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error(body.detail || `Login failed (${res.status})`);
     }
     const data = await res.json();
+    // Password proved but MFA is enrolled: hand back the challenge instead of
+    // storing anything — the caller switches to the code step.
+    if (data.mfa_required) {
+      throw new MfaRequiredError(data.pending_token, data.expires_in ?? 300);
+    }
+    const next = { token: data.token, user: data.user as AuthUser };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    setIsDemoMode(false);
+    setAuth(next);
+  };
+
+  const completeMfaLogin = async (pendingToken: string, code: string) => {
+    const res = await fetch('/api/auth/login/mfa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pending_token: pendingToken, code: code.trim() }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ detail: 'Verification failed' }));
+      throw new Error(body.detail || `Verification failed (${res.status})`);
+    }
+    const data = await res.json();
     const next = { token: data.token, user: data.user as AuthUser };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
     setIsDemoMode(false);
@@ -133,6 +173,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     token: auth?.token ?? null,
     user: auth?.user ?? null,
     login,
+    completeMfaLogin,
     demoLogin,
     logout,
     isDemoMode,

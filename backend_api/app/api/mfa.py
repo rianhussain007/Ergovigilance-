@@ -15,6 +15,7 @@ from typing import Optional
 from app.core.auth import get_current_user
 from app.core.security import AuthenticatedUser
 from app.core.mfa import (
+    MFAUnavailableError,
     generate_mfa_secret,
     verify_totp,
     enable_mfa,
@@ -85,5 +86,9 @@ async def mfa_disable(body: MFAVerifyRequest, user=Depends(get_current_user)):
 @router.post("/verify")
 async def mfa_verify(body: MFAVerifyRequest, user=Depends(get_current_user)):
     """Verify a TOTP code (used during login flow)."""
-    valid = verify_totp(user.id, body.code)
+    try:
+        valid = verify_totp(user.id, body.code)
+    except MFAUnavailableError as exc:
+        # Enabled MFA with pyotp absent — refuse rather than answer {"valid": true}.
+        raise HTTPException(status_code=503, detail="MFA unavailable") from exc
     return {"valid": valid}

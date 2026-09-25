@@ -17,6 +17,14 @@ ELEVATED_ROLES = {"supervisor", "safety_mgr", "admin"}
 
 
 def _user_from_payload(payload: dict) -> AuthenticatedUser:
+    # An MFA challenge token is NOT an authenticated session: it only means the
+    # password half succeeded. Reject it here so it cannot be used on any
+    # endpoint that depends on get_current_user / get_current_user_optional.
+    if payload.get("mfa_pending"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="MFA verification required",
+        )
     user_id = int(payload["sub"])
     row = get_user_by_id(user_id)
     if row is None:
