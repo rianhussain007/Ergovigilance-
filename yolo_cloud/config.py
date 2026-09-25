@@ -19,6 +19,11 @@ class CloudSettings:
     YOLO_MODEL: str = os.getenv("YOLO_MODEL", "yolov8s-pose.pt")
     YOLO_CONFIDENCE: float = float(os.getenv("YOLO_CONFIDENCE", "0.5"))
     YOLO_DEVICE: str = os.getenv("YOLO_DEVICE", "cpu")  # "cpu", "0", "cuda:0"
+    # Inference input size in pixels. 640 is ultralytics' own default, so the
+    # default here changes nothing — it exists to make the size an ops knob
+    # (smaller = faster on CPU, coarser keypoints). The measured trade-off is
+    # in docs/SIZING_SOAK_CLOUD.md.
+    YOLO_IMGSZ: int = int(os.getenv("YOLO_IMGSZ", "640"))
     INFERENCE_FPS: float = float(os.getenv("INFERENCE_FPS", "10"))
 
     # Trained ML models (risk + task classifiers for COCO_17 features)

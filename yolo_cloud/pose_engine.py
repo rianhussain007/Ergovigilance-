@@ -401,6 +401,7 @@ class YOLOPoseEngine:
             frame,
             conf=settings.YOLO_CONFIDENCE,
             device=settings.YOLO_DEVICE,
+            imgsz=settings.YOLO_IMGSZ,
             verbose=False,
         )
 

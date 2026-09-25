@@ -30,9 +30,18 @@ def _load() -> Optional[dict]:
     _TRIED = True
     try:
         import joblib  # optional runtime dep — returns None if unavailable
-        path = Path(os.environ.get("ERGOVIGILANCE_RISK_MODEL", "") or _MODEL_PATH_DEFAULT)
-        if not path.exists():
-            path = _MODEL_PATH_LEGACY
+        override = os.environ.get("ERGOVIGILANCE_RISK_MODEL", "").strip()
+        if override:
+            # An explicitly configured artifact is authoritative: if it is
+            # missing/unreadable we degrade to None (no advisory overlay)
+            # instead of silently substituting a different model. Substituting
+            # here would make "set an explicit model" indistinguishable from
+            # "no model at all".
+            path = Path(override)
+        else:
+            path = _MODEL_PATH_DEFAULT
+            if not path.exists():
+                path = _MODEL_PATH_LEGACY
         if not path.exists():
             return None
         bundle = joblib.load(path)
@@ -57,7 +66,20 @@ def predict_risk_band(features: Mapping[str, float]) -> Optional[Dict[str, objec
     if bundle is None:
         return None
     try:
-        cols = bundle["feature_columns"]
+        # Bundle feature lists come under three names across the artifacts we
+        # ship: `feature_columns` (risk_calibration_model.pkl),
+        # `feature_cols` (diverse/human-labelled models) and `features`
+        # (risk_model_v2.pkl — the default since 406b421). Reading only
+        # `feature_columns` made the default bundle raise KeyError, which the
+        # blanket `except` turned into "no overlay" at runtime.
+        cols = (
+            bundle.get("feature_columns")
+            or bundle.get("feature_cols")
+            or bundle.get("features")
+            or []
+        )
+        if not cols:
+            return None
         row = [features.get(c, 0.0) for c in cols]
         model = bundle["model"]
         proba = model.predict_proba([row])[0]
@@ -73,8 +95,9 @@ def predict_risk_band(features: Mapping[str, float]) -> Optional[Dict[str, objec
         if not classes or best >= len(classes):
             return None
         band = classes[best]
-        # Decode integer labels via LabelEncoder when present
-        le = bundle.get("label_encoder")
+        # Decode integer labels via LabelEncoder when present. risk_model_v2
+        # stores it as `encoder`, the legacy bundle as `label_encoder`.
+        le = bundle.get("label_encoder") or bundle.get("encoder")
         if le is not None and hasattr(le, "inverse_transform"):
             try:
                 band = str(le.inverse_transform([int(band)])[0])

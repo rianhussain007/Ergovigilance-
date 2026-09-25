@@ -15,6 +15,7 @@ from yolo_cloud.ingestion import (
     CloudCameraProcessor,
     CloudIngestionService,
     CloudSession,
+    clip_file_complete,
 )
 from yolo_cloud.pose_engine import YOLOPoseEngine
 from yolo_cloud.rtsp_manager import CameraInfo
@@ -238,3 +239,144 @@ class TestAlertClips:
         service._processors.clear()
         service._processors["cam-1"] = processor
         assert service.get_clip("cam-1", "ALT-nope") is None
+
+
+class TestClipIntegrity:
+    """A clip is either playable (index atom present) or flagged — never
+    silently broken. Guards the 3/224 no-moov defect from TRL6_EVIDENCE.md."""
+
+    @staticmethod
+    def _fill(processor, count):
+        for shade in range(count):
+            processor._capture_clip_frame(
+                np.full((240, 320, 3), shade * 20, np.uint8)
+            )
+
+    @staticmethod
+    def _first_box_only(src_path, dst_path):
+        """Copy just the first container box (ftyp): everything after it —
+        including moov/idx1, which finalize at the END — is gone."""
+        with open(src_path, "rb") as src:
+            header = src.read(8)
+        first_size = int.from_bytes(header[:4], "big")
+        with open(src_path, "rb") as src, open(dst_path, "wb") as dst:
+            dst.write(src.read(first_size))
+
+    def test_mp4_completeness_check_reads_real_files(self, tmp_path, monkeypatch):
+        processor = _processor(tmp_path, monkeypatch)
+        self._fill(processor, 6)
+        entry = processor._save_clip("ALT-OK", 1.0)
+
+        assert entry is not None
+        assert clip_file_complete(entry["path"]) is True
+
+        cut = os.path.join(str(tmp_path), "clips", "cam-1", "ALT-CUT.mp4")
+        self._first_box_only(entry["path"], cut)
+        assert clip_file_complete(cut) is False
+        # Fail-closed: missing or unparsable files count as incomplete.
+        assert clip_file_complete(os.path.join(str(tmp_path), "nope.mp4")) is False
+
+    def test_avi_completeness_check_reads_real_files(self, tmp_path, monkeypatch):
+        import yolo_cloud.ingestion as ingestion_mod
+
+        # AVI-only codec order to reach the second container branch.
+        monkeypatch.setattr(ingestion_mod, "CLIP_CODECS", (("MJPG", ".avi"),))
+        processor = _processor(tmp_path, monkeypatch)
+        self._fill(processor, 6)
+        entry = processor._save_clip("ALT-AVI", 4.0)
+
+        assert entry is not None and entry["path"].endswith(".avi")
+        assert clip_file_complete(entry["path"]) is True
+
+        cut = os.path.join(str(tmp_path), "clips", "cam-1", "ALT-CUT.avi")
+        with open(entry["path"], "rb") as src, open(cut, "wb") as dst:
+            dst.write(src.read(64))  # header only: idx1 lives at the end
+        assert clip_file_complete(cut) is False
+
+    def test_interrupted_encode_is_finalized_not_silently_broken(
+        self, tmp_path, monkeypatch
+    ):
+        import cv2
+
+        real_writer = cv2.VideoWriter
+
+        class FlakyWriter:
+            """Raises mid-encode (camera stopped) while still able to finalize."""
+
+            def __init__(self, inner):
+                self._inner = inner
+                self._calls = 0
+
+            def isOpened(self):
+                return self._inner.isOpened()
+
+            def write(self, image):
+                self._calls += 1
+                if self._calls > 3:
+                    raise RuntimeError("camera stopped mid-encode")
+                self._inner.write(image)
+
+            def release(self):
+                self._inner.release()
+
+        monkeypatch.setattr(
+            cv2, "VideoWriter", lambda *a, **k: FlakyWriter(real_writer(*a, **k))
+        )
+        processor = _processor(tmp_path, monkeypatch)
+        self._fill(processor, 8)
+        entry = processor._save_clip("ALT-INT", 2.0)
+
+        # The exception is caught, the finally releases the real writer, so the
+        # container IS finalized: playable with the frames written so far.
+        assert entry is not None
+        assert entry["frames"] == 3
+        assert clip_file_complete(entry["path"]) is True
+        snapshot = processor.metrics_snapshot()
+        assert snapshot["clips_saved"] == 1
+        assert snapshot["clips_truncated"] == 0
+
+    def test_unfinalized_clip_is_flagged_removed_and_never_served(
+        self, tmp_path, monkeypatch
+    ):
+        import cv2
+
+        class NeverFinalizes:
+            """Writer whose release() is a no-op — a hard-killed process."""
+
+            def __init__(self, path, fourcc, fps, size):
+                self._fh = open(path, "wb")
+                self._fh.write(b"\x00\x00\x00\x18ftypisom" + b"\x00" * 16)
+
+            def isOpened(self):
+                return True
+
+            def write(self, image):
+                self._fh.write(b"\x00" * 64)
+
+            def release(self):
+                self._fh.close()  # closes the handle, still writes NO index —
+                # an unplayable file that os.remove() can then delete (Windows
+                # refuses to remove a file with an open handle)
+
+        monkeypatch.setattr(cv2, "VideoWriter", NeverFinalizes)
+        processor = _processor(tmp_path, monkeypatch)
+        self._fill(processor, 5)
+        entry = processor._save_clip("ALT-BAD", 3.0)
+
+        # Both codecs fail verification: no manifest entry, counter up, and no
+        # unplayable file left on disk.
+        assert entry is None
+        assert processor.metrics_snapshot()["clips_truncated"] >= 1
+        clips_dir = os.path.join(str(tmp_path), "clips", "cam-1")
+        leftovers = os.listdir(clips_dir) if os.path.isdir(clips_dir) else []
+        assert leftovers == []
+
+        # An orphan a hard kill DID leave behind is refused by recovery too.
+        os.makedirs(clips_dir, exist_ok=True)
+        orphan = os.path.join(clips_dir, "ALT-BAD.mp4")
+        with open(orphan, "wb") as handle:
+            handle.write(b"\x00\x00\x00\x18ftypisom" + b"\x00" * 16)
+        service = CloudIngestionService()
+        service._processors.clear()
+        service._processors["cam-1"] = processor
+        assert service.get_clip("cam-1", "ALT-BAD") is None

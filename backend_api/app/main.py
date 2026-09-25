@@ -196,6 +196,25 @@ async def lifespan(app: FastAPI):
     # started lazily on first PDF export (see report_pdf._get_browser), so a
     # slow/missing Chromium binary never blocks service readiness.
 
+    # Auto-recovery watchdog: startup work, so it belongs ABOVE the single
+    # lifespan yield (a second yield makes the lifespan generator fail with
+    # "generator didn't stop" on shutdown, which is what used to turn every
+    # ``with TestClient(app)`` teardown into a RuntimeError).
+    from app.core.auto_recovery import recovery_monitor
+    recovery_monitor.start()
+
+    def check_ollama():
+        import requests as _req
+        try:
+            r = _req.get(os.environ.get("OLLAMA_HOST", "http://localhost:11434") + "/api/tags", timeout=3)
+            return r.status_code == 200
+        except Exception:
+            return False
+
+    recovery_monitor.register_service("ollama", check_ollama)
+
+    logger.info("Auto-recovery monitor started")
+
     yield
 
     corpus_task.cancel()
@@ -220,25 +239,6 @@ async def lifespan(app: FastAPI):
             service.stop_session()
     except RuntimeError:
         pass
-
-    # Start auto-recovery monitor
-    from app.core.auto_recovery import recovery_monitor
-    recovery_monitor.start()
-
-    # Register services for auto-recovery
-    def check_ollama():
-        import requests as _req
-        try:
-            r = _req.get(os.environ.get("OLLAMA_HOST", "http://localhost:11434") + "/api/tags", timeout=3)
-            return r.status_code == 200
-        except Exception:
-            return False
-
-    recovery_monitor.register_service("ollama", check_ollama)
-
-    logger.info("Auto-recovery monitor started")
-
-    yield
 
     # Graceful shutdown: drain in-flight requests
     from app.core.graceful_shutdown import shutdown_manager

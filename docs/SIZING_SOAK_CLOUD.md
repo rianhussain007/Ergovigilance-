@@ -47,9 +47,12 @@ pass?). `scripts/soak_cloud.py` now prints `scale:` and `run_class` for this.
 | `commit-check-wording` (15 s) | 2 | capacity-probe | 320.3 ms | *within* | 4.25 | `soak_20260925T083340Z_summary.json` |
 | `rtsp-decoder-dropcheck` | 1 | capacity-probe | 309.9 ms | *within* | 3.65 | `soak_20260925T081558Z_summary.json` |
 
-### The expected "1–2 streams within budget, 4 breach" is NOT supported
+### Is "1–2 streams within budget, 4 breach" supported?
 
-Do not write that sentence. The measurements say the opposite:
+**Not at the default configuration, and only at one optimized configuration
+with a stream cap of 2 — the spec's own 4-stream load point breaches either
+way.** The morning batch (defaults: yolov8s-pose @ imgsz 640) does not support
+the blanket sentence:
 
 - **Every run of ≥60 s breaches the 500 ms p95 budget — at 1, 2 and 4 streams.**
   Both 1-stream runs breach independently (607.6 ms and 652.8 ms), so this is
@@ -66,6 +69,17 @@ Do not write that sentence. The measurements say the opposite:
 - p95 also varies ~5× between runs at the same setting (4 streams: 831.2 ms vs
   1772.6 ms). Quote a range, never a single number.
 
+**Addendum — later same-day 60 s runs (see matrix below):** the default
+configuration *straddles* the budget instead of cleanly breaching it: 478.5 ms
+(`matrix-s640`) and 529.7 ms (`moov-fix`) at 1 stream, against the morning's
+607.6/652.8 ms. So 1 stream at defaults is a **478–653 ms range over same-day
+60 s runs** — not a verdict in either direction. The only configuration that
+reliably held the budget in 60 s runs is **yolov8n-pose @ imgsz 320: 152.1 ms
+at 1 stream, 114.5 ms at 2 streams — then 946.0 ms at 3 and 896.8 ms at 4**.
+What is true at every configuration tested: **the 4-stream spec load point
+breaches on this host** (1772.6 ms at defaults, 896.8 ms at the best
+configuration measured).
+
 ### Honest capacity statement (compute mode, CPU-only)
 
 What the data supports is throughput, not budget compliance:
@@ -78,8 +92,79 @@ What the data supports is throughput, not budget compliance:
 
 The real constraint is **inference, not contention**: a single stream already
 saturates ~5 of 8 cores, so adding streams divides FPS roughly proportionally
-while p95 degrades monotonically. The p95 < 500 ms budget is **not met at any
-stream count on this host** in compute mode.
+while p95 degrades monotonically. At the **default configuration** the p95
+< 500 ms budget is **not met at any stream count** in compute mode; at the
+**optimized configuration** (yolov8n-pose @ 320) it is met at 1–2 streams and
+fails at 3 — see the matrix below.
+
+## Optimization matrix — model × imgsz (60 s each, 1 stream)
+
+Added after the runs above. Each row is its own 60 s process, compute mode,
+builtin-iou tracker, defaults everywhere except the named variables. Knob:
+`YOLO_IMGSZ` env (`yolo_cloud/config.py`, **default 640 — behavior unchanged
+unless set**), threaded into the predict call in `yolo_cloud/pose_engine.py`.
+CPU and FPS exclude the first 4 s of warm-up (sampled from the run's jsonl at
+t ≥ 4 s); p95 comes from the bounded latency buffer and therefore INCLUDES
+warm-up frames, which is the conservative direction.
+
+| Model | imgsz | p95 (ms) | vs 500 ms | over-budget frames | FPS/stream | CPU mean (t≥4 s) | RSS max | inference p95 | clips saved / truncated | Source |
+|---|---|---|---|---|---|---|---|---|---|---|
+| yolov8s-pose | 640 (default) | **478.5** | within | 8 / 354 | 6.1 | 599.0% | 701 MB | 139.2 ms | 49 / 0 | `soak_20260925T164714Z_summary.json` |
+| yolov8s-pose | 416 | **414.8** | within | 3 / 550 | 9.5 | 590.0% | 679 MB | 98.4 ms | 50 / 0 | `soak_20260925T164819Z_summary.json` |
+| yolov8s-pose | 320 | **399.2** | within | 1 / 636 | 11.0 | 574.6% | 682 MB | 81.2 ms | 52 / 0 | `soak_20260925T164932Z_summary.json` |
+| yolov8n-pose | 640 | **465.8** | within | 10 / 475 | 8.2 | 466.9% | 588 MB | 120.2 ms | 56 / 0 | `soak_20260925T165037Z_summary.json` |
+| yolov8n-pose | 416 | **408.3** | within | 1 / 736 | 12.7 | 541.8% | 577 MB | 65.9 ms | 54 / 0 | `soak_20260925T165148Z_summary.json` |
+| yolov8n-pose | 320 | **152.1** | within | 4 / 928 | 16.0 | 531.6% | 567 MB | 55.5 ms | 46 / 0 | `soak_20260925T165253Z_summary.json` |
+
+All six cells sit within the budget at 1 stream — but the default cell sits
+21 ms under it with 8 over-budget frames, i.e. at the boundary (and a second
+same-day default run measured 529.7 ms, breach). Treat defaults as "around
+the budget", never "within". Every run above wrote clips with
+**`clips.truncated_total = 0`**.
+
+**Accuracy is NOT measured here.** These rows are latency/throughput only.
+`yolov8n-pose` (3.30 M params, measured) detection quality was not evaluated
+in any run; the Safe Claims 87.6% figure belongs to a different engine and is
+untouched by this matrix.
+
+### Stream-count probes at the best configuration (yolov8n-pose @ 320, 60 s)
+
+| Streams | Class | p95 worst stream | vs 500 ms | FPS/stream | Source |
+|---|---|---|---|---|---|
+| 1 | capacity-probe | **152.1 ms** | within | 16.0 | `soak_20260925T165253Z_summary.json` |
+| 2 | capacity-probe | **114.5 ms** | within | 11.28 | `soak_20260925T165513Z_summary.json` |
+| 3 | capacity-probe | **946.0 ms** | BREACH | 4.0 | `soak_20260925T165739Z_summary.json` |
+| 4 | spec-load | **896.8 ms** | BREACH | 2.94 | `soak_20260925T165618Z_summary.json` |
+
+**Honest max streams at p95 < 500 ms on this 8-CPU host: 2**, and only with
+`YOLO_MODEL=yolov8n-pose.pt YOLO_IMGSZ=320`. The cliff between 2 and 3
+streams is sharp (114.5 → 946.0 ms), so do not quote "2–3". At defaults even
+1 stream is not a reliable pass (478–653 ms range). The 4-stream spec load
+point fails under every configuration measured, including this one — the
+spec's 4 feeds × 8 workers × 10 FPS still needs the GPU box (NOT MEASURED).
+
+## Where the CPU goes (one-time profile)
+
+`cProfile` over a 30 s default-config run (`outputs/soak/profile_s640.prof`,
+run `profile-s640`). Shares below are of the sum of the listed stages;
+per-function totals are consistent with the frame counts (140 frames, 349
+tracked poses).
+
+| Stage | Profiled time | Share | Evidence in the profile |
+|---|---|---|---|
+| YOLO inference (predict tree, incl. torch) | 14.55 s cum; `torch.conv2d` alone 11.62 s | ~59% | `ultralytics/tasks.py predict`, 141 calls |
+| Risk/task ML + per-track processing | 4.86 s (`_process_tracked_pose`); of which sklearn HGB predict 3.76 s over 698 model calls | ~20% | `gradient_boosting.py _predict_iterations` |
+| Pre-alert clip encode | 4.85 s — `VideoWriter.write` 3.10 s + buffer `imdecode` 1.26 s + JPEG capture 0.21 s + moov check 0.19 s | ~20% | `_save_clip`, 21 clips in 30 s |
+| Frame decode (compute mode = local file read) | 0.48 s | ~2% | `VideoFeeder.frame`, 141 calls |
+| Tracker + glue + persons | < 0.1 s | <1% | `_SimpleTracker.update`, `build_persons` |
+
+**Reading:** inference dominates, but the clip writer is a real second citizen
+because this footage fires an alert every ~1.4 s (21 clips / 30 s) — each HIGH
+alert writes up to 100 frames *inside* the frame latency window. Caveats:
+cProfile adds overhead, so this run's own p95 (501.1 ms) is a profiling
+artifact and NOT a performance number (use the matrix for those); RTSP-mode
+decode runs in the ffmpeg subprocess and is **not** in this profile — the 2%
+row is compute mode reading a local file.
 
 ## Track stability (60 s compute soak, 4 streams)
 
@@ -116,12 +201,16 @@ die instantly for file/`tcp://` URLs. Fixed in
 
 ## Sizing recommendation (bounded by measurements above)
 
-- CPU-only box (8 cores): the p95 < 500 ms budget is **not met at any stream
-  count** in compute mode — measured 607.6 ms (1 stream) through 1772.6 ms
-  (4 streams). Do not promise "1–2 streams within budget"; it is not what the
-  runs say. What is supported: **~4 FPS/stream at 1 stream, degrading to ~1
-  FPS/stream at 4**, with CPU the binding constraint (230–590% of 8 cores at
-  a single stream).
+- CPU-only box (8 cores), **default config** (yolov8s-pose @ 640): p95 < 500 ms
+  is **not met at any stream count** — 478–653 ms at 1 stream over same-day
+  60 s runs (range, not verdict), through 1772.6 ms at 4. What is supported at
+  defaults: **~4–6 FPS/stream at 1 stream, degrading to ~1 FPS/stream at 4**,
+  with CPU the binding constraint (230–590% of 8 cores at a single stream).
+- CPU-only box, **optimized config** (`YOLO_MODEL=yolov8n-pose.pt
+  YOLO_IMGSZ=320`): **max 2 streams at p95 < 500 ms** (114.5 ms measured),
+  16.0 FPS/stream at 1 and 11.28 at 2 — the 10 FPS/stream target is met per
+  stream at 1–2 streams in compute mode. 3 streams fails sharply (946.0 ms).
+  Latency/throughput only — no accuracy claim for yolov8n-pose.
 - Dropping frames is *not* a way to claim the budget: the one within-budget
   decode run achieved it while discarding 69.3% of decoded frames.
 - GPU box (target config): **NOT MEASURED** — provision for ≥ 8 GB VRAM as a

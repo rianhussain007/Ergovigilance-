@@ -5,8 +5,14 @@ POSE_MODEL_PATH, so the live monitoring service is never initialized. Every
 endpoint that depends on the repository must return HTTP 503 (never silently
 serve mock data) — this is the product's core fail-closed guarantee.
 
-Also verifies that live-service-only endpoints fail gracefully (500 with a
-clear message) rather than crashing.
+Also verifies that live-service-only endpoints fail gracefully (503 with a
+clear "unavailable" message) rather than crashing with an unhandled 500.
+
+The 503 is enforced centrally in app.core.deps.get_repository(): without the
+live service the repository would otherwise serve the synthetic SESH-LIVE-001
+dashboard, a placeholder camera list and empty [] payloads — exactly the
+"silently serve mock data" failure this gate exists to catch. DEMO_MODE is the
+single documented exception (a demo deployment opts in to synthetic data).
 """
 
 from __future__ import annotations

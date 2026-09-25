@@ -95,10 +95,30 @@ Measured across all clips written by the soak runs in `recordings/clips/soak-*/`
 **Verdict:** multi-frame pre-alert clips are confirmed at steady state; the
 buffer reaches its full 100-frame capacity.
 
-**Open defect found while measuring:** 3 clips were cut off while still being
-written (camera stopped mid-encode), leaving an MP4 without a `moov` atom and
-therefore unplayable. This is a real robustness gap in the clip writer and is
-**documented, not fixed** in this pass.
+**Open defect found while measuring → FIXED:** 3 clips were cut off while still
+being written (camera stopped mid-encode), leaving an MP4 without a `moov` atom
+and therefore unplayable. Root cause: the soak harness exited without stopping
+cameras, killing the daemon processing threads mid-encode so `writer.release()`
+never ran. The fix has four parts (`yolo_cloud/ingestion.py`,
+`scripts/soak_cloud.py`):
+
+1. Every `VideoWriter` — construction included — is covered by `try/finally`,
+   so an in-process interruption still finalizes the container.
+2. After release, a top-level box walk verifies `moov` (MP4) / `idx1` (AVI);
+   a truncated clip is **deleted and counted** in `metrics_snapshot()` as
+   `clips_truncated`, never left to be served.
+3. `get_clip()` disk recovery re-verifies the container, so an orphan a hard
+   kill did leave behind is refused instead of streamed to a supervisor.
+4. The soak harness now stops all cameras gracefully before exiting (threads
+   joined → in-flight encodes finish) and reports `clips.saved_total` /
+   `clips.truncated_total` in the summary.
+
+**Re-run evidence** — `soak_20260925T164246Z_summary.json` (label `moov-fix`,
+1 stream × 60 s): **46 clips saved, 0 truncated**; all 47 clip files written
+during the run parse (`moov` present in every one, ffprobe reads format and
+duration). The 3 historical files remain broken — they are pre-fix artifacts.
+Guarded by 4 tests in `TestClipIntegrity`
+(`yolo_cloud/tests/test_trl6_blockers.py`); suite: **100 passed**.
 
 **Not claimed:** clip encode/write cost is not broken out — it sits inside the
 frame latency number and is not separately attributed.

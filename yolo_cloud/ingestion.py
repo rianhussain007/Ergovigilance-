@@ -13,6 +13,7 @@ import json
 import logging
 import math
 import os
+import struct
 import threading
 import time
 from collections import deque
@@ -55,6 +56,89 @@ CLIP_JPEG_QUALITY = 70
 # Codec preference for the written clip. avc1 is not used: OpenH264 is absent on
 # this stack and the writer reports success while producing an unusable file.
 CLIP_CODECS = (("mp4v", ".mp4"), ("MJPG", ".avi"))
+
+
+def _mp4_has_moov(path: str) -> bool:
+    """True when an MP4 file carries its top-level ``moov`` (index) box.
+
+    Walks the top-level box headers only — no decode, no full read. A writer
+    that never finalized leaves no ``moov`` at all (ffmpeg: "moov atom not
+    found"), and a half-written box header fails the size checks, so any
+    uncertainty resolves to False rather than trusting the file.
+    """
+    try:
+        file_size = os.path.getsize(path)
+        with open(path, "rb") as handle:
+            pos = 0
+            while pos + 8 <= file_size:
+                handle.seek(pos)
+                header = handle.read(8)
+                if len(header) < 8:
+                    return False
+                box_size = struct.unpack(">I", header[:4])[0]
+                box_type = header[4:8]
+                if box_size == 1:  # 64-bit size follows the header
+                    extended = handle.read(8)
+                    if len(extended) < 8:
+                        return False
+                    box_size = struct.unpack(">Q", extended)[0]
+                elif box_size == 0:  # box claims to run to EOF
+                    box_size = file_size - pos
+                if box_size < 8 or box_size > file_size - pos:
+                    return False  # truncated or corrupt: not a finalized file
+                if box_type == b"moov":
+                    return True
+                pos += box_size
+    except OSError:
+        return False
+    return False
+
+
+def _avi_has_index(path: str) -> bool:
+    """True when an AVI file carries its trailing ``idx1`` index chunk.
+
+    Same fail-closed rules as the MP4 walk: a chunk whose declared size runs
+    past EOF means the writer never finalized, so the file counts as broken.
+    """
+    try:
+        file_size = os.path.getsize(path)
+        if file_size < 12:
+            return False
+        with open(path, "rb") as handle:
+            head = handle.read(12)
+            if head[:4] != b"RIFF" or head[8:12] != b"AVI ":
+                return False
+            pos = 12
+            while pos + 8 <= file_size:
+                handle.seek(pos)
+                header = handle.read(8)
+                if len(header) < 8:
+                    return False
+                chunk_id = header[:4]
+                chunk_size = struct.unpack("<I", header[4:8])[0]
+                if chunk_size > file_size - pos - 8:
+                    return False  # chunk runs past EOF: never finalized
+                if chunk_id == b"idx1":
+                    return True
+                pos += 8 + chunk_size + (chunk_size & 1)  # chunks are even-padded
+    except OSError:
+        return False
+    return False
+
+
+def clip_file_complete(path: str) -> bool:
+    """Post-write container check: does this clip carry its final index?
+
+    ``moov`` for MP4, ``idx1`` for AVI. Called after the writer is released
+    (the writer can "succeed" and still leave an unplayable file) and again
+    when a clip is recovered from disk, so a truncated file is flagged instead
+    of being served. Fail-closed: unreadable or unparsable = incomplete.
+    """
+    if not path or not os.path.exists(path):
+        return False
+    if path.lower().endswith(".avi"):
+        return _avi_has_index(path)
+    return _mp4_has_moov(path)
 
 
 def percentiles(values, points=(50, 95, 99)) -> dict:
@@ -228,6 +312,10 @@ class CloudCameraProcessor:
         # session, keyed by alert_id.
         self._clip_buffer: deque = deque(maxlen=self._clip_buffer_len())
         self.clips: dict[str, dict] = {}
+        # Clips found truncated (no moov/idx1) after the writer was released:
+        # deleted, never served, and surfaced in metrics_snapshot so a soak can
+        # report the count instead of discovering broken files later.
+        self._clips_truncated = 0
 
     def start(self) -> str:
         """Start processing. Returns the session ID."""
@@ -449,14 +537,19 @@ class CloudCameraProcessor:
         path = ""
         for codec, extension in CLIP_CODECS:
             candidate = os.path.join(target_dir, f"{alert_id}{extension}")
-            writer = cv2.VideoWriter(
-                candidate, cv2.VideoWriter_fourcc(*codec), fps, (width, height)
-            )
-            if not writer.isOpened():
-                writer.release()
-                continue
+            writer = None
             written = 0
             try:
+                # Construction lives INSIDE the try so every writer — including
+                # one that fails to open — is released by the finally below.
+                # A camera stop or any exception mid-encode must still finalize
+                # the container: without release() the MP4 has no moov atom and
+                # ffmpeg rejects the whole file (the 3/224 open defect).
+                writer = cv2.VideoWriter(
+                    candidate, cv2.VideoWriter_fourcc(*codec), fps, (width, height)
+                )
+                if not writer.isOpened():
+                    continue
                 for blob in frames:
                     image = cv2.imdecode(np.frombuffer(blob, np.uint8), cv2.IMREAD_COLOR)
                     if image is None:
@@ -465,14 +558,47 @@ class CloudCameraProcessor:
                         image = cv2.resize(image, (width, height))
                     writer.write(image)
                     written += 1
+            except Exception as exc:  # noqa: BLE001 - one bad frame must not kill the alert
+                logger.warning(
+                    "Clip write for alert %s interrupted (%s codec): %s",
+                    alert_id, codec, exc,
+                )
             finally:
-                writer.release()
-            if written:
-                path = candidate
-                break
+                if writer is not None:
+                    writer.release()
 
-        if not written:
-            logger.warning("Clip save produced no frames for alert %s", alert_id)
+            if not written:
+                # Zero usable frames: drop the stray container, try next codec.
+                try:
+                    if os.path.exists(candidate):
+                        os.remove(candidate)
+                except OSError:
+                    pass
+                continue
+
+            # Post-write verification. The writer can report success and still
+            # leave an unplayable container (no moov/idx1), so the file is
+            # checked here: a truncated clip is deleted and counted, never
+            # served silently, and the next codec gets a chance.
+            if not clip_file_complete(candidate):
+                self._clips_truncated += 1
+                logger.warning(
+                    "Clip for alert %s is truncated (no moov/idx1 after %s "
+                    "encode) — deleting it and counting as truncated",
+                    alert_id, codec,
+                )
+                try:
+                    os.remove(candidate)
+                except OSError:
+                    pass
+                written = 0
+                continue
+
+            path = candidate
+            break
+
+        if not path:
+            logger.warning("Clip save produced no playable clip for alert %s", alert_id)
             return None
 
         entry = {
@@ -518,6 +644,8 @@ class CloudCameraProcessor:
             "latency_over_budget_frames": over_budget,
             "fps": round(float(getattr(self.camera, "fps", 0.0) or 0.0), 2),
             "frames_scored": processed,
+            "clips_saved": len(self.clips),
+            "clips_truncated": self._clips_truncated,
         }
 
     def _binding_for(self, track_id: int) -> Optional[str]:
@@ -888,13 +1016,17 @@ class CloudIngestionService:
             entry = None
             if processor is not None and alert_id in processor.clips:
                 entry = dict(processor.clips[alert_id])
-        if entry and os.path.exists(entry.get("path", "")):
+        # Verified, not just present: a file can outlive the process that was
+        # writing it (a hard kill skips both release() and the save-time check),
+        # so recovery from disk re-verifies the container instead of handing a
+        # supervisor a file ffmpeg will reject.
+        if entry and clip_file_complete(entry.get("path", "")):
             return entry
 
         target_dir = os.path.join(settings.RECORDINGS_DIR, "clips", str(camera_id))
         for _codec, extension in CLIP_CODECS:
             candidate = os.path.join(target_dir, f"{alert_id}{extension}")
-            if os.path.exists(candidate):
+            if os.path.exists(candidate) and clip_file_complete(candidate):
                 return {
                     "alert_id": alert_id,
                     "camera_id": camera_id,

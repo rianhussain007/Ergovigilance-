@@ -15,19 +15,30 @@ logger = logging.getLogger(__name__)
 def get_repository() -> DashboardRepository:
     """Resolve the data repository for a request.
 
-    If the live monitoring service is unavailable (e.g. no camera in Docker),
-    fall back to session-cache mode for read-only endpoints (sessions,
-    deployment, manager). Live-only endpoints (dashboard, alerts, context)
-    will still fail closed with 503 if the service is truly unavailable.
+    Fail-closed contract (tests/test_fail_closed_endpoints.py,
+    test_api_smoke.py::test_live_mode_fails_closed_with_503): when the live
+    monitoring service is not initialized there is no trustworthy data source,
+    so EVERY repository-backed endpoint answers ``503 Service Unavailable``
+    rather than serving mock or empty payloads (an absent service previously
+    leaked the synthetic ``SESH-LIVE-001`` dashboard, a placeholder camera
+    list and empty ``[]`` responses — those are exactly the "silently serve
+    mock data" failure this guard exists to prevent).
+
+    DEMO_MODE is the one deliberate exception: a demo deployment opts in to
+    synthetic data with no camera, so it keeps the session-cache fallback.
     """
     try:
         get_live_service()
-        return LiveRepository()
     except Exception as exc:  # noqa: BLE001
-        # In Docker or headless deployments, the live service may not be
-        # initialized.  Instead of 503-ing every endpoint, allow read-only
-        # endpoints (sessions, deployment, manager) to work from the session
-        # cache and SQLite database.  Live-only endpoints will still get 503
-        # when they try to access live state.
-        logger.warning("Live monitoring service unavailable — using session-cache fallback: %s", exc)
-        return LiveRepository()
+        from backend.services.demo_seeding import DEMO_MODE
+
+        if not DEMO_MODE:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Live monitoring service unavailable",
+            ) from exc
+        logger.warning(
+            "Live monitoring service unavailable — DEMO_MODE serving session-cache fallback: %s",
+            exc,
+        )
+    return LiveRepository()

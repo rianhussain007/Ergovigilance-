@@ -204,6 +204,18 @@ def main() -> int:
     except Exception as exc:  # noqa: BLE001
         print(f"quality flag count skipped: {exc}")
 
+    # Graceful teardown BEFORE the process exits: processor.stop() joins the
+    # processing thread, so an in-flight clip encode finishes and its writer
+    # is released. Exiting straight to process death kills the daemon threads
+    # mid-encode — that is how MP4s with no moov atom got on disk ("truncated
+    # at camera teardown" in docs/TRL6_EVIDENCE.md). All telemetry above is
+    # read before the processors are popped.
+    for cid in [m["camera_id"] for m in stream_metrics]:
+        try:
+            service.stop_camera(cid)
+        except Exception as exc:  # noqa: BLE001 - teardown must not fail the soak
+            print(f"teardown of {cid} skipped: {exc}")
+
     decoded_total = sum(m["decoded_frames"] for m in stream_metrics)
     processed_total = sum(m["processed_frames"] for m in stream_metrics)
     dropped_total = sum(m["dropped_frames"] for m in stream_metrics)
@@ -264,6 +276,15 @@ def main() -> int:
         "alerts_per_worker_hour": round(
             len(alerts) / max(1e-9, (stream_count * (time.time() - started) / 3600.0)), 2
         ),
+        "clips": {
+            "saved_total": sum(m.get("clips_saved", 0) for m in stream_metrics),
+            # A truncated clip is deleted and counted at save time (post-write
+            # moov/idx1 check); > 0 means a writer failed to finalize its
+            # container and is an incident to explain, not a number to round.
+            "truncated_total": sum(
+                m.get("clips_truncated", 0) for m in stream_metrics
+            ),
+        },
         "identity_audit_counts": audit_counts,
         "supervisor_overrides": overrides,
         "override_rate": round(overrides / binds, 3) if binds else None,
@@ -395,6 +416,10 @@ def main() -> int:
         )
     else:
         print("          drops NOT APPLICABLE (compute mode runs no decoder)")
+    print(
+        f"          clips: {summary['clips']['saved_total']} saved, "
+        f"{summary['clips']['truncated_total']} truncated"
+    )
     print(f"          NOT measured: {len(summary['not_measured'])} items — see summary.not_measured")
     print(f"\nwrote {jsonl_path}\nwrote {summary_path}")
     return 0

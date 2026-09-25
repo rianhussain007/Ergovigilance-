@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import logging
 import os
 import time
 from collections import deque
@@ -31,6 +32,8 @@ LEFT_ANKLE = 27
 RIGHT_ANKLE = 28
 NOSE = 0
 
+
+logger = logging.getLogger(__name__)
 
 # Temporal feature names (must match train_task_model_v3.py)
 _TEMPORAL_FEATURES = [
@@ -108,6 +111,7 @@ class TaskRecognition:
         self._feature_window: deque[dict] = deque(maxlen=10)
 
         env_path = os.environ.get("ERGOVIGILANCE_TASK_MODEL")
+        self._model_path_explicit = bool(model_path or env_path)
         if model_path:
             self._model_path = Path(model_path)
         elif env_path:
@@ -121,6 +125,7 @@ class TaskRecognition:
         self._confidence_threshold: float = 0.6
         self._using_model: bool = False
         self._model_version: str = "unknown"
+        self._schema_skip_warned: bool = False
 
     def get_current_task(self) -> str:
         return self._current_task
@@ -185,7 +190,16 @@ class TaskRecognition:
         # Select model: prefer v3 (34 features, most accurate) > human-labeled > diverse > upper-body > fallback
         # When full body features are available, always use the 34-feature v3 model
         # because the 13-feature human-labeled model misclassifies without body_visibility.
-        if has_lower and self.DEFAULT_MODEL_PATH.exists():
+        if self._model_path_explicit:
+            # An explicitly configured artifact (constructor argument or
+            # ERGOVIGILANCE_TASK_MODEL) is authoritative. The built-in
+            # preference chain below used to run first and silently swap in
+            # DEFAULT_MODEL_PATH, so a caller-supplied bundle (or a configured
+            # model) was never the one that scored.
+            if not self._model_path.exists():
+                return None
+            model_path = self._model_path
+        elif has_lower and self.DEFAULT_MODEL_PATH.exists():
             model_path = self.DEFAULT_MODEL_PATH
         elif has_upper and self.UPPER_BODY_MODEL_PATH.exists():
             model_path = self.UPPER_BODY_MODEL_PATH
@@ -222,6 +236,14 @@ class TaskRecognition:
             # Support both 'feature_columns' (v2/v3) and 'feature_cols' (diverse model)
             cols = bundle.get("feature_columns") or bundle.get("feature_cols", [])
             if not cols:
+                if not self._schema_skip_warned:
+                    self._schema_skip_warned = True
+                    logger.warning(
+                        "Task model %s exposes no supported feature schema "
+                        "(feature_columns/feature_cols) — classifier not consulted; "
+                        "the Gaussian scorer decides.",
+                        model_path,
+                    )
                 return None
             row = [features_with_temporal.get(c, 0.0) for c in cols]
             model = bundle["model"]
@@ -295,17 +317,10 @@ class TaskRecognition:
         mid_hip = _midpoint(lhip, rhip)
         torso_height = _dist_2d(mid_shoulder, mid_hip)
 
-        # ── Fast path: try trained model first ──
-        # This handles upper-body-only views where keypoints are degenerate
-        # but features are valid (e.g. camera shows only upper body).
-        model_pred = self._predict_with_model(features)
-        if model_pred is not None:
-            self._using_model = True
-            model_task, model_conf = model_pred
-            model_label = f"Trained task classifier ({self._model_version})"
-            return self._finalize(model_task, round(model_conf * 100.0, 1),
-                                  model_label, kps)
-
+        # ── Hard guard 1: no person ──
+        # Must run BEFORE the model fast path: an all-zero / missing-person
+        # keypoint set is not classifiable, and letting the classifier vote
+        # on it produced labels like "Walking / Moving" for an empty frame.
         if torso_height < 1e-6:
             self._current_task = "Unknown"
             self._confidence = 0.0
@@ -342,7 +357,20 @@ class TaskRecognition:
                 "Seated Work", 95.0,
                 "Knees bent - seated posture detected", kps, force=True)
 
-        # Model already tried above. Fall through to Gaussian scorer.
+        # ── Fast path: trained model ──
+        # Runs only after the two hard guards above, so neither an empty frame
+        # nor unambiguous seating can be relabelled by the classifier. For
+        # upper-body-only views the guards above do not fire (the seated gate
+        # needs visible legs), so the model still classifies those.
+        model_pred = self._predict_with_model(features)
+        if model_pred is not None:
+            self._using_model = True
+            model_task, model_conf = model_pred
+            model_label = f"Trained task classifier ({self._model_version})"
+            return self._finalize(model_task, round(model_conf * 100.0, 1),
+                                  model_label, kps)
+
+        # No confident model answer — Gaussian scorer below decides.
         self._using_model = False
 
         l_elbow_angle = _angle_between(lsh, lel, lwr)
