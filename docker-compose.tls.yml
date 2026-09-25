@@ -1,0 +1,22 @@
+# ErgoVigilance — TLS overlay.
+#
+# The base docker-compose.yml serves the frontend over plain HTTP so the stack
+# starts out of the box. This overlay adds HTTPS termination on :443, and the
+# mounted nginx config redirects :80 -> :443.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d
+#
+# Prerequisite: certs/fullchain.pem + certs/privkey.pem must exist on the host
+# BEFORE starting (see certs/README.md for a self-signed or CA-issued pair).
+# The base file stays HTTP-only precisely because Docker would otherwise create
+# a directory in place of the missing certificate files and nginx would refuse
+# to start.
+services:
+  frontend:
+    ports:
+      - "${FRONTEND_TLS_PORT:-443}:443"
+    volumes:
+      - ./certs/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
+      - ./certs/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
+      - ./ui_posture/nginx.tls.conf.example:/etc/nginx/conf.d/default.conf:ro

@@ -9,7 +9,6 @@ from pydantic import BaseModel
 
 from app.core.database import (
     clear_login_failures,
-    count_recent_login_failures,
     get_user_by_email,
     insert_audit_log,
     record_login_attempt,
@@ -32,11 +31,13 @@ router = APIRouter()
 
 logger = logging.getLogger(__name__)
 
-# Brute-force protection thresholds
-LOGIN_MAX_FAILURES_PER_IP = 10
-LOGIN_MAX_FAILURES_PER_EMAIL = 5
-LOGIN_FAILURE_WINDOW_SECONDS = 15 * 60
-LOGIN_LOCKOUT_SECONDS = 15 * 60
+# Brute-force protection lives in the rate-limit middleware: per-IP throttling
+# of the token-issuing endpoints (/auth/login, /auth/demo), 10 attempts/min by
+# default — see app/core/rate_limit.py.
+#
+# There is deliberately no per-account lockout here. Locking a known email let
+# anyone deny service to that user on purpose, so failures are recorded for the
+# audit trail (record_login_attempt below) and throttled by IP instead.
 
 
 class LoginRequest(BaseModel):
@@ -91,8 +92,9 @@ async def login(request: Request, body: LoginRequest):
     email = body.email.strip()
     ip = _client_ip(request)
 
-    # Rate limiting removed — login should never be blocked.
-    # Audit trail still records all attempts for security review.
+    # Per-IP login throttling (10 attempts/min) is enforced by
+    # RateLimitMiddleware._is_auth_rate_limited in app/core/rate_limit.py;
+    # every attempt is also recorded below for the security audit trail.
 
     row = get_user_by_email(email)
     # Compare against a fixed dummy hash for unknown emails so both paths run
@@ -108,7 +110,7 @@ async def login(request: Request, body: LoginRequest):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
     record_login_attempt(email, ip, success=True)
-    clear_login_failures(email=email)  # unlock the account on success; IP history expires on its own
+    clear_login_failures(email=email)  # user proved ownership — drop their failed rows
     user = AuthenticatedUser(id=row["id"], email=row["email"], role=row["role"])
 
     # Log to audit trail

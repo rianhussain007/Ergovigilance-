@@ -301,6 +301,130 @@ class TestPoseEngineData:
         assert frame.frame_width == 1920
 
 
+# ── Multi-track (multi-worker) isolation ──────────────────────────────────────
+
+class TestMultiTrackIsolation:
+    """Per-track state must never leak between workers or between cameras."""
+
+    @staticmethod
+    def _pose(track_id: int, risk_score: float = 50.0):
+        from yolo_cloud.pose_engine import TrackedPose
+        return TrackedPose(
+            track_id=track_id,
+            bbox=[0.1, 0.1, 0.3, 0.5],
+            keypoints=[[0.2, 0.3, 0.9]] * 17,
+            angles={"trunk": 61.2, "neck": 32.5, "trunk_angle": 61.2},
+            joint_angles={"trunk": 61.2, "neck": 32.5},
+            risk_level="HIGH",
+            risk_score=risk_score,
+            confidence=0.89,
+            task="lifting",
+            quality={"low_light": False, "occluded": False, "too_small": False},
+        )
+
+    def test_persons_payload_carries_angles_and_all_17_keypoints(self):
+        from yolo_cloud.ingestion import CloudCameraProcessor
+        from yolo_cloud.pose_engine import ProcessedCloudFrame, YOLOPoseEngine
+        from yolo_cloud.rtsp_manager import CameraInfo
+
+        processor = CloudCameraProcessor(
+            CameraInfo(id="cam-1", name="Cell A", url="rtsp://x/1"),
+            YOLOPoseEngine(),
+        )
+        processor._binding_for = lambda track_id: "EMP-7"
+        frame = ProcessedCloudFrame(
+            frame_width=1920,
+            frame_height=1080,
+            tracked_poses=[self._pose(12)],
+            person_count=1,
+            inference_ms=40.0,
+            timestamp=123.0,
+        )
+
+        persons = processor.build_persons(frame)
+        assert len(persons) == 1
+        person = persons[0]
+        assert person["track_id"] == 12
+        assert person["worker_id"] == "EMP-7"
+        # The geometric joint angles only — not the merged feature vector.
+        assert person["angles"] == {"trunk": 61.2, "neck": 32.5}
+        # All 17 COCO keypoints, index-aligned, [x, y, conf] normalized.
+        assert len(person["keypoints"]) == 17
+        assert person["keypoints"][0] == [0.2, 0.3, 0.9]
+        # bbox stays [x, y, w, h] in pixels of the frame that produced it.
+        assert person["bbox"] == [192, 108, 384, 432]
+
+    def test_persons_payload_is_one_entry_per_track(self):
+        from yolo_cloud.ingestion import CloudCameraProcessor
+        from yolo_cloud.pose_engine import ProcessedCloudFrame, YOLOPoseEngine
+        from yolo_cloud.rtsp_manager import CameraInfo
+
+        processor = CloudCameraProcessor(
+            CameraInfo(id="cam-1", name="Cell A", url="rtsp://x/1"),
+            YOLOPoseEngine(),
+        )
+        processor._binding_for = lambda track_id: None
+        frame = ProcessedCloudFrame(
+            frame_width=640,
+            frame_height=480,
+            tracked_poses=[self._pose(1), self._pose(2), self._pose(3)],
+            person_count=3,
+            inference_ms=90.0,
+            timestamp=124.0,
+        )
+
+        persons = processor.build_persons(frame)
+        assert [p["track_id"] for p in persons] == [1, 2, 3]
+        assert all(p["worker_id"] is None for p in persons)
+
+    def test_risk_ema_is_per_track_and_alpha_weighted(self):
+        from yolo_cloud.pose_engine import RISK_EMA_ALPHA, YOLOPoseEngine
+
+        engine = YOLOPoseEngine()
+        engine._frame_index = 1
+        # A track's first sample passes through unchanged (no warm-up penalty).
+        assert engine._smooth_risk(("cam-a", 1), 80.0) == 80.0
+        # Then 0.6 * new + 0.4 * previous.
+        assert RISK_EMA_ALPHA == 0.6
+        assert engine._smooth_risk(("cam-a", 1), 20.0) == pytest.approx(44.0)
+        # Another worker in the same frame starts its own series.
+        assert engine._smooth_risk(("cam-a", 2), 20.0) == 20.0
+        # So does the same track id on a different camera.
+        assert engine._smooth_risk(("cam-b", 1), 20.0) == 20.0
+
+    def test_track_state_is_evicted_after_ttl_but_kept_within_grace(self):
+        from yolo_cloud.pose_engine import YOLOPoseEngine
+
+        engine = YOLOPoseEngine()
+        engine._frame_index = 10
+        for track_id in (1, 2):
+            engine._smooth_risk(("cam-a", track_id), 50.0)
+            engine._task_engines[("cam-a", track_id)] = object()
+        # Track 2 has been gone longer than the TTL; track 1 is active now.
+        engine._track_last_seen[("cam-a", 2)] = 10 - engine.TRACK_STATE_TTL_FRAMES - 1
+
+        engine._prune_track_state("cam-a", {1})
+
+        assert ("cam-a", 1) in engine._task_engines
+        assert ("cam-a", 1) in engine._risk_ema
+        assert ("cam-a", 2) not in engine._task_engines
+        assert ("cam-a", 2) not in engine._risk_ema
+        assert ("cam-a", 2) not in engine._track_last_seen
+
+    def test_prune_never_touches_another_cameras_tracks(self):
+        from yolo_cloud.pose_engine import YOLOPoseEngine
+
+        engine = YOLOPoseEngine()
+        engine._frame_index = 999
+        engine._smooth_risk(("cam-b", 5), 50.0)
+        engine._track_last_seen[("cam-b", 5)] = 0
+
+        engine._prune_track_state("cam-a", set())
+
+        assert ("cam-b", 5) in engine._risk_ema
+        assert ("cam-b", 5) in engine._track_last_seen
+
+
 # ── RTSP Manager Tests ────────────────────────────────────────────────────────
 
 class TestRTSPManager:

@@ -33,12 +33,15 @@ def parse_camera_sources(raw: str) -> list[dict]:
 class Settings:
     APP_NAME: str = "ErgoVigilance API"
     APP_VERSION: str = "0.1.0"
-    DEBUG: bool = os.getenv("DEBUG", "true").lower() == "true"
+    # Secure-by-default: production posture unless dev opts in with DEBUG=true.
+    # With DEBUG=false the API refuses to start unless a strong AUTH_JWT_SECRET
+    # is set (see app/core/security.py).
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
     # Secure-by-default host binding: debug builds bind to loopback only so a
     # dev server is never reachable from the LAN. Explicit HOST env always wins
     # (deployments set HOST=0.0.0.0 behind a firewall/reverse proxy).
     HOST: str = os.getenv("HOST") or (
-        "127.0.0.1" if os.getenv("DEBUG", "true").lower() == "true" else "0.0.0.0"
+        "127.0.0.1" if DEBUG else "0.0.0.0"
     )
     PORT: int = int(os.getenv("PORT", "8000"))
     CORS_ORIGINS: list[str] = os.getenv(

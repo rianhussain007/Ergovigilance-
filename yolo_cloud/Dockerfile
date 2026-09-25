@@ -10,7 +10,7 @@ FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 AS base-gpu
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
        python3.11 python3.11-venv python3-pip \
-       libgl1 libglib2.0-0 libgomp1 \
+       libgl1 libglib2.0-0 libgomp1 ffmpeg \
     && ln -sf /usr/bin/python3.11 /usr/bin/python \
     && rm -rf /var/lib/apt/lists/*
 

@@ -61,7 +61,7 @@ Everything below is backed by code inspection, running tests, or runtime evidenc
 ### 1.2 The API Layer (`backend_api/`)
 
 - **~35 endpoint modules**: auth, dashboard, sessions, reports, alerts, video feed (MJPEG), video analysis (upload ≤200 MB → background job), recordings, replay, analytics, worker trends, risk trends, safety reports, audit trail, pilot requests, settings, retention, privacy, observations/override (new), assistant, cameras, workstations, deployment, manager, users, workers, task config.
-- **Auth**: SQLite + bcrypt + JWT, 4 roles enforced server-side (403s), login rate-limit/lockout, mandatory `AUTH_JWT_SECRET` outside debug, fail-closed live mode (503 instead of mock data).
+- **Auth**: SQLite + bcrypt + JWT, 4 roles enforced server-side (403s), per-IP login rate limiting (10 attempts/min on `/auth/*`; no per-account lockout), mandatory `AUTH_JWT_SECRET` outside debug, fail-closed live mode (503 instead of mock data).
 - **Observability**: `/healthz`, `/readyz`, `/metrics` (Prometheus), structured logging.
 - **Persistence**: sessions → JSON files + CSV index; recordings → MP4 + timeline.json + summary.json + observations.json; video-analysis jobs → SQLite (survive restarts); alerts → SQLite.
 - **Retention**: age-based + disk-cap guardrail, manual run endpoint.

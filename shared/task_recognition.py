@@ -310,7 +310,11 @@ class TaskRecognitionEngine:
         if not features or len(features) < 5:
             features = extract_features_from_landmarks(keypoints, image_width, image_height)
 
-        kps = np.asarray(keypoints, dtype=float) if keypoints else np.zeros((33, 4))
+        kps = (
+            np.asarray(keypoints, dtype=float)
+            if keypoints is not None and len(keypoints) > 0
+            else np.zeros((33, 4))
+        )
 
         # Try ML model first
         model_pred = self._predict_with_model(features)

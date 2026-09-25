@@ -4,7 +4,8 @@ Covers the security-critical behavior shipped in the P0 pass plus the
 operational endpoints from P1:
 
 - /health, /healthz, /readyz, /metrics
-- login success/failure, per-account lockout (429 + Retry-After)
+- login success/failure (per-IP throttling is asserted in
+  tests/test_login_rate_limit.py — there is no per-account lockout)
 - fail-closed 503 when the live monitoring service is unavailable
   (POSE_MODEL_PATH is intentionally invalid in the test environment)
 """
@@ -80,23 +81,24 @@ def test_login_wrong_password_rejected(client: TestClient):
     assert res.status_code == 401
 
 
-# NOTE: the auth tests below share one temp DB and one test-client IP, so the
-# per-IP failure counter accumulates across tests (email counters are per-account
-# and isolated). Current ordering stays below the 10/IP lockout threshold; if you
-# reorder or randomize, keep total failures under 10 or use distinct emails.
+# NOTE: every test-client request shares one IP, so the middleware's per-IP
+# /auth bucket accumulates across this module. conftest raises
+# RATE_LIMIT_AUTH_MAX to 500 for the suite; throttling against the real default
+# is asserted in tests/test_login_rate_limit.py.
 
-def test_account_lockout_after_five_failures(client: TestClient):
-    """5 failed attempts on one account → 6th (even with the right password) → 429."""
-    # Use safety@example.local — its 5 bad-password attempts below will
-    # lock the account for the remainder of the test suite, which is fine
-    # because integration tests skip this email.
+def test_repeated_failures_do_not_lock_the_account(client: TestClient):
+    """Failed logins are audited and throttled per IP — never locked per account.
+
+    Locking a known email would let anyone deny service to that user on purpose,
+    so the correct password must still work after repeated failures.
+    """
     email, password = "safety@example.local", "SafetyPass123!"
     for _ in range(5):
         res = client.post("/api/auth/login", json={"email": email, "password": "bad-password"})
         assert res.status_code == 401
     res = client.post("/api/auth/login", json={"email": email, "password": password})
-    assert res.status_code == 429
-    assert res.headers.get("Retry-After") == "900"
+    assert res.status_code == 200
+    assert res.json()["user"]["role"] == "safety_mgr"
 
 
 def test_live_mode_fails_closed_with_503(client: TestClient):

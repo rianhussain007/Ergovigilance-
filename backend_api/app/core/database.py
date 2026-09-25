@@ -256,9 +256,11 @@ LOGIN_ATTEMPTS_RETENTION_SECONDS = 24 * 60 * 60
 
 
 def record_login_attempt(email: str, ip: str, success: bool) -> None:
-    """Record a login attempt for brute-force / lockout tracking.
+    """Record a login attempt for brute-force forensics.
 
-    Old rows are pruned opportunistically so the table stays bounded.
+    Throttling itself lives in app/core/rate_limit.py (per-IP, /auth/*); this
+    table is the durable record of who tried what. Old rows are pruned
+    opportunistically so the table stays bounded.
     """
     now = datetime.now(timezone.utc).isoformat()
     cutoff = datetime.fromtimestamp(

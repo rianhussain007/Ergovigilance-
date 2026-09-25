@@ -61,8 +61,15 @@ vite_live.log
 vite_startup.log
 .env.demo
 
-# Runtime retention overrides set from the Settings UI
+# TLS material — never commit private keys or issued certificates
+certs/*.pem
+certs/*.key
+certs/*.crt
+
+# Runtime configuration written by the app — site-specific, not committed:
+# Settings UI retention overrides and station ROIs drawn by a supervisor.
 config/retention.json
+config/stations.json
 
 
 # Stray root files

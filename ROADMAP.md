@@ -6,7 +6,7 @@ has an acceptance criterion so it is unambiguous when done.
 
 ## ✅ Already done (context)
 
-- **P0 (#1–#6)** — mandatory `AUTH_JWT_SECRET` outside debug, login rate-limit/lockout,
+- **P0 (#1–#6)** — mandatory `AUTH_JWT_SECRET` outside debug, per-IP login rate limiting,
   fail-closed `deps.py`, retention, session/recording isolation, auth hardening.
 - **P1 (#7–#15)** — runnable pytest suite + smoke tests, DB migrations, observability
   (`/healthz`, `/readyz`, `/metrics`), startup hardening, auth hardening, build hygiene,

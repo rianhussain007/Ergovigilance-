@@ -210,11 +210,51 @@ def _safe_point(
     return np.array(kps[idx][:2], dtype=float)
 
 
+def assert_pixel_space(keypoints: np.ndarray, *, min_points: int = 3) -> None:
+    """Raise when keypoints look normalized (0..1) instead of pixels.
+
+    Every angle and distance feature here assumes one common unit, and in
+    practice that unit is pixels. Normalized input does not fail on its own — it
+    returns plausible numbers that are wrong, because x and y are divided by
+    different frame dimensions, so the result depends on aspect ratio (a true
+    60 deg trunk bend computes ~44 deg on 16:9 and ~52 deg on 4:3). That silent
+    drift is exactly why this is checked rather than documented.
+
+    A frame is more than one pixel across, so keypoints whose every finite x and
+    y falls within 0..1 cannot be pixels. ``min_points`` usable points are
+    required so a single landmark at the image corner cannot trip the check,
+    and an all-zero input is treated as "no detection" (see below).
+    """
+    if keypoints.ndim < 2 or keypoints.shape[0] < min_points:
+        return
+    xs, ys = keypoints[:, 0], keypoints[:, 1]
+    finite = np.isfinite(xs) & np.isfinite(ys)
+    if int(finite.sum()) < min_points:
+        return
+    # A zero-filled array (every x and y exactly 0, no visibility) is the
+    # standard "no landmarks detected" placeholder, not a normalized pose.
+    # Letting the extractor degrade it to unavailable features is what callers
+    # already expect; turning a missing detection into a crash would be a
+    # regression. Only coordinates that actually span space can be normalized.
+    if not np.any(xs[finite]) and not np.any(ys[finite]):
+        return
+    if np.max(np.abs(xs[finite])) <= 1.0 and np.max(np.abs(ys[finite])) <= 1.0:
+        raise ValueError(
+            "extract_features_from_keypoints expects PIXEL coordinates, but every "
+            "keypoint lies within 0..1 (normalized input). Scale by the frame "
+            "size first: x * frame_width, y * frame_height. Angles computed from "
+            "normalized coordinates are aspect-ratio dependent and silently wrong."
+        )
+
+
 def extract_features_from_keypoints(
     keypoints: Sequence[Sequence[float]],
     index_map: Mapping[str, int] | None = None,
 ) -> tuple[Dict[str, float], list[str], list[str]]:
     """Extract ergonomic features from detected keypoints.
+
+    ``keypoints`` MUST be in PIXEL coordinates — see ``assert_pixel_space``.
+    Normalized (0..1) input raises rather than returning wrong numbers.
 
     Returns:
         (features, unavailable_features, approximate_features) — features
@@ -224,6 +264,7 @@ def extract_features_from_keypoints(
         instead of hip-anchored) and marked as approximate.
     """
     kps = np.asarray(keypoints, dtype=float)
+    assert_pixel_space(kps)
     if index_map is None:
         index_map = MEDIAPIPE_33 if len(kps) >= 25 else COCO_17
 

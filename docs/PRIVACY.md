@@ -60,8 +60,9 @@ the platform and for the workers whose posture is monitored.
   `admin`) are enforced **server-side**; unauthorized access returns 403.
 - Only `admin` can trigger retention runs, view retention stats, and delete
   worker data.
-- The audit log records logins, lockouts, session lifecycle events, and data
-  deletions — review it periodically (`GET /api/audit`).
+- The audit log records logins and session lifecycle events, plus data
+  deletions — review it periodically (`GET /api/audit`). Brute-force attempts
+  are kept in the separate `login_attempts` table (24 h retention).
 
 ## 5. Operational recommendations (the responsible part)
 
@@ -90,6 +91,6 @@ ErgoVigilance monitors people. Before rolling out in a workplace:
 | Data minimization | Keypoints are processed to features; raw frames are not persisted in live mode |
 | Storage limitation | Retention policy (age + disk cap) enforced by a background task |
 | Integrity & confidentiality | Local storage, bcrypt/JWT auth, RBAC, loopback-only API port |
-| Accountability | Audit log for auth, lockout, session, and deletion events |
+| Accountability | Audit log for auth and deletion events; per-IP login throttling plus a 24 h `login_attempts` record |
 | Right to erasure | `POST /api/privacy/delete-worker-data/{worker_id}` (admin) + retention |
 | Transparency | This document + README + in-app notices (recommended signage) |

@@ -104,7 +104,7 @@ const ENDPOINT_GROUPS: EndpointGroup[] = [
 
 const RATE_LIMITS = [
   { category: 'General API', limit: '100 requests/min', window: 'Per IP address' },
-  { category: 'Authentication', limit: '10 attempts/min', window: 'Per IP address (lockout after 5 failures)' },
+  { category: 'Authentication', limit: '10 attempts/min', window: 'Per IP address, /auth/login + /auth/demo' },
   { category: 'WebSocket', limit: '1 connection/user', window: 'Persistent connection for live data' },
   { category: 'File Upload', limit: '10 MB max', window: 'Per request (video, images)' },
 ];

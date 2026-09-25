@@ -7,22 +7,27 @@ consume these endpoints the same way it consumes the on-premise backend.
 
 import asyncio
 import csv
+import hashlib
 import io
 import json
 import logging
 import os
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from yolo_cloud.auth import require_api_key, optional_api_key, get_tenant_id
 from yolo_cloud import storage
 
 from yolo_cloud.config import settings
 from yolo_cloud.ingestion import get_cloud_service
+from yolo_cloud.identity import get_identity_registry, embedding_from_image_bytes
+from yolo_cloud.stations import get_station_store
+from yolo_cloud import identity_audit
 from yolo_cloud.reports import (
     generate_daily_csv,
     generate_daily_summary,
@@ -30,6 +35,21 @@ from yolo_cloud.reports import (
     generate_weekly_summary,
     generate_pdf_report,
 )
+
+# Shared feature extraction (works for COCO_17 too). Imported at module scope so
+# /inference/detect can always resolve FEATURE_COLUMNS even when its per-person
+# feature extraction falls through to the fallback path.
+try:
+    from backend.core.constants import COCO_17, FEATURE_COLUMNS
+    from backend.services.features import (
+        extract_features_from_keypoints,
+        risk_from_features,
+    )
+except ImportError:  # pragma: no cover - backend package not on path
+    COCO_17 = None
+    FEATURE_COLUMNS = []
+    extract_features_from_keypoints = None
+    risk_from_features = None
 
 logger = logging.getLogger(__name__)
 
@@ -152,7 +172,7 @@ async def camera_snapshot(camera_id: str):
 
 
 @router.post("/cameras/{camera_id}/start")
-async def start_camera(camera_id: str):
+async def start_camera(camera_id: str, tenant: dict = Depends(require_api_key)):
     """Start monitoring a camera."""
     service = get_cloud_service()
     cameras = service.get_all_cameras()
@@ -176,6 +196,210 @@ async def stop_camera(camera_id: str):
     if result is None:
         raise HTTPException(404, f"Camera {camera_id} not found or not active")
     return result
+
+
+# -- Multi-worker persons & identity -----------------------------------------
+
+@router.get("/cameras/{camera_id}/persons")
+async def camera_persons(camera_id: str):
+    """Live per-track person snapshots for one camera (multi-worker tile grid)."""
+    service = get_cloud_service()
+    state = service.get_camera_persons(camera_id)
+    if state is None:
+        raise HTTPException(404, f"Camera {camera_id} not found or not active")
+    return state
+
+
+@router.get("/persons/{track_id}/timeline")
+async def person_timeline(
+    track_id: int,
+    limit: int = Query(100, ge=1, le=2000),
+    camera_id: Optional[str] = Query(None),
+    session_id: Optional[str] = Query(None),
+):
+    """Sampled per-track risk series for a track_id (merged across sessions)."""
+    service = get_cloud_service()
+    return service.get_person_timeline(
+        track_id, limit=limit, camera_id=camera_id, session_id=session_id,
+    )
+
+
+# -- Station ROIs (workstation polygons) --------------------------------------
+
+@router.get("/cameras/{camera_id}/stations")
+async def list_stations(camera_id: str):
+    """Workstation polygons drawn for this camera."""
+    stations = get_station_store().list_stations(camera_id)
+    return {
+        "camera_id": camera_id,
+        "station_count": len(stations),
+        "stations": stations,
+    }
+
+
+@router.put("/cameras/{camera_id}/stations/{station_id}")
+async def upsert_station(
+    camera_id: str, station_id: str, body: dict,
+    tenant: dict = Depends(require_api_key),
+):
+    """Create or replace one workstation polygon.
+
+    Body: ``{"station_name": "Assembly 1", "polygon": [{"x": 0.1, "y": 0.2}, ...]}``
+    with at least 3 points in NORMALIZED frame coordinates (0..1). Points are
+    normalized so a boundary drawn at one stream resolution keeps working if the
+    stream size changes. A track's bbox centroid inside this polygon is reported
+    as this station in ``persons[]``. Overlaps resolve to the smallest polygon.
+    """
+    try:
+        return get_station_store().set_station(
+            camera_id,
+            station_id,
+            station_name=str(body.get("station_name", "") or "").strip(),
+            polygon=body.get("polygon"),
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+
+@router.delete("/cameras/{camera_id}/stations/{station_id}")
+async def delete_station(
+    camera_id: str, station_id: str, tenant: dict = Depends(require_api_key),
+):
+    """Remove one workstation polygon (tracks at it become unmapped)."""
+    if not get_station_store().delete_station(camera_id, station_id):
+        raise HTTPException(404, f"Station {station_id} not found on camera {camera_id}")
+    return {"camera_id": camera_id, "station_id": station_id, "deleted": True}
+
+
+# -- Alert clips (pre-alert evidence) ----------------------------------------
+
+@router.get("/cameras/{camera_id}/clips/{alert_id}")
+async def get_alert_clip(camera_id: str, alert_id: str):
+    """Download the short clip saved when this alert fired.
+
+    The clip is PRE-ALERT only: it covers the seconds before the alert, from the
+    camera's rolling buffer, and ends at the alert. Only HIGH alerts save a clip,
+    so a MEDIUM alert has none and returns 404.
+    """
+    entry = get_cloud_service().get_clip(camera_id, alert_id)
+    if entry is None:
+        raise HTTPException(
+            404,
+            f"No clip for alert {alert_id} on camera {camera_id} "
+            "(clips are saved for HIGH alerts only)",
+        )
+    suffix = os.path.splitext(entry["path"])[1].lower()
+    media_type = "video/mp4" if suffix == ".mp4" else "video/x-msvideo"
+    return FileResponse(
+        entry["path"], media_type=media_type, filename=os.path.basename(entry["path"])
+    )
+
+
+@router.post("/cameras/{camera_id}/tracks/{track_id}/identity")
+async def bind_track_identity(
+    camera_id: str, track_id: int, body: dict,
+    tenant: dict = Depends(require_api_key),
+):
+    """Bind a track to a worker via an explicit badge/QR scan.
+
+    Body: ``{"worker_id": "EMP-4", "method": "badge"|"qr"}``. Rebinding the
+    same track to a different worker is allowed and audited as an ID switch.
+    """
+    worker_id = str(body.get("worker_id", "")).strip()
+    method = str(body.get("method", "badge")).strip().lower()
+    actor = str(body.get("actor", "")).strip() or None
+    if not worker_id:
+        raise HTTPException(400, "'worker_id' is required")
+    if method not in ("badge", "qr"):
+        raise HTTPException(400, "'method' must be 'badge' or 'qr'")
+    return get_identity_registry().bind_badge(camera_id, track_id, worker_id, actor=actor)
+
+
+@router.delete("/cameras/{camera_id}/tracks/{track_id}/identity")
+async def unbind_track_identity(
+    camera_id: str, track_id: int, tenant: dict = Depends(require_api_key),
+):
+    """Remove a track's worker binding (identity only — no biometric wipe)."""
+    removed = get_identity_registry().unbind(camera_id, track_id)
+    if not removed:
+        raise HTTPException(404, f"No binding for track {track_id} on {camera_id}")
+    return {"camera_id": camera_id, "track_id": track_id, "unbound": True}
+
+
+@router.post("/cameras/{camera_id}/tracks/{track_id}/face")
+async def bind_track_face(
+    camera_id: str, track_id: int, file: bytes = File(...),
+    tenant: dict = Depends(require_api_key),
+):
+    """Bind a track by face match — ONLY for workers who granted consent.
+
+    Reuses the on-premise recognizer; matches below the verified band are never
+    bound, and the response reports the band instead (never guess a name).
+    """
+    if file is None:
+        raise HTTPException(400, "No image file provided")
+    embedding = embedding_from_image_bytes(file)
+    if embedding is None:
+        raise HTTPException(
+            503, "Face recognizer unavailable, or no usable face in the image"
+        )
+    result = get_identity_registry().bind_face(camera_id, track_id, embedding)
+    if result.get("reason") == "consent_withdrawn":
+        raise HTTPException(403, "Worker has withdrawn consent for face identity")
+    return result
+
+
+@router.post("/cameras/{camera_id}/tracks/{track_id}/identity/override")
+async def override_track_identity(
+    camera_id: str, track_id: int, body: dict,
+    tenant: dict = Depends(require_api_key),
+):
+    """Supervisor override: force a track's identity, bypassing badge/face state.
+
+    Body: ``{"worker_id": "EMP-4", "supervisor": "shift-lead@plant", "reason": "..."}``.
+    Always audited with the actor and reason.
+    """
+    worker_id = str(body.get("worker_id", "")).strip()
+    supervisor = str(body.get("supervisor", "")).strip()
+    reason = str(body.get("reason", "")).strip()
+    result = get_identity_registry().override(
+        camera_id, track_id, worker_id, supervisor, reason,
+    )
+    if not result.get("bound"):
+        raise HTTPException(400, f"Override not applied: {result.get('reason')}")
+    return result
+
+
+@router.get("/identity/audit")
+async def identity_audit_log(
+    limit: int = Query(200, ge=1, le=2000),
+    camera_id: Optional[str] = Query(None),
+    worker_id: Optional[str] = Query(None),
+    event: Optional[str] = Query(None),
+):
+    """Append-only identity audit trail (bind/rebind/override/reentry/unbind/consent)."""
+    return {
+        "events": identity_audit.read(
+            limit=limit, camera_id=camera_id, worker_id=worker_id, event=event,
+        ),
+        "path": identity_audit.audit_path(),
+    }
+
+
+@router.post("/workers/{worker_id}/withdraw-consent")
+async def withdraw_worker_consent(
+    worker_id: str, tenant: dict = Depends(require_api_key),
+):
+    """Withdraw face-identity consent: unbind every live track + wipe biometrics."""
+    return get_identity_registry().withdraw(worker_id)
+
+
+@router.post("/workers/{worker_id}/restore-consent")
+async def restore_worker_consent(
+    worker_id: str, tenant: dict = Depends(require_api_key),
+):
+    """Clear the local withdrawal latch after a re-consent is recorded."""
+    return get_identity_registry().restore(worker_id)
 
 
 # -- Dashboard ---------------------------------------------------------------
@@ -574,7 +798,7 @@ async def export_models():
 
 
 @router.post("/models/import")
-async def import_models(file: bytes = None):
+async def import_models(file: bytes = File(...)):
     """Import models from an uploaded zip file."""
     if file is None:
         raise HTTPException(status_code=400, detail="No file provided")
@@ -595,7 +819,7 @@ async def import_models(file: bytes = None):
 
 
 @router.post("/inference/detect")
-async def detect_posture(file: bytes = None):
+async def detect_posture(file: bytes = File(...)):
     """Run YOLO pose detection on an uploaded image frame.
     
     Accepts a JPEG/PNG image, runs YOLOv8-pose + risk classification,
@@ -636,16 +860,24 @@ async def detect_posture(file: bytes = None):
 
         # Load ML models for risk/task classification
         import joblib
-        from pathlib import Path
         risk_model = None
         task_model = None
+        model_features = None
         try:
             risk_bundle = joblib.load(Path(__file__).resolve().parents[1] / "models" / "yolo_risk_model.pkl")
             risk_model = risk_bundle["model"] if isinstance(risk_bundle, dict) else risk_bundle
             task_bundle = joblib.load(Path(__file__).resolve().parents[1] / "models" / "yolo_task_model.pkl")
             task_model = task_bundle["model"] if isinstance(task_bundle, dict) else task_bundle
+            # Models were trained on their own feature column list — use it for the
+            # feature vector (falling back to FEATURE_COLUMNS if absent).
+            if isinstance(risk_bundle, dict) and risk_bundle.get("features"):
+                model_features = list(risk_bundle["features"])
+            elif isinstance(task_bundle, dict) and task_bundle.get("features"):
+                model_features = list(task_bundle["features"])
+            else:
+                model_features = list(FEATURE_COLUMNS)
         except Exception:
-            pass
+            model_features = list(FEATURE_COLUMNS)
 
         for pi in range(len(kps_data)):
             person_kps = kps_data[pi]
@@ -654,9 +886,6 @@ async def detect_posture(file: bytes = None):
 
             # Extract features
             try:
-                from backend.core.constants import COCO_17, FEATURE_COLUMNS
-                from backend.services.features import extract_features_from_keypoints, risk_from_features
-
                 kps_arr = np.zeros((17, 4), dtype=float)
                 for ki, kp in enumerate(person_kps):
                     if len(kp) >= 3 and kp[2] > 0:
@@ -669,7 +898,7 @@ async def detect_posture(file: bytes = None):
                 features, unavailable, _ = extract_features_from_keypoints(kps_arr, COCO_17)
 
                 # Classify risk and task
-                feat_vec = np.array([features.get(c, float("nan")) for c in FEATURE_COLUMNS], dtype=float).reshape(1, -1)
+                feat_vec = np.array([features.get(c, float("nan")) for c in model_features], dtype=float).reshape(1, -1)
 
                 risk_level = "MEDIUM"
                 risk_score = 50.0
@@ -952,18 +1181,60 @@ async def revoke_api_key(key_id: str, tenant: dict = Depends(require_api_key)):
 # -- WebSocket for live camera data streaming -----------------------------
 
 _ws_clients: set = set()
+# Event loop serving the WebSocket, captured when a client connects so the ingest
+# thread can schedule alert pushes onto it via run_coroutine_threadsafe.
+_ws_loop: Optional[asyncio.AbstractEventLoop] = None
+
+
+def _remember_ws_loop() -> None:
+    """Capture the loop serving ``/ws`` (no-op when there is no running loop)."""
+    global _ws_loop
+    try:
+        _ws_loop = asyncio.get_running_loop()
+    except RuntimeError:  # pragma: no cover
+        _ws_loop = None
+
+
+def push_alert_event(alert: dict) -> int:
+    """Push a newly created alert to connected clients immediately.
+
+    Called from the ingest thread, so the send is scheduled onto the WebSocket
+    loop rather than awaited here. Returns how many clients were queued.
+
+    This is an ACCELERATOR, not the delivery guarantee: ``/ws`` still sends its
+    5 Hz snapshot carrying ``recent_alerts``, so an alert reaches a client within
+    200 ms even if this push is missed. Clients should de-duplicate on
+    ``alert_id`` because one alert can arrive by both paths.
+    """
+    loop = _ws_loop
+    if loop is None or not _ws_clients:
+        return 0
+    payload = {"type": "alert", "alert": alert}
+    queued = 0
+    for client in list(_ws_clients):
+        try:
+            asyncio.run_coroutine_threadsafe(client.send_json(payload), loop)
+            queued += 1
+        except Exception as exc:  # noqa: BLE001 - a dead client must not stall ingest
+            logger.debug("Alert event push failed: %s", exc)
+    return queued
 
 
 @router.websocket("/ws")
 async def cloud_ws(websocket: WebSocket):
-    """WebSocket endpoint for live camera data.
+    """WebSocket endpoint for live camera data. Two delivery paths:
 
-    Pushes updates every 2 seconds with:
-    - Per-camera status (frame count, risk score, persons, active)
-    - Recent alerts
-    - Overall dashboard stats
+    * ``{"type": "update"}`` at 5 Hz (every 200 ms): per-camera status including
+      ``persons[]`` (one entry per ``track_id``, so one camera_id can drive 5-10
+      worker tiles), recent alerts carrying ``track_id``/``worker_id``, and
+      overall dashboard stats. This is the GUARANTEED path — an alert always
+      appears here within 200 ms of being created.
+    * ``{"type": "alert"}`` immediately on creation, as an accelerator for
+      toasts. Best-effort, and the SAME alert may also arrive in the next
+      ``update`` snapshot, so clients must de-duplicate on ``alert_id``.
     """
     await websocket.accept()
+    _remember_ws_loop()
     _ws_clients.add(websocket)
     logger.info("WebSocket client connected (%d total)", len(_ws_clients))
 
@@ -982,18 +1253,20 @@ async def cloud_ws(websocket: WebSocket):
             },
         })
 
-        # Push updates every 2 seconds
+        # Push updates at 5 Hz (200 ms) — enough for per-tile progress bars
         while True:
             # Check for incoming messages (ping/pong keep-alive)
             try:
-                msg = await asyncio.wait_for(websocket.receive_text(), timeout=2.0)
+                msg = await asyncio.wait_for(websocket.receive_text(), timeout=0.2)
                 data = json.loads(msg)
                 if data.get("type") == "ping":
                     await websocket.send_json({"type": "pong"})
             except asyncio.TimeoutError:
                 pass
+            except WebSocketDisconnect:
+                break
             except Exception:
-                pass
+                break
 
             # Push camera status update
             try:
@@ -1003,8 +1276,13 @@ async def cloud_ws(websocket: WebSocket):
                 await websocket.send_json({
                     "type": "update",
                     "cameras": cameras,
+                    "persons": dashboard.get("persons", []),
                     "recent_alerts": alerts[:5],
                     "dashboard": {
+                        "active_cameras": dashboard.get("active_cameras", 0),
+                        "total_workers": dashboard.get("total_workers", 0),
+                        "risk_distribution": dashboard.get("risk_distribution", {}),
+                        "id_switch_count": dashboard.get("id_switch_count", 0),
                         "total_sessions": dashboard.get("total_sessions", 0),
                         "active_alerts": dashboard.get("active_alerts", 0),
                         "avg_risk_score": dashboard.get("avg_risk_score", 0),
@@ -1093,6 +1371,40 @@ All payloads are signed with HMAC-SHA256 for verification.""",
 
     _app.openapi = custom_openapi
 
+    # ── Single-worker guard ─────────────────────────────────────────────
+    # Camera ingestion is in-process singleton state (one FFmpeg per camera, one
+    # set of processors, one identity registry). A second uvicorn worker would
+    # open a second stream per camera and double-process every frame, so it is
+    # refused unless an operator explicitly opts out.
+    web_concurrency = int(os.getenv("WEB_CONCURRENCY", "1") or "1")
+    if web_concurrency > 1:
+        _msg = (
+            f"WEB_CONCURRENCY={web_concurrency} is not supported: cloud ingestion is "
+            "in-process singleton state, so multiple workers duplicate every stream. "
+            "Run a single worker and scale vertically "
+            f"(EXPECTED_CAMERAS={settings.EXPECTED_CAMERAS}). "
+            "Set STRICT_SINGLE_WORKER=false to override (unsupported)."
+        )
+        if settings.STRICT_SINGLE_WORKER:
+            raise RuntimeError(_msg)
+        logger.error(_msg)
+
+    # ── TLS / reverse-proxy policy ──────────────────────────────────────
+    @_app.middleware("http")
+    async def _tls_and_proxy_guard(request: Request, call_next):
+        if settings.REQUIRE_TLS:
+            forwarded_proto = request.headers.get("x-forwarded-proto", "")
+            is_https = request.url.scheme == "https" or (
+                settings.TRUST_PROXY
+                and forwarded_proto.split(",")[0].strip().lower() == "https"
+            )
+            if not is_https:
+                return JSONResponse(
+                    status_code=403,
+                    content={"error": "TLS required (REQUIRE_TLS=true)"},
+                )
+        return await call_next(request)
+
     # Rate limiting (must be added before routers)
     try:
         from yolo_cloud.rate_limit import CloudRateLimitMiddleware
@@ -1121,7 +1433,15 @@ All payloads are signed with HMAC-SHA256 for verification.""",
     @_app.get("/healthz")
     async def root_health():
         db_status = "connected" if storage.pg_enabled() and storage.get_connection() else "file-mode"
-        return {"status": "ok", "service": "cloud-core", "storage": db_status}
+        from yolo_cloud.rate_limit import limits_snapshot
+        return {
+            "status": "ok",
+            "service": "cloud-core",
+            "storage": db_status,
+            "expected_cameras": settings.EXPECTED_CAMERAS,
+            "web_concurrency": web_concurrency,
+            "limits": limits_snapshot(),
+        }
 
     logger.info(
         "Cloud Core started: model=%s device=%s port=%d",

@@ -75,9 +75,9 @@ class TestAuthLifecycle:
     def test_all_roles_can_login(self, client: TestClient):
         """Every seeded role can authenticate successfully.
 
-        NOTE: safety@example.local is locked out by the smoke test's
-        ``test_account_lockout_after_five_failures`` — we test it
-        separately below.
+        NOTE: safety@example.local takes the failed attempts of the smoke test's
+        ``test_repeated_failures_do_not_lock_the_account`` and must still be
+        usable, so it is asserted separately below.
         """
         accounts = [
             ("operator@example.local", "OperatorPass123!", "operator"),
@@ -89,10 +89,16 @@ class TestAuthLifecycle:
             assert res.status_code == 200, f"Failed for {email}: {res.text}"
             assert res.json()["user"]["role"] == expected_role
 
-    def test_safety_role_is_locked_out(self, client: TestClient):
-        """safety@example.local was locked by the smoke test — verify 429."""
+    def test_safety_role_survives_earlier_failed_attempts(self, client: TestClient):
+        """No per-account lockout: safety@example.local still logs in after the
+        smoke test's five failed attempts.
+
+        Brute-force protection is per-IP throttling in the rate-limit middleware
+        (see tests/test_login_rate_limit.py).
+        """
         res = client.post("/api/auth/login", json={"email": "safety@example.local", "password": "SafetyPass123!"})
-        assert res.status_code == 429
+        assert res.status_code == 200
+        assert res.json()["user"]["role"] == "safety_mgr"
 
     def test_wrong_password_returns_401(self, client: TestClient):
         res = client.post("/api/auth/login", json={

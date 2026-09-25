@@ -30,8 +30,8 @@ bcrypt>=4.1.0,<5.0.0
 jinja2>=3.1.0,<4.0.0
 pandas>=2.0.0,<3.0.0
 
-# PDF generation (optional)
-# reportlab>=4.0.0,<5.0.0
+# PDF generation (daily/weekly reports)
+reportlab>=4.0.0,<5.0.0
 
 # Async
 aiofiles>=23.0.0,<25.0.0

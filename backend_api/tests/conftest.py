@@ -36,7 +36,9 @@ os.environ["SESSION_RETENTION_DAYS"] = "0"
 os.environ["RECORDING_RETENTION_DAYS"] = "0"
 os.environ["RECORDINGS_MAX_GB"] = "0"
 os.environ["RETENTION_INTERVAL_HOURS"] = "1000"
+# The code default is DEBUG=false, which hard-requires a strong
+# AUTH_JWT_SECRET at import time — tests opt into dev mode explicitly.
+os.environ["DEBUG"] = "true"
 os.environ["AUTH_JWT_TTL_SECONDS"] = "3600"
 os.environ["RATE_LIMIT_AUTH_MAX"] = "500"
 os.environ["RATE_LIMIT_MAX_REQUESTS"] = "500"
-os.environ["AUTH_LOCKOUT_ATTEMPTS"] = "999"

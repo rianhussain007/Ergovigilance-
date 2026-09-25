@@ -130,7 +130,7 @@ export default function LoginPage() {
 
             {/* Error region — inline under the form; role=alert announces to
                 screen readers. Server messages are the backend's own generic
-                strings ("Invalid email or password", lockout notices). */}
+                strings ("Invalid email or password", throttling notices). */}
             {(fieldError || serverError) && (
               <div
                 id="login-field-error"

@@ -106,6 +106,17 @@ CREATE TABLE IF NOT EXISTS cloud_alerts (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS station_rois (
+    station_id   TEXT NOT NULL,
+    camera_id    TEXT NOT NULL,
+    station_name TEXT NOT NULL DEFAULT '',
+    polygon      JSONB NOT NULL,
+    tenant_id    TEXT NOT NULL DEFAULT 'default',
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at   TIMESTAMPTZ,
+    PRIMARY KEY (camera_id, station_id)
+);
+
 CREATE TABLE IF NOT EXISTS cloud_api_keys (
     key_id      TEXT PRIMARY KEY,
     api_key     TEXT NOT NULL UNIQUE,

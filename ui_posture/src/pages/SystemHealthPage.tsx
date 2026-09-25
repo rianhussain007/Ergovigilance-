@@ -40,12 +40,12 @@ export default function SystemHealthPage() {
 
   const fetchHealth = async () => {
     try {
-      // Check each service — /health is proxied to backend:8001,
-      // /cloud-api/cloud/health is proxied to cloud-core:8100,
+      // Check each service — /health is proxied to backend:8000,
+      // /cloud-api/cloud/health is proxied to cloud-core:8100 (rewritten to /api/cloud/health),
       // /healthz is the liveness probe.
       const checks = await Promise.allSettled([
         fetch('/health').then(r => r.json()).catch(() => ({ status: 'down' })),
-        fetch('/cloud-api/api/cloud/health').then(r => r.json()).catch(() => ({ status: 'down' })),
+        fetch('/cloud-api/cloud/health').then(r => r.json()).catch(() => ({ status: 'down' })),
         fetch('/health').then(r => r.json()).catch(() => ({ status: 'down' })),
       ]);
 

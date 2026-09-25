@@ -33,9 +33,12 @@ services:
     ports:
       - "127.0.0.1:${BACKEND_PORT:-8001}:8000"
     environment:
-      - DEBUG=true
-      # Set a strong secret for production: DEBUG=false + missing/known secret = refused to start
-      - AUTH_JWT_SECRET=${AUTH_JWT_SECRET:-}
+      # Production posture by default; set DEBUG=true for local development.
+      - DEBUG=${DEBUG:-false}
+      # Required with DEBUG=false: the API refuses to start unless this is a
+      # strong (>=32 char) non-default secret. Generate with:
+      #   python -c "import secrets; print(secrets.token_urlsafe(48))"
+      - AUTH_JWT_SECRET=${AUTH_JWT_SECRET:?AUTH_JWT_SECRET is required (>=32 chars) - see backend_api/.env.production.example}
       # True because the nginx frontend is the trusted proxy; do not expose :8000 publicly
       - TRUST_PROXY_HEADERS=true
       - CORS_ORIGINS=http://localhost:3000,http://localhost:5173,http://localhost
@@ -69,19 +72,14 @@ services:
       dockerfile: ui_posture/Dockerfile
     container_name: ergovigilance-frontend
     ports:
+      # Plain HTTP, so the stack starts with no certificate material on the
+      # host. Add HTTPS on :443 with the TLS overlay (see certs/README.md):
+      #   docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d
       - "${FRONTEND_PORT:-8080}:80"
-      # TLS (optional): uncomment after mounting certs + nginx.tls.conf.example
-      # (see ui_posture/nginx.tls.conf.example for the full setup):
-      # - "443:443"
     depends_on:
       backend:
         condition: service_healthy
     restart: unless-stopped
-    # For TLS, mount the certificate/key plus the TLS nginx config:
-    # volumes:
-    #   - ./certs/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
-    #   - ./certs/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
-    #   - ./ui_posture/nginx.tls.conf.example:/etc/nginx/conf.d/default.conf:ro
 
   cloud-core:
     build:
@@ -91,7 +89,8 @@ services:
     ports:
       - "127.0.0.1:${CLOUD_PORT:-8100}:8100"
     environment:
-      - DEBUG=true
+      # Production posture by default; set DEBUG=true for local development.
+      - DEBUG=${DEBUG:-false}
       - YOLO_MODEL=${YOLO_MODEL:-yolov8s-pose.pt}
       - YOLO_DEVICE=${YOLO_DEVICE:-cpu}
       - YOLO_CONFIDENCE=${YOLO_CONFIDENCE:-0.5}

@@ -11,6 +11,7 @@ Each camera gets its own processing thread that:
 
 import json
 import logging
+import math
 import os
 import threading
 import time
@@ -19,6 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
+import cv2
 import numpy as np
 
 from yolo_cloud.config import settings
@@ -29,8 +31,57 @@ from yolo_cloud.pose_engine import (
     TrackedPose,
     get_pose_engine,
 )
+from yolo_cloud.identity import get_identity_registry
 
 logger = logging.getLogger(__name__)
+
+# Per-processor sample buffer for latency/lag percentiles. 5000 samples at the
+# measured ~1.7 FPS/stream is ~50 minutes of history, which is enough for a
+# percentile to mean something without unbounded growth over a long soak.
+LATENCY_SAMPLE_MAX = 5000
+
+# End-to-end per-frame latency budget from the hardening spec (p95 must stay
+# under this). Recorded next to the measurement so the verdict is not restated
+# by hand in every report.
+LATENCY_BUDGET_MS = 500.0
+
+# Pre-alert clip capture. A rolling buffer of recent frames is kept per camera and
+# written out as a short clip when a HIGH alert fires. Frames are held as JPEG at
+# a reduced width: a 10 s window of raw 720p RGB would cost ~280 MB per camera,
+# against ~0.4 MB encoded this way, which matters with several cameras running.
+CLIP_BUFFER_SECONDS = 10.0
+CLIP_FRAME_MAX_W = 640
+CLIP_JPEG_QUALITY = 70
+# Codec preference for the written clip. avc1 is not used: OpenH264 is absent on
+# this stack and the writer reports success while producing an unusable file.
+CLIP_CODECS = (("mp4v", ".mp4"), ("MJPG", ".avi"))
+
+
+def percentiles(values, points=(50, 95, 99)) -> dict:
+    """Nearest-rank percentiles over a sample buffer (``{}`` when empty).
+
+    Nearest-rank rather than interpolated: for a latency budget the question is
+    whether an actual observed frame breached 500 ms, so the reported p95 is a
+    real sample, not a value between two samples.
+    """
+    data = sorted(float(v) for v in values)
+    if not data:
+        return {}
+    out: dict = {}
+    for point in points:
+        rank = math.ceil((point / 100.0) * len(data))  # nearest-rank
+        index = min(len(data) - 1, max(0, rank - 1))
+        out[f"p{point}"] = round(data[index], 1)
+    out["max"] = round(data[-1], 1)
+    out["n"] = len(data)
+    return out
+
+
+def normalize_per_hour(count: int, elapsed_seconds: float) -> float:
+    """Rate per hour, so a short run and a 4 h run are comparable."""
+    if elapsed_seconds <= 0:
+        return 0.0
+    return round(count * 3600.0 / elapsed_seconds, 1)
 
 
 @dataclass
@@ -50,6 +101,9 @@ class CloudSession:
     risk_scores: list[float] = field(default_factory=list)
     alerts: list[dict] = field(default_factory=list)
     timeline: list[dict] = field(default_factory=list)
+    # Per-track sampled risk series, keyed by str(track_id) — persisted with the
+    # session payload (Postgres JSONB or the on-disk JSON backup).
+    track_timelines: dict[str, list[dict]] = field(default_factory=dict)
     is_active: bool = True
 
     @property
@@ -86,6 +140,7 @@ class CloudSession:
             "avg_risk_score": round(self.avg_risk_score, 1),
             "highest_risk": self.highest_risk,
             "alert_count": len(self.alerts),
+            "track_timelines": self.track_timelines,
             "is_active": self.is_active,
         }
 
@@ -103,6 +158,7 @@ class CloudAlert:
     risk_score: float
     task: str
     track_id: int
+    worker_id: Optional[str] = None
     tenant_id: str = "default"
     acknowledged: bool = False
 
@@ -118,6 +174,7 @@ class CloudAlert:
             "risk_score": self.risk_score,
             "task": self.task,
             "track_id": self.track_id,
+            "worker_id": self.worker_id,
             "tenant_id": self.tenant_id,
             "acknowledged": self.acknowledged,
         }
@@ -136,6 +193,8 @@ class CloudCameraProcessor:
     ALERT_COOLDOWN = 10  # frames between same-type alerts
     # Timeline entry every N frames
     TIMELINE_SAMPLE_RATE = 5  # every 5th processed frame
+    # Max sampled points retained per track (oldest dropped) to bound session size
+    TRACK_TIMELINE_MAX = 2000
 
     def __init__(self, camera: CameraInfo, engine: YOLOPoseEngine, tenant_id: str = "default"):
         self.camera = camera
@@ -150,9 +209,25 @@ class CloudCameraProcessor:
         self._alert_counter = 0
         self._frame_counter = 0
         self._idle_start: Optional[float] = None
+        self._identity = get_identity_registry()
         # Latest state for API consumption
         self.latest_poses: list[TrackedPose] = []
+        self.latest_persons: list[dict] = []
         self.latest_frame_time: float = 0.0
+        # Frame size of the most recent processed frame. Clients need it to map
+        # the pixel bbox back to NORMALIZED space (station polygons and the
+        # skeleton overlay are both normalized).
+        self.frame_width: int = 0
+        self.frame_height: int = 0
+        # Load/QA instrumentation. Bounded buffers, so a four-hour soak reports
+        # percentiles without growing memory without limit.
+        self.latency_ms: deque = deque(maxlen=LATENCY_SAMPLE_MAX)
+        self.inference_ms: deque = deque(maxlen=LATENCY_SAMPLE_MAX)
+        self.source_lag_ms: deque = deque(maxlen=LATENCY_SAMPLE_MAX)
+        # Rolling pre-alert clip buffer (JPEG frames) and the clips saved this
+        # session, keyed by alert_id.
+        self._clip_buffer: deque = deque(maxlen=self._clip_buffer_len())
+        self.clips: dict[str, dict] = {}
 
     def start(self) -> str:
         """Start processing. Returns the session ID."""
@@ -222,9 +297,24 @@ class CloudCameraProcessor:
 
             self._idle_start = None  # Got a frame — not idle
 
+            self._capture_clip_frame(frame)
+
+            # How stale the frame was when we picked it up: the single-slot
+            # buffer means this is the pipeline falling behind the source.
+            source = rtsp.get_camera(self.camera.id)
+            if source is not None and source.last_frame_time:
+                lag_ms = (time.time() - source.last_frame_time) * 1000.0
+                if 0.0 <= lag_ms < 60_000.0:
+                    self.source_lag_ms.append(lag_ms)
+
+            # End-to-end per-frame latency: the frame handed to the scorer
+            # through to the scored result being stored. This is the number the
+            # p95 < 500 ms target applies to.
+            frame_started = time.perf_counter()
             try:
-                processed = self.engine.process_frame(frame)
+                processed = self.engine.process_frame(frame, camera_id=self.camera.id)
                 self._handle_result(processed)
+                self.latency_ms.append((time.perf_counter() - frame_started) * 1000.0)
             except Exception as exc:
                 logger.error(
                     "Camera %s: processing error: %s", self.camera.id, exc, exc_info=True
@@ -239,7 +329,12 @@ class CloudCameraProcessor:
         self._frame_counter += 1
         self._session.frame_count += 1
         self.latest_poses = result.tracked_poses
+        self._maintain_identities(result)
+        self.latest_persons = self.build_persons(result)
         self.latest_frame_time = result.timestamp
+        self.frame_width = int(result.frame_width or 0)
+        self.frame_height = int(result.frame_height or 0)
+        self.inference_ms.append(float(result.inference_ms or 0.0))
 
         # Track unique persons
         active_ids = {p.track_id for p in result.tracked_poses}
@@ -266,10 +361,15 @@ class CloudCameraProcessor:
                     "task": task,
                     "person_count": len(result.tracked_poses),
                 })
+                self._sample_track_timelines(result)
 
-            # Alert check
+            # Alert check (cooldown is per track_id)
             if risk_level in ("MEDIUM", "HIGH"):
-                self._check_alert(risk_level, risk_score, task, track_id, result.timestamp)
+                self._check_alert(
+                    risk_level, risk_score, task, track_id, result.timestamp,
+                    worker_id=self._binding_for(track_id),
+                    quality=dict(getattr(dominant, "quality", {}) or {}),
+                )
             else:
                 # Person is in safe zone — reset idle tracking
                 self._idle_start = None
@@ -288,10 +388,250 @@ class CloudCameraProcessor:
             self._save_checkpoint()
             self._last_checkpoint = now
 
+    def _clip_buffer_len(self) -> int:
+        """Frames held for the pre-alert clip.
+
+        Sized from the CONFIGURED inference rate rather than the measured one,
+        because the measured rate varies with load; the buffer therefore holds at
+        least CLIP_BUFFER_SECONDS of video at the rate the engine is configured
+        for, and more than that when the pipeline runs slower.
+        """
+        fps = max(1, int(getattr(settings, "INFERENCE_FPS", 10) or 10))
+        return max(1, int(CLIP_BUFFER_SECONDS * fps))
+
+    def _capture_clip_frame(self, frame) -> None:
+        """Append the newest frame to the pre-alert clip buffer.
+
+        Best-effort: clip capture must never break frame processing.
+        """
+        try:
+            height, width = frame.shape[:2]
+            if width > CLIP_FRAME_MAX_W:
+                scale = CLIP_FRAME_MAX_W / float(width)
+                frame = cv2.resize(
+                    frame,
+                    (CLIP_FRAME_MAX_W, max(1, int(height * scale))),
+                    interpolation=cv2.INTER_AREA,
+                )
+            ok, encoded = cv2.imencode(
+                ".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, CLIP_JPEG_QUALITY]
+            )
+            if ok:
+                self._clip_buffer.append(encoded.tobytes())
+        except Exception as exc:  # noqa: BLE001 - never break a frame for a clip
+            logger.debug("Clip frame capture skipped: %s", exc)
+
+    def _save_clip(self, alert_id: str, timestamp: float) -> Optional[dict]:
+        """Write the buffered pre-alert frames to a clip for this alert.
+
+        Pre-roll only: the buffer holds the seconds BEFORE the alert, which is
+        the evidence a supervisor reviews. There is no post-roll, so the clip
+        ends at the alert rather than continuing past it.
+        """
+        frames = list(self._clip_buffer)
+        if not frames:
+            return None
+
+        target_dir = os.path.join(settings.RECORDINGS_DIR, "clips", self.camera.id)
+        try:
+            os.makedirs(target_dir, exist_ok=True)
+        except OSError as exc:
+            logger.warning("Clip directory unavailable (%s): %s", target_dir, exc)
+            return None
+
+        first = cv2.imdecode(np.frombuffer(frames[0], np.uint8), cv2.IMREAD_COLOR)
+        if first is None:
+            return None
+        height, width = first.shape[:2]
+        fps = max(1.0, float(getattr(settings, "INFERENCE_FPS", 10) or 10))
+
+        written = 0
+        path = ""
+        for codec, extension in CLIP_CODECS:
+            candidate = os.path.join(target_dir, f"{alert_id}{extension}")
+            writer = cv2.VideoWriter(
+                candidate, cv2.VideoWriter_fourcc(*codec), fps, (width, height)
+            )
+            if not writer.isOpened():
+                writer.release()
+                continue
+            written = 0
+            try:
+                for blob in frames:
+                    image = cv2.imdecode(np.frombuffer(blob, np.uint8), cv2.IMREAD_COLOR)
+                    if image is None:
+                        continue
+                    if image.shape[0] != height or image.shape[1] != width:
+                        image = cv2.resize(image, (width, height))
+                    writer.write(image)
+                    written += 1
+            finally:
+                writer.release()
+            if written:
+                path = candidate
+                break
+
+        if not written:
+            logger.warning("Clip save produced no frames for alert %s", alert_id)
+            return None
+
+        entry = {
+            "alert_id": alert_id,
+            "camera_id": self.camera.id,
+            "path": path,
+            "frames": written,
+            "fps": fps,
+            "duration_s": round(written / fps, 2),
+            "bytes": os.path.getsize(path),
+            "created_at": timestamp,
+            "post_roll": False,
+        }
+        self.clips[alert_id] = entry
+        logger.info("Clip saved for alert %s: %s (%d frames)", alert_id, path, written)
+        return entry
+
+    def metrics_snapshot(self) -> dict:
+        """Processing metrics for QA / soak reporting.
+
+        ``dropped_frames`` is decoded minus processed: ``get_frame`` returns only
+        the LATEST frame, so any frame the decoder overwrote before this
+        processor read it was dropped. If the consumer ever outpaces the decoder
+        it re-processes one image, which shows up as ``repeat_frames`` with
+        ``processed > decoded`` — so the drop ratio is never read from that case
+        without noticing.
+        """
+        decoded = int(getattr(self.camera, "frame_count", 0) or 0)
+        processed = int(self._frame_counter)
+        dropped = max(0, decoded - processed)
+        over_budget = sum(1 for v in self.latency_ms if v > LATENCY_BUDGET_MS)
+        return {
+            "camera_id": self.camera.id,
+            "decoded_frames": decoded,
+            "processed_frames": processed,
+            "dropped_frames": dropped,
+            "repeat_frames": max(0, processed - decoded),
+            "drop_rate": round(dropped / decoded, 4) if decoded else 0.0,
+            "latency_ms": percentiles(self.latency_ms),
+            "inference_ms": percentiles(self.inference_ms),
+            "source_lag_ms": percentiles(self.source_lag_ms),
+            "latency_budget_ms": LATENCY_BUDGET_MS,
+            "latency_over_budget_frames": over_budget,
+            "fps": round(float(getattr(self.camera, "fps", 0.0) or 0.0), 2),
+            "frames_scored": processed,
+        }
+
+    def _binding_for(self, track_id: int) -> Optional[str]:
+        """Worker id currently bound to this track (badge or verified face)."""
+        try:
+            return self._identity.binding_for(self.camera.id, int(track_id))
+        except Exception:  # noqa: BLE001 - identity is best-effort
+            return None
+
+    def build_persons(self, result: ProcessedCloudFrame) -> list[dict]:
+        """Per-track snapshot for the multi-worker tile grid / WS payload.
+
+        One entry per active ``track_id``; ``bbox`` is in PIXELS ``[x, y, w, h]``
+        (the engine works in normalized xyxy). ``worker_id`` is null until an
+        identity is bound via badge/QR or a consenting face match.
+        """
+        fw = float(result.frame_width or 1)
+        fh = float(result.frame_height or 1)
+        persons = []
+        for p in result.tracked_poses:
+            x1, y1, x2, y2 = p.bbox
+            persons.append({
+                "track_id": int(p.track_id),
+                "bbox": [
+                    int(round(x1 * fw)), int(round(y1 * fh)),
+                    int(round((x2 - x1) * fw)), int(round((y2 - y1) * fh)),
+                ],
+                "risk_score": round(float(p.risk_score), 1),
+                "risk_level": p.risk_level,
+                "confidence": round(float(p.confidence), 3),
+                "task": p.task,
+                # Joint angles (neck/trunk/shoulder/...) in degrees for THIS
+                # track, so two workers in one frame never share figures.
+                "angles": {
+                    str(k): round(float(v), 1)
+                    for k, v in (getattr(p, "joint_angles", None) or {}).items()
+                },
+                # The 17 COCO keypoints as [x, y, conf] in NORMALIZED frame
+                # coordinates, for the per-tile skeleton overlay. Index-aligned
+                # with COCO_17 (a malformed point becomes [0, 0, 0], never a gap).
+                "keypoints": [
+                    [round(float(kp[0]), 4), round(float(kp[1]), 4), round(float(kp[2]), 3)]
+                    if len(kp) >= 3 else [0.0, 0.0, 0.0]
+                    for kp in list(getattr(p, "keypoints", None) or [])[:17]
+                ],
+                # Display-only capture-quality flags (low_light/occluded/too_small);
+                # never inputs to risk or task scoring.
+                "quality": dict(getattr(p, "quality", {}) or {}),
+                # Workstation this person is standing at (null when no ROI covers
+                # their centroid), so a tile can be labelled by station rather
+                # than only by track_id.
+                "station_id": getattr(p, "station_id", None),
+                "station_name": getattr(p, "station_name", None),
+                "worker_id": self._binding_for(p.track_id),
+                "last_seen": result.timestamp,
+            })
+        return persons
+
+    def _maintain_identities(self, result: ProcessedCloudFrame) -> None:
+        """Keep identity state fresh each frame.
+
+        Bound tracks refresh their remembered box; unbound tracks get one chance
+        to re-attach to a recently-seen identity (a worker who left the frame and
+        came back has a brand-new track_id). Best-effort: never breaks processing.
+        """
+        for p in result.tracked_poses:
+            try:
+                worker_id = self._identity.binding_for(self.camera.id, p.track_id)
+                if worker_id:
+                    self._identity.remember(
+                        self.camera.id, worker_id, p.track_id, list(p.bbox),
+                    )
+                else:
+                    self._identity.try_rebind(
+                        self.camera.id, p.track_id, list(p.bbox),
+                    )
+            except Exception:  # noqa: BLE001 - identity is best-effort
+                continue
+
+    def refresh_person_bindings(self) -> None:
+        """Overlay the latest identity bindings onto the cached persons snapshot.
+
+        Without this a badge scan only shows up on the *next* processed frame;
+        reading live state should reflect a scan immediately.
+        """
+        for person in self.latest_persons:
+            person["worker_id"] = self._binding_for(person["track_id"])
+
+    def _sample_track_timelines(self, result: ProcessedCloudFrame) -> None:
+        """Append one sampled point per active track, keyed by track_id."""
+        if self._session is None:
+            return
+        for p in result.tracked_poses:
+            series = self._session.track_timelines.setdefault(str(int(p.track_id)), [])
+            series.append({
+                "timestamp": result.timestamp,
+                "frame": self._frame_counter,
+                "risk_level": p.risk_level,
+                "risk_score": round(float(p.risk_score), 1),
+                "confidence": round(float(p.confidence), 3),
+                "task": p.task,
+                "quality": dict(getattr(p, "quality", {}) or {}),
+                "station_id": getattr(p, "station_id", None),
+                "worker_id": self._binding_for(p.track_id),
+            })
+            if len(series) > self.TRACK_TIMELINE_MAX:
+                del series[: len(series) - self.TRACK_TIMELINE_MAX]
+
     def _check_alert(
-        self, risk_level: str, risk_score: float, task: str, track_id: int, timestamp: float
+        self, risk_level: str, risk_score: float, task: str, track_id: int,
+        timestamp: float, worker_id: Optional[str] = None,
+        quality: Optional[dict] = None,
     ) -> None:
-        """Check if we should fire an alert."""
+        """Check if we should fire an alert (cooldown is keyed by track_id)."""
         last = self._last_alert_time.get(track_id, 0)
         if timestamp - last < self.ALERT_COOLDOWN * (1.0 / settings.INFERENCE_FPS):
             return
@@ -308,11 +648,30 @@ class CloudCameraProcessor:
             risk_score=risk_score,
             task=task,
             track_id=track_id,
+            worker_id=worker_id,
             tenant_id=self.tenant_id,
         )
         alert_dict = alert.to_dict()
+        if risk_level == "HIGH":
+            # HIGH alerts carry the pre-alert clip; MEDIUM is alert-only, so a
+            # long medium-risk stretch cannot fill the disk with clips.
+            clip = self._save_clip(alert.alert_id, timestamp)
+            if clip:
+                alert_dict["clip"] = clip
+        if quality:
+            # Display-only capture-quality flags at alert time (helps the
+            # supervisor judge whether low light / occlusion caused the alert).
+            alert_dict["quality"] = dict(quality)
         self._session.alerts.append(alert_dict)
         self._last_alert_time[track_id] = timestamp
+        # Accelerator only: the 5 Hz WS snapshot stays the guaranteed path, so a
+        # failure here is logged and dropped rather than retried.
+        try:
+            from yolo_cloud.api import push_alert_event
+
+            push_alert_event(alert_dict)
+        except Exception as exc:  # noqa: BLE001 - never break ingest for a push
+            logger.debug("Alert event push unavailable: %s", exc)
         # Persist alert to PostgreSQL
         try:
             from yolo_cloud import storage
@@ -490,6 +849,7 @@ class CloudIngestionService:
             if processor is None:
                 return None
             camera = self._rtsp.get_camera(camera_id)
+            processor.refresh_person_bindings()
             return {
                 "camera_id": camera_id,
                 "camera_name": camera.name if camera else "",
@@ -507,9 +867,117 @@ class CloudIngestionService:
                     }
                     for p in processor.latest_poses
                 ],
+                # Per-track snapshots for the multi-worker tile grid: one entry
+                # per active track_id, bbox in PIXELS [x, y, w, h].
+                "persons": processor.latest_persons,
                 "person_count": len(processor.latest_poses),
+                "frame_width": processor.frame_width,
+                "frame_height": processor.frame_height,
+                "id_switch_count": processor._identity.switch_count(camera_id),
                 "fps": camera.fps if camera else 0,
             }
+
+    def get_clip(self, camera_id: str, alert_id: str) -> Optional[dict]:
+        """Manifest entry for a saved pre-alert clip, or None.
+
+        Falls back to a filesystem lookup so a clip stays downloadable after its
+        camera has been stopped or removed.
+        """
+        with self._lock:
+            processor = self._processors.get(camera_id)
+            entry = None
+            if processor is not None and alert_id in processor.clips:
+                entry = dict(processor.clips[alert_id])
+        if entry and os.path.exists(entry.get("path", "")):
+            return entry
+
+        target_dir = os.path.join(settings.RECORDINGS_DIR, "clips", str(camera_id))
+        for _codec, extension in CLIP_CODECS:
+            candidate = os.path.join(target_dir, f"{alert_id}{extension}")
+            if os.path.exists(candidate):
+                return {
+                    "alert_id": alert_id,
+                    "camera_id": camera_id,
+                    "path": candidate,
+                    "bytes": os.path.getsize(candidate),
+                    "recovered_from_disk": True,
+                }
+        return None
+
+    def get_processing_metrics(self) -> list[dict]:
+        """Per-camera processing metrics (latency percentiles, drop rate, lag).
+
+        Read-only snapshot for QA / soak reporting; safe to call while cameras
+        are running.
+        """
+        with self._lock:
+            return [p.metrics_snapshot() for p in self._processors.values()]
+
+    def get_camera_persons(self, camera_id: str) -> Optional[dict]:
+        """Live per-track persons for one camera (multi-worker tile source)."""
+        with self._lock:
+            processor = self._processors.get(camera_id)
+            if processor is None:
+                return None
+            session = processor.session
+            processor.refresh_person_bindings()
+            return {
+                "camera_id": camera_id,
+                "camera_name": processor.camera.name,
+                "session_id": session.session_id if session else None,
+                "is_active": processor._running,
+                "frame_count": processor._frame_counter,
+                "person_count": len(processor.latest_persons),
+                "persons": processor.latest_persons,
+                "frame_width": processor.frame_width,
+                "frame_height": processor.frame_height,
+                "id_switch_count": processor._identity.switch_count(camera_id),
+                "updated_at": processor.latest_frame_time,
+            }
+
+    def get_person_timeline(
+        self, track_id: int, limit: int = 100,
+        camera_id: Optional[str] = None, session_id: Optional[str] = None,
+    ) -> dict:
+        """Sampled per-track risk series, merged across sessions.
+
+        Timeline points are stored per ``(session_id, track_id)``; this flattens
+        them into one newest-``limit`` series and also reports which sessions
+        contributed.
+        """
+        key = str(int(track_id))
+        points: list[dict] = []
+        contributing: list[dict] = []
+        for sess in self.get_sessions(limit=1000):
+            if session_id and sess.get("session_id") != session_id:
+                continue
+            if camera_id and sess.get("camera_id") != camera_id:
+                continue
+            series = (sess.get("track_timelines") or {}).get(key) or []
+            if not series:
+                continue
+            contributing.append({
+                "session_id": sess.get("session_id"),
+                "camera_id": sess.get("camera_id"),
+                "sample_count": len(series),
+            })
+            for pt in series:
+                points.append({
+                    "session_id": sess.get("session_id"),
+                    "camera_id": sess.get("camera_id"),
+                    **pt,
+                })
+        points.sort(key=lambda p: p.get("timestamp") or 0)
+        if limit and limit > 0:
+            points = points[-limit:]
+        return {
+            "track_id": int(track_id),
+            "camera_id": camera_id,
+            "session_id": session_id,
+            "point_count": len(points),
+            "sessions": contributing,
+            "points": points,
+        }
 
     def get_all_cameras(self) -> list[dict]:
         """Get state of all cameras."""
@@ -541,12 +1009,20 @@ class CloudIngestionService:
                 level = pose.get("risk_level", "LOW")
                 risk_counts[level] = risk_counts.get(level, 0) + 1
 
+        # Flatten per-camera persons so a caller can drive a tile grid from one place.
+        persons = []
+        for cam in all_cameras:
+            for person in cam.get("persons", []):
+                persons.append({"camera_id": cam.get("camera_id"), **person})
+
         return {
             "total_cameras": len(all_cameras),
             "active_cameras": active_cameras,
             "total_workers": total_persons,
             "risk_distribution": risk_counts,
             "cameras": all_cameras,
+            "persons": persons,
+            "id_switch_count": get_identity_registry().switch_count(),
         }
 
     def get_sessions(self, limit: int = 50) -> list[dict]:

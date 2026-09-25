@@ -64,7 +64,19 @@ export default defineConfig(() => {
                 '/cloud-api': {
                     target: 'http://127.0.0.1:8100',
                     changeOrigin: true,
-                    rewrite: (path) => path.replace(/^\/cloud-api/, ''),
+                    // ws:true lets the cloud WebSocket (/cloud-api/cloud/ws) work
+                    // through this prefix instead of needing a direct origin.
+                    ws: true,
+                    // Cloud core routes live under /api/cloud/... — map the UI's
+                    // /cloud-api/cloud/... prefix onto that namespace.
+                    rewrite: (path) => path.replace(/^\/cloud-api/, '/api'),
+                    // NOTE for the cloud WS client (not yet wired up): the cloud
+                    // socket has TWO alert delivery paths. Every 200 ms it sends
+                    // {type:'update'} with recent_alerts — that snapshot is the
+                    // GUARANTEED path. It ALSO emits {type:'alert'} the instant an
+                    // alert is created, purely as an accelerator for toasts, and
+                    // that same alert will normally also appear in the next
+                    // update. De-duplicate on alert_id or every alert shows twice.
                 },
             },
     },

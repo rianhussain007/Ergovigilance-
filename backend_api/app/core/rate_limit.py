@@ -9,7 +9,8 @@ Limits per-IP request rates with role-based multipliers:
 Configurable via environment:
 - RATE_LIMIT_WINDOW: seconds per window (default 60)
 - RATE_LIMIT_MAX_REQUESTS: base max requests per window (default 500)
-- RATE_LIMIT_AUTH_MAX: max auth attempts per window (default 50)
+- RATE_LIMIT_AUTH_MAX: max auth attempts per IP per window on the
+  token-issuing endpoints (/auth/login, /auth/demo) (default 10)
 
 Usage in main.py:
     from app.core.rate_limit import RateLimitMiddleware
@@ -24,11 +25,18 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 WINDOW = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
 MAX_REQUESTS = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "500"))
-AUTH_MAX = int(os.getenv("RATE_LIMIT_AUTH_MAX", "50"))
+AUTH_MAX = int(os.getenv("RATE_LIMIT_AUTH_MAX", "10"))
+
+# Token-issuing endpoints get their own tighter per-IP bucket so the generic
+# 500/min budget (from which /auth/ is exempt) can never be spent guessing
+# credentials.
+AUTH_PATHS = ("/auth/login", "/auth/demo")
 
 # Role-based multipliers: admins get more headroom, operators are stricter
 ROLE_MULTIPLIERS: dict[str, float] = {
@@ -48,12 +56,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.max_requests = max_requests
         # {ip: [(timestamp, path)]}
         self._requests: dict[str, list[float]] = defaultdict(list)
+        # Separate bucket for auth endpoints: {ip: [timestamp]}
+        self._auth_requests: dict[str, list[float]] = defaultdict(list)
 
     def _get_client_ip(self, request: Request) -> str:
-        # Trust X-Forwarded-For when behind a proxy
-        forwarded = request.headers.get("x-forwarded-for")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
+        # X-Forwarded-For is only honored behind a trusted reverse proxy
+        # (TRUST_PROXY_HEADERS=true). Otherwise a client could spoof the header
+        # to dodge per-IP limits — including login throttling.
+        if settings.TRUST_PROXY_HEADERS:
+            forwarded = request.headers.get("x-forwarded-for")
+            if forwarded:
+                return forwarded.split(",")[0].strip()
         return request.client.host if request.client else "unknown"
 
     def _is_rate_limited(self, ip: str, path: str, role: str = "operator") -> bool:
@@ -77,6 +90,25 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return True
 
         self._requests[ip].append(now)
+        return False
+
+    def _is_auth_rate_limited(self, ip: str, path: str) -> bool:
+        """Tighter per-IP limit for token-issuing endpoints (login, demo).
+
+        Independent of the global budget so credential guessing is throttled
+        even though /auth/ is exempt from the general limiter.
+        """
+        if not any(p in path for p in AUTH_PATHS):
+            return False
+
+        now = time.time()
+        cutoff = now - self.window
+        self._auth_requests[ip] = [t for t in self._auth_requests[ip] if t > cutoff]
+
+        if len(self._auth_requests[ip]) >= AUTH_MAX:
+            return True
+
+        self._auth_requests[ip].append(now)
         return False
 
     def _extract_role_from_token(self, request: Request) -> str:
@@ -110,6 +142,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         ip = self._get_client_ip(request)
         role = self._extract_role_from_token(request)
+
+        if self._is_auth_rate_limited(ip, path):
+            logger.warning("Auth rate limit exceeded for %s on %s", ip, path)
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many authentication attempts. Try again later."},
+                headers={"Retry-After": str(self.window)},
+            )
 
         if self._is_rate_limited(ip, path, role):
             logger.warning("Rate limit exceeded for %s (role=%s) on %s", ip, role, path)

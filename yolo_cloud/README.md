@@ -34,12 +34,12 @@ Factory IP Cameras (RTSP) → FFmpeg Ingestion → YOLOv8-pose → ByteTrack →
 # Install dependencies
 pip install -r requirements.txt
 
-# Start with demo RTSP feeds
-python -m yolo_cloud.main --demo
-
-# Start with real cameras
+# (Optional) configure real cameras before starting; without RTSP_CAMERAS the
+# core starts with no cameras and you can add them via POST /cloud/cameras
 export RTSP_CAMERAS='[{"id":"cam-1","name":"Assembly Line","url":"rtsp://192.168.1.100:554/stream"}]'
-python -m yolo_cloud.main
+
+# Start the cloud core (FastAPI app factory; serves /cloud/* on :8100)
+uvicorn yolo_cloud.api:create_app --factory --host 0.0.0.0 --port 8100
 ```
 
 ## Endpoints

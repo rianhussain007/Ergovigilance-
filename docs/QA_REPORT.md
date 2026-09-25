@@ -117,7 +117,10 @@ imported across modules
 ### Authentication — ✅ Solid
 - JWT HS256 with secret enforcement (32+ chars when DEBUG=false)
 - bcrypt password hashing (async, off event loop)
-- Brute-force protection: 5 failures/account, 10/IP → 15-min lockout (429 + Retry-After)
+- Brute-force protection: per-IP throttle on the token-issuing endpoints
+  (/auth/login, /auth/demo) — 10 attempts/min (429 + Retry-After). Deliberately
+  no per-account lockout: locking a known email would let anyone deny service
+  to that user. Failed attempts are still audited.
 - Timing-safe login (dummy bcrypt hash for unknown emails)
 - Admin self-deletion blocked (lockout prevention)
 
@@ -162,7 +165,7 @@ imported across modules
 
 ## ✅ What's Already Solid
 
-1. Auth & RBAC (server-enforced, JWT + bcrypt + lockout)
+1. Auth & RBAC (server-enforced, JWT + bcrypt + per-IP login throttling)
 2. Test isolation (temp DB, temp dirs — never touches dev data)
 3. Fail-closed behavior (verified by tests, not just code)
 4. Structured logging + /healthz /readyz /metrics

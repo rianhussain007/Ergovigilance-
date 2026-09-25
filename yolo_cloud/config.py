@@ -12,7 +12,8 @@ class CloudSettings:
     # Server
     HOST: str = os.getenv("CLOUD_HOST", "0.0.0.0")
     PORT: int = int(os.getenv("CLOUD_PORT", "8100"))
-    DEBUG: bool = os.getenv("DEBUG", "true").lower() == "true"
+    # Secure-by-default: false unless local dev explicitly sets DEBUG=true.
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
 
     # YOLO model
     YOLO_MODEL: str = os.getenv("YOLO_MODEL", "yolov8s-pose.pt")
@@ -42,6 +43,38 @@ class CloudSettings:
     RTSP_RECONNECT_DELAY: float = float(os.getenv("RTSP_RECONNECT_DELAY", "2.0"))
     RTSP_MAX_RECONNECT: int = int(os.getenv("RTSP_MAX_RECONNECT", "10"))
 
+    # ── Deployment behind a reverse proxy ───────────────────────────────
+    # X-Forwarded-For / X-Forwarded-Proto are honoured ONLY when TRUST_PROXY is
+    # on. Trusting them unconditionally lets any client pick its own rate-limit
+    # bucket and spoof its address.
+    TRUST_PROXY: bool = os.getenv("TRUST_PROXY", "false").lower() == "true"
+    TRUSTED_PROXY_HOPS: int = int(os.getenv("TRUSTED_PROXY_HOPS", "1"))
+    REQUIRE_TLS: bool = os.getenv("REQUIRE_TLS", "false").lower() == "true"
+    TLS_CERTFILE: str = os.getenv("TLS_CERTFILE", "")
+    TLS_KEYFILE: str = os.getenv("TLS_KEYFILE", "")
+
+    # ── Rate limits (per client IP, sliding window) ─────────────────────
+    # Sized for 4 concurrent RTSP streams: one 5 Hz WS + 5 s polls per operator
+    # screen fit comfortably; camera add/start/stop and identity scans get a
+    # stricter bucket of their own.
+    RATE_LIMIT_WINDOW_S: int = int(os.getenv("RATE_LIMIT_WINDOW_S", "60"))
+    RATE_LIMIT_REQUESTS: int = int(os.getenv("RATE_LIMIT_REQUESTS", "600"))
+    RATE_LIMIT_CAMERA_WRITES: int = int(os.getenv("RATE_LIMIT_CAMERA_WRITES", "60"))
+
+    # ── Single-worker guard ─────────────────────────────────────────────
+    # Camera ingestion (RTSP manager, processors, identity registry) is
+    # in-process singleton state. A second uvicorn worker would open a second
+    # FFmpeg per camera and double-process every frame, so >1 worker is refused
+    # unless explicitly overridden. EXPECTED_CAMERAS sizes the box; it does NOT
+    # enable clustering.
+    EXPECTED_CAMERAS: int = int(os.getenv("EXPECTED_CAMERAS", "4"))
+    STRICT_SINGLE_WORKER: bool = os.getenv("STRICT_SINGLE_WORKER", "true").lower() == "true"
+
+    # ── Per-tile quality flags (display only; never inputs to scoring) ──
+    LOW_LIGHT_LUMA: float = float(os.getenv("LOW_LIGHT_LUMA", "40"))
+    QUALITY_MIN_TILE_H_PX: int = int(os.getenv("QUALITY_MIN_TILE_H_PX", "64"))
+    QUALITY_KEYPOINT_CONF: float = float(os.getenv("QUALITY_KEYPOINT_CONF", "0.3"))
+
     # Session management
     SESSION_IDLE_TIMEOUT: int = int(os.getenv("SESSION_IDLE_TIMEOUT", "60"))
     SESSION_CHECKPOINT_INTERVAL: int = int(os.getenv("SESSION_CHECKPOINT_INTERVAL", "120"))
@@ -54,6 +87,12 @@ class CloudSettings:
     RECORDINGS_DIR: str = os.getenv(
         "RECORDINGS_DIR",
         os.path.join(os.path.dirname(__file__), "..", "recordings"),
+    )
+    # Station ROI polygons — per-camera workstation boundaries drawn by a
+    # supervisor (JSON; see yolo_cloud/stations.py).
+    STATIONS_FILE: str = os.getenv(
+        "STATIONS_FILE",
+        os.path.join(os.path.dirname(__file__), "..", "config", "stations.json"),
     )
 
     # Cameras (JSON array of {id, name, url})
@@ -82,6 +121,7 @@ class CloudSettings:
         # Ensure dirs exist
         os.makedirs(self.SESSIONS_DIR, exist_ok=True)
         os.makedirs(self.RECORDINGS_DIR, exist_ok=True)
+        os.makedirs(os.path.dirname(os.path.abspath(self.STATIONS_FILE)), exist_ok=True)
 
 
 settings = CloudSettings()

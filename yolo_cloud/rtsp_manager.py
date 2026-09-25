@@ -153,6 +153,19 @@ class RTSPStream:
                 )
                 time.sleep(delay)
 
+    @staticmethod
+    def _input_url_options(url: str) -> list:
+        """Per-scheme input options for ffmpeg/ffprobe.
+
+        ffmpeg 9 rejects a pre-input ``-rtsp_transport`` for any non-RTSP
+        source ("Option rtsp_transport not found" -> instant exit before
+        opening the file), so the flag is only passed for rtsp:// URLs.
+        File and tcp:// sources are unaffected and need no options.
+        """
+        if url.lower().startswith(("rtsp://", "rtsps://")):
+            return ["-rtsp_transport", settings.RTSP_TRANSPORT]
+        return []
+
     def _start_ffmpeg(self) -> None:
         """Launch FFmpeg to decode the RTSP stream."""
         url = self.camera.url
@@ -160,7 +173,7 @@ class RTSPStream:
         # FFmpeg command: decode RTSP to raw BGR24 frames on stdout
         cmd = [
             "ffmpeg",
-            "-rtsp_transport", settings.RTSP_TRANSPORT,
+            *self._input_url_options(url),
             "-i", url,
             "-tune", "zerolatency",
             "-fflags", "nobuffer",
@@ -258,7 +271,7 @@ class RTSPStream:
         try:
             cmd = [
                 "ffprobe",
-                "-rtsp_transport", settings.RTSP_TRANSPORT,
+                *self._input_url_options(self.camera.url),
                 "-i", self.camera.url,
                 "-select_streams", "v:0",
                 "-show_entries", "stream=width,height",
