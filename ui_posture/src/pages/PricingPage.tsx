@@ -97,7 +97,7 @@ const FAQ = [
   },
   {
     q: 'How accurate is the risk scoring?',
-    a: 'The system uses RULA/REBA-informed models trained on 30,698 labeled poses. On-premise (MediaPipe) achieves 87.6% agreement with human assessors on 500 labeled frames. Cloud (YOLO) achieves 94.1% cross-validated F1 on synthetic REBA data. Real-world accuracy depends on camera angle, lighting, and worker body types — we recommend a pilot to validate for your facility.',
+    a: 'The system uses RULA/REBA-informed models trained on 30,698 labeled poses. On-premise (MediaPipe) achieves 87.6% agreement with human assessors on 500 labeled frames (LOW/MEDIUM risk categories; HIGH unvalidated). Real-world accuracy depends on camera angle, lighting, and worker body types — which is exactly why we recommend a pilot to validate for your facility. It is a screening aid, not a medical device.',
   },
   {
     q: 'Can I try before buying?',
