@@ -232,6 +232,12 @@ export default function ROIAnalyticsPage() {
               Estimated <strong className="text-green-400">${metrics.cost_savings.compliance_savings.toLocaleString()}</strong> in avoided fines and audit preparation costs.
             </p>
           </div>
+          <p className="border-t border-white/10 pt-3 text-xs text-slate-400">
+            Estimates only — planning figures, not measured outcomes: $42,000 is a
+            published industry benchmark for a musculoskeletal-disorder claim, and
+            the 15%-of-high-risk-events conversion is a heuristic. ErgoVigilance is
+            a screening aid and does not guarantee injury prevention.
+          </p>
         </div>
       </div>
     </div>

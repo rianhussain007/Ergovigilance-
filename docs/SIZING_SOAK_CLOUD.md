@@ -235,12 +235,31 @@ reader) but was not benchmarked against TCP under matched load — no
 transport performance claim either way; `RTSP_TRANSPORT=tcp` remains the
 default.
 
+## 4-hour soak (measured 2026-09-26)
+
+Label `trl6-rtsp-4h`, `outputs/soak/soak_20260926T035744Z_summary.json` —
+the full 4 h × 4 RTSP run executed on this box (14 404.4 s, graceful stop):
+
+| Item | Value | Source |
+|---|---|---|
+| Completion | **full 4 h 00 m**, clean shutdown, summary written | `duration_s` |
+| Clips | **5021 saved / 0 truncated** — moov guard held for 4 h | `clips` |
+| RSS | mean 771.8 MB, max 1287.4 MB; first-10-min mean 1262.9 → last-10-min 945.2 MB — **no leak** | `rss_mb` |
+| CPU | mean 470.0%, max 737.5% | `cpu_pct` |
+| p95 worst stream | **5024.4 ms — BREACH** (19 951/25 005 scored frames over budget) | `latency` |
+| FPS/stream | mean 0.43; drop 94.6% of 462 526 decoded frames | `frame_drops` |
+| Identity | 687 distinct tracks, **0** ID switches, 1282 wildcard binds (all `bound=True`) | `total_distinct_tracks`, `identity_binds_this_run` |
+| Alerts | 1000 (**query cap reached**), 664 with `worker_id` | `alerts_total` |
+
+Duration stability is demonstrated; latency still breaches the 500 ms
+budget on this same-box worst case (same caveat as the runs above).
+
 ## NOT MEASURED (do not quote)
 
 | Item | Why |
 |---|---|
 | GPU memory per stream | no GPU on this host |
-| 4 h × 4 RTSP soak | longest run is 30 min (RTSP demo, 2026-09-26); the 4 h run is a site task |
+| 4 h × 4 RTSP soak off-host / on GPU | the 4 h run **is** measured on this box (4-hour soak section above: full 14 404 s, 0 truncated, no RSS leak); a 4 h run with feeds from separate hosts and/or on a GPU was not |
 | RTSP server built on ffmpeg alone | ffmpeg 9 on Windows cannot bind an RTSP listen server — the rig publishes through **MediaMTX** instead; client-side DESCRIBE/SETUP/PLAY over TCP **is** measured (30-min 4-cam demo run) |
 | UDP vs TCP latency (load-matched A/B) | one 120 s UDP probe exists (measured above: works, p95 1966.0 ms BREACH) but runs were not load/duration-matched, so no comparative transport number |
 | Accuracy / detection quality | out of scope by task constraint |

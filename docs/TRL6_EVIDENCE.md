@@ -285,6 +285,41 @@ first bind landed (t ≈ 20 s) or on tracks the binder had not yet seen.
 Attribution starts at bind time, per track; there is deliberately no
 back-fill of pre-bind alerts.
 
+**Run C — 4-hour duration stability (`trl6-rtsp-4h`, 14 404 s ≈ 4 h,
+`outputs/soak/soak_20260926T035744Z*`):**
+
+| Metric | Value |
+|---|---|
+| streams | 4 × RTSP (TCP), same rig and sources as Runs A/B |
+| completion | **ran the full 14 404.4 s (4 h 00 m), stopped gracefully, summary written** |
+| distinct tracks / ID switches | **687** (soak-1 190, soak-2 19, soak-3 306, soak-4 172) / **0**; 21 exit-reentry rebinds |
+| alerts | 1000 — **query cap reached** (not a field rate) |
+| alerts with `worker_id` | 664 / 1000 (66.4%) |
+| badge binds (wildcard specs) | **1282 this run**, every one `bound=True` (soak-3 → W-001: 838, soak-4 → W-002: 444; soak-1/soak-2 carry no `--bind` spec by design) |
+| clips saved / truncated | **5021 / 0** — moov guard held for 4 h |
+| p95 worst stream | **5024.4 ms — BREACH** (soak-3; per-stream p95 3504.6 / 3790.5 / 4696.7 / 5024.4; 19 951 / 25 005 scored frames over the 500 ms budget) |
+| FPS/stream (mean) | 0.43 (max 2.0); drop 94.6% of 462 526 decoded frames |
+| CPU | mean 470.0%, max 737.5% |
+| RSS | mean 771.8 MB, **max 1287.4 MB — first 10 min 1262.9 MB → last 10 min 945.2 MB: no upward drift (no leak over 4 h)** |
+| persons ≥2 (all cams) | **35 / 47** five-minute snapshot times (`--persons-every 300`; 83 per-camera rows) |
+| persons ≥2 (same camera) | **22 / 47** snapshot times (23 camera-rows with ≥2 persons) |
+| supervisor overrides | 0 |
+
+What this run was for: **duration stability**, and it delivered that —
+the process ran the full 4 h with no crash or restart, every one of the
+5021 clips passed the moov guard (0 truncated), RSS did not drift upward
+(last-10-min mean is below the warm-up peak), and identity stayed
+continuous (0 ID switches across 687 tracks, 1282 successful wildcard
+binds). The latency number is **not** a pass: p95 5024.4 ms breaches the
+budget on all four streams in this 4-stream same-box worst case, exactly
+as Runs A/B did — this run adds duration, not a different performance
+regime. The 66.4% attribution rate is below Run B's 91% partly because
+only soak-3/soak-4 were given `--bind` specs here (alerts on soak-1/soak-2
+can never carry a `worker_id` in this run) plus the usual pre-bind gap
+(no back-fill). Environment noise unchanged and expected: tracker
+`builtin-iou` (ByteTrack unimportable in this build, see Scope notes) and
+Postgres unavailable → file mode.
+
 **Spot-check sheet — DRAFT, pending human approval:**
 `outputs/tri6_demo/spotcheck/alerts_spotcheck.csv` + `*.jpg` (12 rows, 3 per
 camera, one pre-alert frame each; produced by `scripts/spotcheck_draft.py`
@@ -319,7 +354,7 @@ transport performance claim** is made in either direction.
 
 **Same-box caveat — read with every p95/FPS row above:** four ffmpeg
 publishers, MediaMTX and 4-stream pose inference share these 8 CPUs
-(CPU mean 531–544%, max 703%). These numbers are a **worst case for
+(CPU mean 470–544%, max 738%). These numbers are a **worst case for
 same-host rigs**, not a field deployment where feeds arrive over the
 network from separate hosts.
 
@@ -408,7 +443,7 @@ YOLO_MODEL=yolov8n-pose.pt YOLO_IMGSZ=320 \
 | GPU memory / utilisation | no GPU on this host |
 | 10 FPS per feed | frames are processed at whatever rate the pipeline sustains; measured rate reported instead |
 | 8 workers per feed | available footage is single-worker clips, so 8 real tracks per feed cannot be produced |
-| 4-hour continuous run | longest run here is 30 min (RTSP demo); the harness supports `--seconds 14400` but the full run was not executed |
+| 4-hour continuous run | measured 2026-09-26 (Run C above): full 14 404.4 s, 5021 clips / 0 truncated, no RSS leak, 0 ID switches. What remains unmeasured is a 4 h run with feeds arriving over the network from separate hosts and/or on a GPU |
 | ByteTrack-specific counters | ByteTrack cannot be imported in this ultralytics build |
 | Real badge/QR hardware | demo binds go through the same registry call the REST endpoint uses, executed in-process by the harness — no physical scanner was exercised |
 | Backend-engine accuracy | out of scope for this pack; the pre-existing Safe Claims 87.6% is the only human-ground-truth number for that engine. Cloud-engine accuracy IS measured above. |
@@ -429,7 +464,7 @@ YOLO_MODEL=yolov8n-pose.pt YOLO_IMGSZ=320 \
 | Clip under load (224 clips) | `recordings/clips/soak-*/` |
 | Soak summaries | `outputs/soak/*_summary.json` |
 | RTSP demo rig (4 cams) | `scripts/rtsp_trial_pubs.py` (MediaMTX + publishers) |
-| RTSP demo runs A/B | `outputs/soak/soak_20260926T021815Z_summary.json`, `soak_20260926T025639Z_summary.json` |
+| RTSP demo runs A/B/C | `outputs/soak/soak_20260926T021815Z_summary.json`, `soak_20260926T025639Z_summary.json`, `soak_20260926T035744Z_summary.json` |
 | UDP transport probe | `outputs/soak/soak_20260926T034839Z_summary.json` (label `trl6-rtsp-udp`) + ingest cmdlines `outputs/tri6_demo/ffmpeg_cmdlines.txt` |
 | Badge binds in demo (jsonl `type=bind`) | same two jsonl files; audit trail `outputs/audit/identity_audit.jsonl` |
 | persons ≥2 snapshots (`type=persons`) | `outputs/soak/soak_20260926T021815Z.jsonl` (28/30 times) |

@@ -24,9 +24,11 @@ Factory IP Cameras (RTSP) → FFmpeg Ingestion → YOLOv8-pose → ByteTrack →
 
 | Tier | Cameras | Price |
 |------|---------|-------|
-| Starter | 1-3 | $99/camera/month |
-| Professional | 4-10 | $79/camera/month |
-| Enterprise | 10+ | $59/camera/month |
+| On-Premise Starter | up to 4 (USB/webcam) | Free |
+| Cloud Professional | up to 20 (RTSP/IP) | $299/month per 10 cameras ($239 annual) |
+| Enterprise | 50+ | Custom |
+
+Canonical pricing source: `ui_posture/src/pages/PricingPage.tsx`.
 
 ## Quick Start
 

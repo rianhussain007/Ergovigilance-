@@ -37,7 +37,7 @@ ErgoVigilance uses **AI-powered computer vision** to monitor worker posture in r
 | Tier | Price | Cameras | Best For |
 |------|-------|---------|----------|
 | **On-Premise Starter** | Free | 4 | Small facilities, self-hosted |
-| **Cloud Professional** | $299/mo | 20 | Medium factories, zero hardware |
+| **Cloud Professional** | $299/mo per 10 cams | Up to 20 | Medium factories, zero hardware |
 | **Enterprise** | Custom | 50+ | Large manufacturers, multi-site |
 
 ## 🏭 Target Customers

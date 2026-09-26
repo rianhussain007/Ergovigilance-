@@ -239,9 +239,11 @@ python scripts/report_dataset_health.py
 | Tier | Price | Includes |
 |------|-------|----------|
 | **Pilot** | Free (14 days) | 1 camera, 5 workers |
-| **Starter** | $299/mo | 3 cameras, 20 workers |
-| **Professional** | $799/mo | 10 cameras, 100 workers |
-| **Enterprise** | Custom | Unlimited + API + support |
+| **On-Premise Starter** | Free | Up to 4 USB/webcam feeds, self-hosted |
+| **Cloud Professional** | $299/mo per 10 cameras ($239 annual) | Up to 20 RTSP/IP cameras |
+| **Enterprise** | Custom | 50+ cameras, multi-site, SLA |
+
+Canonical source: `ui_posture/src/pages/PricingPage.tsx`.
 
 ---
 

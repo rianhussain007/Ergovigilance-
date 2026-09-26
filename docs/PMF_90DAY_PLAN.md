@@ -32,7 +32,10 @@ with other AIs for critique (see the shared-review block at the end).
 - PMF 2 vs 4: irrelevant — meaningless until market observation exists.
 - $50k funding (no vs conditional yes): don't raise (see #8 above).
 - Pricing (Claude $300–600/camera/mo ≈ Grok $4–12k/site/yr): compatible; firm up
-  only after pilot #1.
+  only after pilot #1. Current canonical price list is Starter Free /
+  Cloud $299/mo per 10 cameras ($239 annual) / Enterprise custom —
+  `ui_posture/src/pages/PricingPage.tsx`; the ranges above are third-party
+  opinions, not our prices.
 
 ---
 
