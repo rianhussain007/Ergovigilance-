@@ -25,6 +25,7 @@ export default function CloudOnboardingPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [cameraForm, setCameraForm] = useState({ id: '', name: '', url: '' });
   const [cameraTestResult, setCameraTestResult] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
+  const [cameraTestDetail, setCameraTestDetail] = useState('');
   const [copied, setCopied] = useState(false);
   const [apiKey, setApiKey] = useState('');
 
@@ -40,17 +41,36 @@ export default function CloudOnboardingPage() {
   };
 
   const handleTestCamera = async () => {
+    // True probe of the camera URL (POST /cameras/probe persists nothing).
+    // The old check only verified the cloud core was up — a passing test
+    // with a dead camera URL was the "dummy" behavior.
     if (!cameraForm.url) return;
     setCameraTestResult('testing');
+    setCameraTestDetail('');
     try {
-      const res = await fetch('/cloud-api/cloud/health');
-      if (res.ok) {
+      const res = await fetch('/cloud-api/cloud/cameras/probe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: cameraForm.url }),
+      });
+      if (!res.ok) {
+        setCameraTestResult('error');
+        setCameraTestDetail('Probe request failed. Is the cloud core running?');
+        return;
+      }
+      const data = await res.json();
+      if (data.reachable) {
         setCameraTestResult('success');
+        setCameraTestDetail(
+          typeof data.latency_ms === 'number' ? `Opened in ${data.latency_ms} ms.` : ''
+        );
       } else {
         setCameraTestResult('error');
+        setCameraTestDetail(data.detail || 'Unreachable. Check the RTSP URL and network.');
       }
     } catch {
       setCameraTestResult('error');
+      setCameraTestDetail('Cloud core unreachable. Is the service running?');
     }
   };
 
@@ -272,7 +292,7 @@ export default function CloudOnboardingPage() {
                   <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-4">
                     <div className="flex items-center gap-2">
                       <CheckCircle className="w-4 h-4 text-green-400" />
-                      <p className="text-sm text-green-300">Camera connected successfully! Frames are being processed.</p>
+                      <p className="text-sm text-green-300">Camera stream opened successfully!{cameraTestDetail ? ` ${cameraTestDetail}` : ''}</p>
                     </div>
                   </div>
                 )}
@@ -283,7 +303,7 @@ export default function CloudOnboardingPage() {
                       <div>
                         <p className="text-sm text-red-300 font-bold">Connection failed</p>
                         <p className="text-xs text-red-200/70 mt-1">
-                          Check: RTSP URL format, camera credentials, network connectivity, and firewall rules.
+                          {cameraTestDetail || 'Check: RTSP URL format, camera credentials, network connectivity, and firewall rules.'}
                         </p>
                       </div>
                     </div>

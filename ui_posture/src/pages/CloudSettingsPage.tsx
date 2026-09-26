@@ -82,6 +82,7 @@ export default function CloudSettingsPage() {
     testMessage: '',
   });
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [cameraCount, setCameraCount] = useState(0);
 
   const fetchHealth = useCallback(async () => {
@@ -123,11 +124,35 @@ export default function CloudSettingsPage() {
     return () => clearInterval(interval);
   }, [fetchHealth, fetchCameras]);
 
-  const handleSave = () => {
-    // In production, this would POST to a settings endpoint
-    // For now, show confirmation
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+  const handleSave = async () => {
+    // Persisted to the cloud core (config/cloud_settings.json); every knob
+    // needs a service restart — the confirmation says so explicitly.
+    setSaveError('');
+    try {
+      const res = await fetch('/cloud-api/cloud/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          YOLO_MODEL: settings.yoloModel,
+          YOLO_DEVICE: settings.yoloDevice,
+          YOLO_CONFIDENCE: settings.yoloConfidence,
+          INFERENCE_FPS: settings.inferenceFps,
+          RTSP_TRANSPORT: settings.rtspTransport,
+          RTSP_TIMEOUT: settings.rtspTimeout,
+          RTSP_RECONNECT_DELAY: settings.rtspReconnectDelay,
+          SESSION_IDLE_TIMEOUT: settings.sessionIdleTimeout,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: 'Save failed' }));
+        setSaveError(err.detail || 'Save failed. Is the cloud core running?');
+        return;
+      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 5000);
+    } catch {
+      setSaveError('Cloud core unreachable — settings not saved.');
+    }
   };
 
   const handleTestConnection = async () => {
@@ -197,9 +222,12 @@ export default function CloudSettingsPage() {
           className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors"
         >
           <Save className="w-4 h-4" />
-          {saved ? 'Saved!' : 'Save Settings'}
+          {saved ? 'Saved — restart core to apply' : 'Save Settings'}
         </button>
       </div>
+      {saveError && (
+        <p className="mt-2 text-sm text-red-400">{saveError}</p>
+      )}
 
       {/* Health Status */}
       <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-5">
@@ -414,10 +442,10 @@ export default function CloudSettingsPage() {
             {/* Info box */}
             <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 flex gap-2 text-sm text-blue-300">
               <Info className="w-4 h-4 mt-0.5 shrink-0" />
-              <span>
-                <strong>{cameraCount}</strong> camera{cameraCount !== 1 ? 's' : ''} configured.
-                Each RTSP stream consumes ~100-500 MB/s of network bandwidth depending on resolution.
-              </span>
+                <span>
+                  <strong>{cameraCount}</strong> camera{cameraCount !== 1 ? 's' : ''} configured.
+                  Each RTSP stream consumes ~2-8 Mbps of network bandwidth depending on resolution.
+                </span>
             </div>
           </div>
         </div>
@@ -505,9 +533,8 @@ export default function CloudSettingsPage() {
           <div className="space-y-2">
             <h3 className="font-medium text-white">Hardware Requirements</h3>
             <ul className="space-y-1 text-slate-400">
-              <li>• <strong>CPU-only:</strong> 4+ cores, ~20 cameras at 10 FPS</li>
-              <li>• <strong>NVIDIA T4:</strong> 20-40 cameras at 10 FPS</li>
-              <li>• <strong>NVIDIA A10:</strong> 50-100 cameras at 10 FPS</li>
+              <li>• <strong>CPU-only:</strong> 4+ cores to start; validate camera count on your hardware (unmeasured)</li>
+              <li>• <strong>NVIDIA T4 / A10:</strong> GPU helps, but no GPU capacity numbers have been measured — pilot your stream count first</li>
               <li>• <strong>RAM:</strong> 2 GB base + 200 MB per active camera</li>
             </ul>
           </div>

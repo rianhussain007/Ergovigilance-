@@ -5,7 +5,7 @@ import {
   Building2, Loader2, Wifi, Eye, ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '@/src/auth/AuthContext';
-import { apiFetch } from '@/src/services/apiClient';
+import { apiFetch, friendlyHttpError } from '@/src/services/apiClient';
 import Logo from '../components/common/Logo';
 
 /* ── Step definitions ──────────────────────────────────────────── */
@@ -44,7 +44,7 @@ export default function OnboardingChecklistPage() {
   // Results
   const [cameraResult, setCameraResult] = useState<string | null>(null);
   const [workerResult, setWorkerResult] = useState<string | null>(null);
-  const [sessionResult, setSessionResult] = useState<{ id: string; risk: string } | null>(null);
+  const [sessionResult, setSessionResult] = useState<{ id: string; status: string } | null>(null);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -58,13 +58,30 @@ export default function OnboardingChecklistPage() {
   /* ── Step handlers ─────────────────────────────────────────── */
 
   const handleCreateCamera = async () => {
+    // Webcam needs no setup; an RTSP URL is really registered with the
+    // cloud core. Failures stay on this step with the reason — the old
+    // code advanced with a "ready" label having created nothing.
     setLoading(true); setError(null);
     try {
-      // Just mark camera as configured — actual camera is optional for demo
-      setCameraResult(cameraUrl === 'webcam' ? 'Webcam ready' : cameraUrl);
+      if (cameraUrl === 'webcam') {
+        setCameraResult('Webcam selected — no setup needed');
+      } else {
+        const name = cameraName.trim() || 'Main Station';
+        const id = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'station-1';
+        const res = await apiFetch('/cloud-api/cloud/cameras', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, name, url: cameraUrl }),
+        });
+        if (!res.ok) {
+          setError(`Could not add the camera (${friendlyHttpError(res.status, 'Camera setup')}). Fix the URL or skip setup above and add it later from Cloud Cameras.`);
+          return;
+        }
+        setCameraResult(`${name} connected`);
+      }
       setStep(2);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed');
+      setError('Network error — is the cloud core running? See docs/DEV_START.md, or skip setup above.');
     } finally { setLoading(false); }
   };
 
@@ -73,7 +90,7 @@ export default function OnboardingChecklistPage() {
     setLoading(true); setError(null);
     try {
       const empId = workerId.trim() || `EMP-${Date.now().toString(36).slice(-4).toUpperCase()}`;
-      await apiFetch('/api/workers', {
+      const res = await apiFetch('/api/workers', {
         method: 'POST',
         body: JSON.stringify({
           employee_id: empId,
@@ -82,27 +99,45 @@ export default function OnboardingChecklistPage() {
           shift: 'Day',
         }),
       });
+      if (!res.ok) {
+        setError(`${friendlyHttpError(res.status, 'Worker setup')} You can also skip setup above and add workers later.`);
+        return;
+      }
       setWorkerResult(`${workerName.trim()} (${empId})`);
       setStep(3);
     } catch (e) {
-      // Non-fatal — user can skip
-      setWorkerResult(`${workerName.trim()} (skipped — add later)`);
-      setStep(3);
+      // Network failure (backend down) — stay with guidance, not a fake skip.
+      setError('Network error — is the backend running? See docs/DEV_START.md, or skip setup above.');
     } finally { setLoading(false); }
   };
 
   const handleStartTestSession = async () => {
+    // The old endpoint path (/api/sessions/start, plural) never existed —
+    // every call 404'd and the wizard showed a fabricated LOW result.
+    // Real endpoint, real response, honest failure that stays on-step.
     setLoading(true); setError(null);
     try {
-      const res = await apiFetch('/api/sessions/start', { method: 'POST' });
-      if (!res.ok) throw new Error('Session start failed');
+      const body: Record<string, unknown> = {};
+      if (cameraUrl !== 'webcam') body.camera_id = cameraUrl;
+      if (workerId.trim()) body.worker_id = workerId.trim();
+      const res = await apiFetch('/api/session/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        if (res.status === 503) {
+          setError('No camera available for a live session — connect a camera first, or continue to the dashboard (Skip setup above).');
+        } else {
+          setError(`${friendlyHttpError(res.status, 'Test session')} You can continue to the dashboard (Skip setup above).`);
+        }
+        return;
+      }
       const data = await res.json();
-      setSessionResult({ id: data.session_id || 'demo', risk: 'LOW' });
+      setSessionResult({ id: data.id || 'unknown', status: data.status || 'started' });
       setStep(4);
     } catch {
-      // If session start fails (e.g., no camera), show demo result
-      setSessionResult({ id: 'demo-session', risk: 'LOW' });
-      setStep(4);
+      setError('Network error — is the backend running? See docs/DEV_START.md, or skip setup above.');
     } finally { setLoading(false); }
   };
 
