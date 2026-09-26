@@ -17,6 +17,8 @@ class RetentionConfigUpdate(BaseModel):
     session_retention_days: int | None = None
     recording_retention_days: int | None = None
     recordings_max_gb: float | None = None
+    audit_log_retention_days: int | None = None
+    alert_retention_days: int | None = None
 
 
 @router.get("/retention/stats")

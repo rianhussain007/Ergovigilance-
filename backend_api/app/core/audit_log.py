@@ -234,9 +234,18 @@ class AuditLogger:
             "file": str(log_file),
         }
 
-    def cleanup_old_logs(self) -> int:
-        """Delete audit logs older than retention period."""
-        cutoff = time.time() - (AUDIT_LOG_RETENTION_DAYS * 86400)
+    def cleanup_old_logs(self, max_age_days: Optional[int] = None) -> int:
+        """Delete rotated audit log files older than the retention period.
+
+        ``max_age_days`` overrides ``AUDIT_LOG_RETENTION_DAYS`` for this call
+        (the retention service passes the admin-tunable policy value).
+        0 — from either source — disables cleanup, matching the platform-wide
+        convention that 0 means "keep everything".
+        """
+        days = AUDIT_LOG_RETENTION_DAYS if max_age_days is None else int(max_age_days)
+        if days <= 0:
+            return 0
+        cutoff = time.time() - (days * 86400)
         deleted = 0
 
         for log_file in self.log_dir.glob("audit_*.jsonl"):

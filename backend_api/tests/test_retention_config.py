@@ -36,6 +36,8 @@ class RetentionConfigOverrideTest(unittest.TestCase):
         self.assertEqual(cfg["session_retention_days"], 30)
         self.assertEqual(cfg["recording_retention_days"], 30)
         self.assertEqual(cfg["recordings_max_gb"], 20)
+        self.assertEqual(cfg["audit_log_retention_days"], 365)
+        self.assertEqual(cfg["alert_retention_days"], 30)
 
     def test_set_persists_and_layers(self):
         with mock.patch("app.services.retention._OVERRIDE_PATH", self._path):
@@ -44,6 +46,8 @@ class RetentionConfigOverrideTest(unittest.TestCase):
             self.assertEqual(merged["session_retention_days"], 60)
             # Unspecified keys keep the current effective value.
             self.assertEqual(merged["recording_retention_days"], 30)
+            self.assertEqual(merged["audit_log_retention_days"], 365)
+            self.assertEqual(merged["alert_retention_days"], 30)
 
             cfg = retention_config()
             self.assertEqual(cfg["session_retention_days"], 60)
@@ -51,11 +55,19 @@ class RetentionConfigOverrideTest(unittest.TestCase):
 
     def test_partial_update_merges_with_existing(self):
         with mock.patch("app.services.retention._OVERRIDE_PATH", self._path):
-            set_retention_config({"session_retention_days": 60, "recordings_max_gb": 10})
+            set_retention_config(
+                {
+                    "session_retention_days": 60,
+                    "recordings_max_gb": 10,
+                    "audit_log_retention_days": 90,
+                }
+            )
             merged, _ = set_retention_config({"session_retention_days": 90})
             self.assertEqual(merged["session_retention_days"], 90)
             self.assertEqual(merged["recordings_max_gb"], 10)
             self.assertEqual(merged["recording_retention_days"], 30)
+            self.assertEqual(merged["audit_log_retention_days"], 90)
+            self.assertEqual(merged["alert_retention_days"], 30)
 
     def test_unwritable_path_reports_not_persisted(self):
         missing_dir = os.path.join(self._tmp.name, "nope", "sub", "retention.json")

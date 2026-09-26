@@ -32,6 +32,7 @@ os.environ["AUTH_DB_PATH"] = str(_TMP / "test_auth.db")
 os.environ["POSE_MODEL_PATH"] = str(_TMP / "missing_pose_model.task")
 os.environ["SESSIONS_DIR"] = str(_TMP / "sessions")
 os.environ["RECORDINGS_DIR"] = str(_TMP / "recordings")
+os.environ["AUDIT_LOG_DIR"] = str(_TMP / "audit_logs")
 os.environ["SESSION_RETENTION_DAYS"] = "0"
 os.environ["RECORDING_RETENTION_DAYS"] = "0"
 os.environ["RECORDINGS_MAX_GB"] = "0"
