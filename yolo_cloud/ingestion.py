@@ -535,6 +535,14 @@ class CloudCameraProcessor:
         if not frames:
             return None
 
+        # Free-space watermark before writing: HIGH-alert clips are the one
+        # path that can flood disk between backend retention passes (C4 guard).
+        try:
+            from yolo_cloud import disk_guard
+            disk_guard.ensure_free_space(os.path.join(settings.RECORDINGS_DIR, "clips"))
+        except Exception as exc:  # noqa: BLE001 - the guard must never block evidence
+            logger.warning("Disk guard unavailable (%s)", exc)
+
         target_dir = os.path.join(settings.RECORDINGS_DIR, "clips", self.camera.id)
         try:
             os.makedirs(target_dir, exist_ok=True)

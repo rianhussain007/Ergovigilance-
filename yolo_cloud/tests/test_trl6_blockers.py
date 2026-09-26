@@ -181,6 +181,23 @@ class TestAlertClips:
         processor = _processor(tmp_path, monkeypatch)
         assert processor._save_clip("ALT-1", 1.0) is None
 
+    def test_save_clip_runs_the_disk_guard_first(self, tmp_path, monkeypatch):
+        """C4: every clip write passes the free-space watermark guard."""
+        from yolo_cloud import disk_guard
+
+        processor = _processor(tmp_path, monkeypatch)
+        calls = []
+        monkeypatch.setattr(
+            disk_guard,
+            "ensure_free_space",
+            lambda root, min_gb=None: calls.append(root) or {"skipped": False},
+        )
+        for shade in range(4):
+            processor._capture_clip_frame(np.full((240, 320, 3), shade, np.uint8))
+
+        assert processor._save_clip("ALT-G", 1.0) is not None
+        assert calls == [os.path.join(str(tmp_path), "clips")]
+
     def test_save_clip_writes_a_real_video_file(self, tmp_path, monkeypatch):
         processor = _processor(tmp_path, monkeypatch)
         for shade in range(8):
