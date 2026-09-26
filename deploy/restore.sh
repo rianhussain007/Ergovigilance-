@@ -13,6 +13,7 @@
 #   ./restore.sh backups/ergovigilance_backup_20260901_120000.tar.gz
 #   ./restore.sh backups/ergovigilance_backup_20260901_120000.tar.gz --db-only
 #   ./restore.sh backups/ergovigilance_backup_20260901_120000.tar.gz --dry-run
+#   ./restore.sh <archive> --yes          # skip the confirmation prompt (CI/drills)
 #
 # WARNING: This will OVERWRITE existing data!
 # ══════════════════════════════════════════════════════════════════
@@ -50,11 +51,13 @@ fi
 BACKUP_FILE="$1"
 DB_ONLY=false
 DRY_RUN=false
+YES=false
 
 for arg in "$@"; do
     case $arg in
         --db-only) DB_ONLY=true ;;
         --dry-run) DRY_RUN=true ;;
+        --yes) YES=true ;;
     esac
 done
 
@@ -109,7 +112,9 @@ if [ "$DRY_RUN" = true ]; then
     exit 0
 fi
 
-# Confirmation
+# Confirmation (--yes bypasses this for automated drills; the interactive
+# prompt stays the default so a typo can never silently overwrite a site).
+if [ "$YES" = false ]; then
 echo ""
 warn "═══════════════════════════════════════════════════════════"
 warn "WARNING: This will OVERWRITE existing data!"
@@ -121,6 +126,7 @@ if [ "$CONFIRM" != "RESTORE" ]; then
     if [ -n "${DECRYPTED_FILE}" ]; then rm -f "${DECRYPTED_FILE}"; fi
     exit 0
 fi
+fi
 
 # ── 1. Restore PostgreSQL Database ──────────────────────────────
 if [ -f "${BACKUP_DIR}/database.dump" ]; then
@@ -131,7 +137,8 @@ if [ -f "${BACKUP_DIR}/database.dump" ]; then
         -U "${DB_USER}" \
         -d "${DB_NAME}" \
         -c \
-        -if "${BACKUP_DIR}/database.dump" 2>/dev/null || {
+        --if-exists \
+        "${BACKUP_DIR}/database.dump" 2>/dev/null || {
             warn "pg_restore had warnings (this is usually OK)"
         }
     log "Database restored"
