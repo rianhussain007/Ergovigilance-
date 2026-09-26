@@ -196,20 +196,39 @@ class LabelHandler(SimpleHTTPRequestHandler):
             data = json.loads(body)
 
             frame_name = data.get("frame_name")
+            subdir = data.get("subdir", "")
+            matched = None
             for frame in self.frames:
-                if frame["frame_name"] == frame_name:
-                    frame["human_task"] = data.get("human_task", "")
-                    frame["human_risk"] = data.get("human_risk", "")
-                    frame["quality"] = data.get("quality", "")
-                    frame["notes"] = data.get("notes", "")
+                if frame["frame_name"] == frame_name and (not subdir or frame.get("subdir") == subdir):
+                    matched = frame
                     break
 
-            save_labels(self.frames, self.labels_path)
+            if matched is None:
+                self.send_response(404)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "error": f"Frame not found: {frame_name}"}).encode())
+                return
 
+            matched["human_task"] = data.get("human_task", "")
+            matched["human_risk"] = data.get("human_risk", "")
+            matched["quality"] = data.get("quality", "")
+            matched["notes"] = data.get("notes", "")
+
+            try:
+                save_labels(self.frames, self.labels_path)
+            except OSError as exc:
+                self.send_response(500)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": False, "error": str(exc)}).encode())
+                return
+
+            labeled = sum(1 for f in self.frames if f.get("human_task"))
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(json.dumps({"ok": True}).encode())
+            self.wfile.write(json.dumps({"ok": True, "labeled": labeled, "total": len(self.frames)}).encode())
         else:
             self.send_error(404)
 
@@ -248,6 +267,8 @@ body {{ font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0;
 .btn-skip:hover {{ background: #64748b; }}
 .saved-toast {{ position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #22c55e; color: #fff; padding: 8px 20px; border-radius: 8px; font-size: 14px; font-weight: 600; opacity: 0; transition: opacity 0.3s; z-index: 999; }}
 .saved-toast.show {{ opacity: 1; }}
+.saved-toast.error {{ background: #ef4444; }}
+.human-badge {{ background: rgba(34,197,94,0.2); color: #22c55e; border: 1px solid rgba(34,197,94,0.4); }}
 .task-grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }}
 .task-btn {{ padding: 10px 8px; border: 2px solid #475569; border-radius: 8px; background: transparent; color: #e2e8f0; font-size: 12px; cursor: pointer; text-align: center; }}
 .task-btn:hover {{ border-color: #38bdf8; }}
@@ -353,6 +374,18 @@ function loadFrame(idx) {{
   document.getElementById('quality').value = frame.quality || '';
   document.getElementById('notes').value = frame.notes || '';
 
+  // Show a visible confirmation when this frame already has a human label
+  let humanBadge = '';
+  if (frame.human_task) {{
+    humanBadge = ' <span class="auto-badge human-badge">Human: ' + frame.human_task + ' / ' + frame.human_risk + '</span>';
+  }}
+  document.getElementById('frame-info').innerHTML =
+    '<strong>' + frame.frame_name + '</strong>' +
+    ' <span class="auto-badge">Auto: ' + frame.auto_task + ' (' + Math.round(frame.confidence) + '%)</span>' +
+    humanBadge +
+    '<br>Video: ' + (frame.video || 'N/A') +
+    ' | Risk: ' + frame.auto_risk;
+
   // Update button states
   document.querySelectorAll('.task-btn').forEach(b => {{
     b.classList.toggle('selected', b.textContent === selectedTask);
@@ -387,27 +420,60 @@ async function saveAndNext() {{
   if (!selectedRisk) {{ alert('Select a risk level'); return; }}
 
   const frame = frames[currentIdx];
-  await fetch('/api/label', {{
-    method: 'POST',
-    headers: {{ 'Content-Type': 'application/json' }},
-    body: JSON.stringify({{
-      frame_name: frame.frame_name,
-      human_task: selectedTask,
-      human_risk: selectedRisk,
-      quality: document.getElementById('quality').value,
-      notes: document.getElementById('notes').value,
-    }})
-  }});
+  let res;
+  try {{
+    res = await fetch('/api/label', {{
+      method: 'POST',
+      headers: {{ 'Content-Type': 'application/json' }},
+      body: JSON.stringify({{
+        frame_name: frame.frame_name,
+        subdir: frame.subdir,
+        human_task: selectedTask,
+        human_risk: selectedRisk,
+        quality: document.getElementById('quality').value,
+        notes: document.getElementById('notes').value,
+      }})
+    }});
+  }} catch (err) {{
+    showToast('Save failed — server unreachable', true);
+    return;
+  }}
+
+  if (!res.ok) {{
+    let msg = 'Save failed (' + res.status + ')';
+    try {{ const j = await res.json(); if (j.error) msg = 'Save failed: ' + j.error; }} catch (e) {{}}
+    showToast(msg, true);
+    return;
+  }}
 
   frame.human_task = selectedTask;
   frame.human_risk = selectedRisk;
+  frame.quality = document.getElementById('quality').value;
+  frame.notes = document.getElementById('notes').value;
 
-  // Show saved toast
-  const toast = document.getElementById('toast');
-  toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 1500);
+  showToast('✓ Saved!');
+
+  // Refresh the header counter so progress is visible immediately
+  refreshStats();
 
   loadFrame(currentIdx + 1);
+}}
+
+function showToast(msg, isError) {{
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.toggle('error', !!isError);
+  toast.classList.add('show');
+  setTimeout(() => toast.classList.remove('show'), 2000);
+}}
+
+async function refreshStats() {{
+  try {{
+    const res = await fetch('/api/stats');
+    const stats = await res.json();
+    document.getElementById('stats').textContent =
+      stats.labeled + '/' + stats.total + ' labeled (' + Math.round(stats.labeled/stats.total*100) + '%)';
+  }} catch (e) {{}}
 }}
 
 function skipFrame() {{
