@@ -25,6 +25,14 @@ class CloudSettings:
     # in docs/SIZING_SOAK_CLOUD.md.
     YOLO_IMGSZ: int = int(os.getenv("YOLO_IMGSZ", "640"))
     INFERENCE_FPS: float = float(os.getenv("INFERENCE_FPS", "10"))
+    # Frame-skip: the processing loop scores only every Nth frame it pulls
+    # (1 = score every frame — the default, behavior unchanged). The skipped
+    # frames are consumed so the next scored frame is fresh, but never scored,
+    # clipped, or counted in latency — every reported rate stays a
+    # SCORED-frame rate. Cost: every window measured in frames (task smoothing,
+    # tracker hits, dwell) stretches in wall time, so time-to-alert grows as N.
+    # Measured trade-off: docs/DEPLOYMENT_TOPOLOGY.md.
+    YOLO_SCORE_EVERY: int = max(1, int(os.getenv("YOLO_SCORE_EVERY", "1")))
 
     # Trained ML models (risk + task classifiers for COCO_17 features)
     YOLO_RISK_MODEL: str = os.getenv(

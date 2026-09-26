@@ -292,6 +292,9 @@ class CloudCameraProcessor:
         self._last_alert_time: dict[int, float] = {}  # track_id -> timestamp
         self._alert_counter = 0
         self._frame_counter = 0
+        # Frame-skip accounting (YOLO_SCORE_EVERY): frames pulled vs scored.
+        self._pull_counter = 0
+        self._frames_skipped = 0
         self._idle_start: Optional[float] = None
         self._identity = get_identity_registry()
         # Latest state for API consumption
@@ -330,6 +333,8 @@ class CloudCameraProcessor:
         )
         self._running = True
         self._frame_counter = 0
+        self._pull_counter = 0
+        self._frames_skipped = 0
         self._idle_start = None
         self._thread = threading.Thread(
             target=self._process_loop,
@@ -384,6 +389,16 @@ class CloudCameraProcessor:
                 continue
 
             self._idle_start = None  # Got a frame — not idle
+
+            # Frame-skip knob (YOLO_SCORE_EVERY, default 1 = score every
+            # frame): frames between scores are pulled — that is what keeps the
+            # next scored frame fresh against the single-slot buffer — but not
+            # scored, not captured into the clip buffer, and not counted in
+            # latency. Clip cadence therefore stays equal to score cadence, as
+            # it is today when every pull is scored.
+            if not self._should_score():
+                self._frames_skipped += 1
+                continue
 
             self._capture_clip_frame(frame)
 
@@ -616,6 +631,17 @@ class CloudCameraProcessor:
         logger.info("Clip saved for alert %s: %s (%d frames)", alert_id, path, written)
         return entry
 
+    def _should_score(self) -> bool:
+        """True when this pulled frame is due to be scored (frame-skip knob).
+
+        Counts every pulled frame and scores every ``YOLO_SCORE_EVERY``-th,
+        starting with the first pull, so a session always begins with a scored
+        frame. Values < 1 are clamped to 1 (score everything).
+        """
+        self._pull_counter += 1
+        every = max(1, int(getattr(settings, "YOLO_SCORE_EVERY", 1) or 1))
+        return (self._pull_counter - 1) % every == 0
+
     def metrics_snapshot(self) -> dict:
         """Processing metrics for QA / soak reporting.
 
@@ -628,7 +654,10 @@ class CloudCameraProcessor:
         """
         decoded = int(getattr(self.camera, "frame_count", 0) or 0)
         processed = int(self._frame_counter)
-        dropped = max(0, decoded - processed)
+        skipped = int(self._frames_skipped)
+        # Frames intentionally skipped by YOLO_SCORE_EVERY are NOT decoder
+        # drops — subtract them so the knob never reads as frame loss.
+        dropped = max(0, decoded - processed - skipped)
         over_budget = sum(1 for v in self.latency_ms if v > LATENCY_BUDGET_MS)
         return {
             "camera_id": self.camera.id,
@@ -644,6 +673,8 @@ class CloudCameraProcessor:
             "latency_over_budget_frames": over_budget,
             "fps": round(float(getattr(self.camera, "fps", 0.0) or 0.0), 2),
             "frames_scored": processed,
+            "score_every": max(1, int(getattr(settings, "YOLO_SCORE_EVERY", 1) or 1)),
+            "frames_skipped": int(self._frames_skipped),
             "clips_saved": len(self.clips),
             "clips_truncated": self._clips_truncated,
         }

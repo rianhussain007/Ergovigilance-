@@ -173,6 +173,45 @@ class TestEngineTrackingAudit:
         assert audit["per_hour"]["new_tracks"] == 0.0  # no divide-by-zero
 
 
+class TestFrameSkipKnob:
+    """YOLO_SCORE_EVERY: score every Nth pulled frame, default every frame."""
+
+    def test_default_scores_every_pulled_frame(self):
+        processor = _processor()
+        assert [processor._should_score() for _ in range(4)] == [True] * 4
+        assert processor.metrics_snapshot()["score_every"] == 1
+        assert processor.metrics_snapshot()["frames_skipped"] == 0
+
+    def test_score_every_two_scores_half_the_frames(self, monkeypatch):
+        from yolo_cloud.config import settings
+
+        monkeypatch.setattr(settings, "YOLO_SCORE_EVERY", 2)
+        processor = _processor()
+        # The FIRST pull is scored — a session never starts with a skip — then
+        # every 2nd frame after it.
+        assert [processor._should_score() for _ in range(4)] == [True, False, True, False]
+        assert processor.metrics_snapshot()["score_every"] == 2
+
+    def test_values_below_one_clamp_to_scoring_everything(self, monkeypatch):
+        from yolo_cloud.config import settings
+
+        monkeypatch.setattr(settings, "YOLO_SCORE_EVERY", 0)
+        processor = _processor()
+        assert [processor._should_score() for _ in range(3)] == [True, True, True]
+        assert processor.metrics_snapshot()["score_every"] == 1
+
+    def test_skipped_frames_never_read_as_decoder_drops(self):
+        # 100 decoded, 60 scored, 30 intentionally skipped -> only 10 were
+        # actually lost to the single-slot buffer.
+        processor = _processor()
+        processor.camera.frame_count = 100
+        processor._frame_counter = 60
+        processor._frames_skipped = 30
+        snapshot = processor.metrics_snapshot()
+        assert snapshot["dropped_frames"] == 10
+        assert snapshot["frames_skipped"] == 30
+
+
 class TestProcessingMetricsService:
     def test_service_reports_one_entry_per_camera(self):
         from yolo_cloud.ingestion import CloudIngestionService

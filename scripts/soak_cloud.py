@@ -45,7 +45,7 @@ from yolo_cloud.ingestion import LATENCY_BUDGET_MS, get_cloud_service  # noqa: E
 from yolo_cloud.pose_engine import get_pose_engine  # noqa: E402
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Cloud core soak / sizing harness")
     p.add_argument("--streams", type=int, default=4, help="number of camera streams")
     p.add_argument("--seconds", type=int, default=60, help="soak duration (seconds)")
@@ -53,24 +53,34 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--video", default="data/datasets/diverse_training/huggingface/"
                                       "cardboard_manipulation_station01_worker041.mp4",
                    help="local video used as the frame source in compute mode")
+    p.add_argument("--videos", nargs="*", default=None,
+                   help="one file per stream in compute mode (overrides --video/"
+                        "--streams; stream count = len(videos)) — the TRL-6 "
+                        "4-different-sources run uses this")
     p.add_argument("--urls", nargs="*", default=[], help="real RTSP URLs (enables RTSP mode)")
     p.add_argument("--out", default=os.path.join("outputs", "soak"))
     p.add_argument("--label", default="calibration",
                    help="label recorded in the summary (e.g. calibration, 4h)")
     p.add_argument("--target-fps", type=float, default=10.0,
                    help="per-feed FPS the run is being compared against")
-    return p.parse_args()
+    return p.parse_args(argv)
 
 
 class VideoFeeder:
-    """Loops a local video, one decode position per camera."""
+    """Loops local videos — one decode position per camera.
 
-    def __init__(self, path: str, count: int):
-        self.path = path
-        self.caps = [cv2.VideoCapture(path) for _ in range(count)]
-        self.locks = [__import__("threading").Lock() for _ in range(count)]
-        if not self.caps[0].isOpened():
-            raise RuntimeError(f"cannot open video: {path}")
+    ``paths`` is one file per camera (different content per stream, the TRL-6
+    relevant-environment shape). The legacy single-file fan-out is expressed as
+    ``[path] * count`` at the call site.
+    """
+
+    def __init__(self, paths: list[str]):
+        self.paths = list(paths)
+        self.caps = [cv2.VideoCapture(p) for p in self.paths]
+        self.locks = [__import__("threading").Lock() for _ in self.paths]
+        for path, cap in zip(self.paths, self.caps):
+            if not cap.isOpened():
+                raise RuntimeError(f"cannot open video: {path}")
 
     def frame(self, idx: int):
         cap, lock = self.caps[idx], self.locks[idx]
@@ -90,7 +100,13 @@ def main() -> int:
     summary_path = os.path.join(args.out, f"soak_{stamp}_summary.json")
 
     mode = "rtsp" if args.urls else "compute"
-    stream_count = len(args.urls) if args.urls else args.streams
+    if mode == "rtsp":
+        sources = list(args.urls)
+    elif args.videos:
+        sources = list(args.videos)
+    else:
+        sources = [args.video] * args.streams
+    stream_count = len(sources)
 
     engine = get_pose_engine()
     engine.initialize()
@@ -104,7 +120,7 @@ def main() -> int:
         from yolo_cloud.rtsp_manager import RTSPStream, get_rtsp_manager
 
         RTSPStream.start = lambda self: None  # no ffmpeg in compute mode
-        feeders = VideoFeeder(args.video, stream_count)
+        feeders = VideoFeeder(sources)
         manager = get_rtsp_manager()
         manager.get_frame = lambda cid: feeders.frame(int(cid.split("-")[-1]) - 1)
         for i in range(1, stream_count + 1):
@@ -114,7 +130,7 @@ def main() -> int:
     proc.cpu_percent(None)  # prime the counter
 
     print(f"mode={mode} streams={stream_count} duration={args.seconds}s interval={args.interval}s")
-    print(f"source={args.urls or args.video}")
+    print(f"source={sources}")
     print(f"backend={'bytetrack' if engine._bytetrack_cls else 'builtin-iou'} device=device(unset)")
 
     seen_ids: dict[str, set[int]] = {}
@@ -251,7 +267,7 @@ def main() -> int:
         "started_utc": stamp,
         "duration_s": round(time.time() - started, 1),
         "streams": stream_count,
-        "source": args.urls or args.video,
+        "source": sources,
         "tracker_backend": "bytetrack" if engine._bytetrack_cls else "builtin-iou",
         "fps_per_stream": {
             "min": round(min(fps_samples), 2) if fps_samples else 0,
@@ -333,6 +349,19 @@ def main() -> int:
                 for m in stream_metrics
             },
         },
+        "frame_skip": {
+            # YOLO_SCORE_EVERY: score every Nth pulled frame. Recorded so the
+            # artifact itself proves the knob's setting — a label alone is
+            # user-typed text and cannot.
+            "score_every": max(
+                (m.get("score_every", 1) for m in stream_metrics), default=1
+            ),
+            "frames_skipped_total": sum(
+                m.get("frames_skipped", 0) for m in stream_metrics
+            ),
+            "note": "latency, FPS and drop rates cover SCORED frames only; "
+                   "skipped frames are pulled then dropped by design",
+        },
         "tracking_audit": tracking,
         "spec_comparison": {
             "spec": "4 feeds x 8 workers x 10 FPS, p95 < 500 ms, continuous 4 h",
@@ -407,6 +436,11 @@ def main() -> int:
             f"          {sc['fps_shortfall_factor']}x shortfall vs the "
             f"{sc['target_fps_per_stream']} FPS target is NOT a spec number at "
             f"{sc['measured_streams']} streams — capacity probe only"
+        )
+    if summary["frame_skip"]["score_every"] > 1:
+        print(
+            f"          frame-skip: scored every {summary['frame_skip']['score_every']} pulled "
+            f"frame(s) -> {summary['frame_skip']['frames_skipped_total']} skipped total"
         )
     if summary["frame_drops"]["applicable"]:
         print(

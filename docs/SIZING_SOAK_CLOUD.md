@@ -143,6 +143,25 @@ streams is sharp (114.5 → 946.0 ms), so do not quote "2–3". At defaults even
 point fails under every configuration measured, including this one — the
 spec's 4 feeds × 8 workers × 10 FPS still needs the GPU box (NOT MEASURED).
 
+### Frame-skip probe — score every 2nd frame (4 streams, n/320, 60 s)
+
+`YOLO_SCORE_EVERY=2` (knob added in `yolo_cloud/config.py`, default 1 = unchanged;
+skipped frames are pulled, never scored/clipped/counted in latency) vs a
+same-session `every=1` control, compute mode:
+
+| Run label | score_every | p95 worst stream | vs 500 ms | over-budget | FPS/stream | CPU mean | Source |
+|---|---|---|---|---|---|---|---|
+| `frame-skip-4stream-n320-every2` | 2 | **1440.2 ms** | BREACH | 147/275 | 1.14 | 413.2% | `soak_20260926T015529Z_summary.json` |
+| `control-4stream-n320-every1` | 1 | **1420.6 ms** | BREACH | 164/326 | 1.36 | 517.1% | `soak_20260926T015729Z_summary.json` |
+
+**Frame-skip does not buy the budget** — the runs are 1.4% apart; the pipeline is
+score-gated (it already drops frames at the single-slot buffer when inference falls
+behind, so skipping pulls creates no capacity), and every frame-count window (10-frame
+dwell, task window, tracker hits) would take 2× wall time at half the scoring rate,
+doubling time-to-alert. Both runs also sit ~1.6× above the previous day's 896.8 ms
+same-config run — further evidence of the run-to-run variance noted above. Full
+verdict and the 4-camera options: `docs/DEPLOYMENT_TOPOLOGY.md`.
+
 ## Where the CPU goes (one-time profile)
 
 `cProfile` over a 30 s default-config run (`outputs/soak/profile_s640.prof`,

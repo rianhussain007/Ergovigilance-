@@ -126,3 +126,6 @@ local_auth.db
 ops/keep_alive.py
 ops/start_services.bat
 node_modules/
+
+# Local RTSP test rig (binaries + auto-generated TLS keys)
+tools/mediamtx/
