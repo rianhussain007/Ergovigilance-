@@ -21,6 +21,7 @@ import logging
 import os
 import threading
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterator
 
 logger = logging.getLogger(__name__)
@@ -386,6 +387,56 @@ def reset_connection() -> None:
                 pass
             _conn = None
         _conn_error_at = 0.0
+
+
+def prune_telemetry(max_age_days: int) -> dict:
+    """Delete telemetry rows older than ``max_age_days`` (P0-6, 0 disables).
+
+    Deletes per-frame timeline rows first (they outnumber summaries ~100:1
+    and reference a session_id rather than a foreign key), then the session
+    summary rows themselves. Timestamps are parsed by Postgres, so
+    unparseable values can never match — retention never guesses.
+
+    Returns a stats dict; never raises (a broken DB means nothing to prune,
+    and file mode is the fallback anyway).
+    """
+    if max_age_days <= 0:
+        return {"skipped": True, "deleted_frames": 0, "deleted_sessions": 0}
+    conn = get_connection()
+    if conn is None:
+        return {"skipped": True, "reason": "pg_unavailable", "deleted_frames": 0, "deleted_sessions": 0}
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "DELETE FROM ergo_session_frames WHERE sample_time < %s",
+                (cutoff,),
+            )
+            deleted_frames = cur.rowcount
+            cur.execute(
+                "DELETE FROM ergo_sessions WHERE created_at < %s",
+                (cutoff,),
+            )
+            deleted_sessions = cur.rowcount
+        conn.commit()
+        if deleted_frames or deleted_sessions:
+            logger.info(
+                "Postgres telemetry pruning: %d frame rows, %d session rows "
+                "older than %d days",
+                deleted_frames, deleted_sessions, max_age_days,
+            )
+        return {
+            "skipped": False,
+            "deleted_frames": deleted_frames,
+            "deleted_sessions": deleted_sessions,
+        }
+    except Exception as exc:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        logger.warning("Postgres telemetry pruning failed: %s", exc)
+        return {"skipped": False, "error": str(exc), "deleted_frames": 0, "deleted_sessions": 0}
 
 
 def iter_timeline_files(project_root: str) -> Iterator[tuple[dict, list[dict]]]:

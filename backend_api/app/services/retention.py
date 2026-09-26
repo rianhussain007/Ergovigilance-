@@ -9,12 +9,15 @@ Policy domains (each store has one owner — do not read env knobs elsewhere):
   (``recording_retention_days``) plus a hard disk cap (``recordings_max_gb``)
 - Audit-trail JSONL files in ``AUDIT_LOG_DIR`` (``audit_log_retention_days``)
 - Alert rows in the local DB (``alert_retention_days``)
+- Postgres telemetry rows (``db_telemetry_retention_days``): per-frame
+  timeline rows and session summaries in ``ergo_sessions`` /
+  ``ergo_session_frames``
 
 Deliberately separate domains with their own defaults: consent-record expiry
 (``app/api/consent.py`` ``CONSENT_POLICY`` — a legal renewal cadence, not a
 disk policy) and login-attempt throttling (``app/core/database.py``).
-Postgres telemetry rows (Tier 1) are not yet age-pruned — tracked in
-docs/P0_REVERIFICATION.md (P0-6).
+Postgres telemetry rows (Tier 1) ARE age-pruned via
+``db_telemetry_retention_days`` (was the last unpruned store — P0-6).
 
 All knobs come from environment variables (0 disables the check) and can be
 overridden at runtime by the admin ``PUT /retention/config`` endpoint, which
@@ -124,6 +127,7 @@ def retention_config() -> dict:
         "recordings_max_gb": _env_int("RECORDINGS_MAX_GB", 20),
         "audit_log_retention_days": _env_int("AUDIT_LOG_RETENTION_DAYS", 365),
         "alert_retention_days": _env_int("ALERT_RETENTION_DAYS", 30),
+        "db_telemetry_retention_days": _env_int("DB_RETENTION_DAYS", 90),
     }
     for key in policy:
         if key in overrides:
@@ -337,9 +341,15 @@ def run_retention() -> dict:
     except Exception as exc:
         logger.warning("Alert retention pass failed: %s", exc)
         stats["alerts"] = {"error": str(exc)}
-    logger.info("Retention run: sessions=%s recordings=%s disk_cap=%s audit=%s alerts=%s",
+    try:
+        from app.core.postgres import prune_telemetry
+        stats["db_telemetry"] = prune_telemetry(cfg["db_telemetry_retention_days"])
+    except Exception as exc:
+        logger.warning("Postgres telemetry retention pass failed: %s", exc)
+        stats["db_telemetry"] = {"error": str(exc)}
+    logger.info("Retention run: sessions=%s recordings=%s disk_cap=%s audit=%s alerts=%s db_telemetry=%s",
                 stats["sessions"], stats["recordings"], stats["disk_cap"],
-                stats["audit_logs"], stats["alerts"])
+                stats["audit_logs"], stats["alerts"], stats["db_telemetry"])
     return stats
 
 
