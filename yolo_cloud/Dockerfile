@@ -5,7 +5,10 @@
 # ── GPU base image (NVIDIA runtime required on host) ──────────────
 # When NVIDIA Container Toolkit is NOT available, Docker falls back to CPU.
 # Build with: docker compose build (Compose handles the --gpus flag)
-FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04 AS base-gpu
+# Base images pinned by digest (P1 supply chain): tags kept for readability,
+# digests make the build byte-reproducible. Re-pin deliberately via
+#   docker buildx imagetools inspect <image>:<tag>
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04@sha256:2fcc4280646484290cc50dce5e65f388dd04352b07cbe89a635703bd1f9aedb6 AS base-gpu
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -15,7 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ── CPU-only fallback ─────────────────────────────────────────────
-FROM python:3.11-slim AS base-cpu
+FROM python:3.11-slim@sha256:e41613d42d4891e4930f79523f93f81bbc7632584ec65e36ab055f41a800b41e AS base-cpu
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
        libgl1 libglib2.0-0 libgomp1 ffmpeg \

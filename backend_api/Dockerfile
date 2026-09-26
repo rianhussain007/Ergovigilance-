@@ -1,4 +1,7 @@
-FROM python:3.12-slim
+# Base pinned by digest (P1 supply chain): tag kept for readability,
+# digest makes the build byte-reproducible. Re-pin deliberately via
+#   docker buildx imagetools inspect python:3.12-slim
+FROM python:3.12-slim@sha256:f77ac9e44ae96ef2c90b8053ea08c31f8be030f824196b0ae4db6d462c84e51f
 
 # ── System dependencies for OpenCV ─────────────────────────────────
 # Minimal set: just what MediaPipe + OpenCV need, plus the shared libraries
