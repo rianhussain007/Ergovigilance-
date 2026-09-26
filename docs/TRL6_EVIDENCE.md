@@ -118,7 +118,7 @@ never ran. The fix has four parts (`yolo_cloud/ingestion.py`,
 during the run parse (`moov` present in every one, ffprobe reads format and
 duration). The 3 historical files remain broken — they are pre-fix artifacts.
 Guarded by 4 tests in `TestClipIntegrity`
-(`yolo_cloud/tests/test_trl6_blockers.py`); suite: **100 passed**.
+(`yolo_cloud/tests/test_trl6_blockers.py`); suite: **121 passed**.
 
 **Not claimed:** clip encode/write cost is not broken out — it sits inside the
 frame latency number and is not separately attributed.
@@ -148,25 +148,23 @@ Observed delivery in the chain run: `HIGH alert ALT-000001 delivered via 'alert'
 
 | Suite | Result |
 |---|---|
-| `yolo_cloud/tests` | **96 passed** (0 failed) |
-| `backend_api/tests` (55 test files) | **397 passed, 17 failed, 13 errors, 1 skipped, 1 deselected** |
+| `yolo_cloud/tests` | **121 passed** (0 failed) |
+| `backend_api/tests` (55 test files) | **425 passed, 0 failed, 0 errors, 1 skipped, 1 deselected** |
 
-Baseline comparison for `backend_api`: **395 → 397 passed** (the two new
-per-IP rate-limit tests). Failures **18 → 17**, back to the pre-existing
-baseline: a regression from `525090a` (the pixel-space guard rejected
-zero-filled keypoints) was found and fixed in `217edf8`.
+The `backend_api` gate used to read *397 passed / 17 failed / 13 errors*. Every
+one of those was root-caused and fixed in `0de8d40` rather than skipped:
 
-The remaining **17 failures are all pre-existing and none are auth/security**:
-
-| File | Failures | Cause |
+| File | Was | Root cause (fixed) |
 |---|---|---|
-| `test_fail_closed_endpoints.py` | 9 | fail-closed on missing model/service |
-| `test_task_model_v2.py` | 5 | model bundle shape/gating |
-| `test_risk_calibration.py` | 2 | model artifact absent |
-| `test_model_manifest.py` | 1 | model manifest |
+| `test_fail_closed_endpoints.py` | 9F | `get_repository()` served mock/empty payloads with no live service; 503 is now enforced centrally |
+| `test_task_model_v2.py` | 5F | explicit model path ignored + model fast path ran before the "no person"/seated gates; 3 assertions tracked a pre-retrain artifact contract |
+| `test_risk_calibration.py` | 2F | default bundle schema unreadable (`features` vs `feature_columns`) and a missing explicit override silently substituted the legacy model |
+| `test_model_manifest.py` | 1F | `models/MANIFEST.json` still recorded the pre-`7348403` `task_model_v2.pkl` size/sha |
+| teardown (13E) | `RuntimeError: generator didn't stop` | `app/main.py` lifespan yielded twice |
 
-The **13 errors** are all the pre-existing teardown
-`RuntimeError: generator didn't stop`; their test bodies pass.
+The single remaining **skip** is `test_postgres_store.py` (`DATABASE_URL not
+set`) and the **deselect** is `-m "not hardware"` from `pytest.ini` — both
+pre-existing and both print their reason.
 
 ---
 
@@ -222,6 +220,82 @@ That sentence is contradicted by the measurements and must not be written.
 
 ---
 
+## Cloud engine accuracy (yolo_cloud)
+
+**The first accuracy number for the cloud engine.** Script:
+`scripts/eval_cloud_accuracy.py` (prints a JSON report; one process per profile
+because `yolo_cloud.config` reads the env at import).
+
+Method: every labelled still is pushed through the production risk path
+`YOLOPoseEngine.process_frame()` (YOLOv8-pose → COCO_17 features →
+`models/yolo_risk_model.pkl`), with a fresh `camera_id` per frame so tracker and
+temporal state never cross stills; the largest person in the frame supplies the
+band. Ground truth is the `human_risk` column of
+`outputs/real_data/human_labels.csv`. Date: 2026-09-25, CPU-only.
+
+### Dataset join
+
+| Item | Count |
+|---|---|
+| rows in `human_labels.csv` | 1429 |
+| rows joining `outputs/real_data/frames/` | **184** |
+| rows not in that dir | **1245** — all of them resolve under `outputs/real_data/frames_diverse/`, so 1429/1429 images exist on disk |
+| rows carrying a human risk label | 119 (LOW 117, MEDIUM 2, **HIGH 0**) |
+| labelled rows with an image → evaluated **N** | **119** (all inside the 184-row join) |
+| of those, `quality=occluded` | 8 (reported both included and excluded) |
+| `partial` / `blurry` / `clear` / unflagged | 52 / 2 / 1 / 56 |
+
+Ground truth contains **no HIGH row**, so no HIGH accuracy is claimed — same
+Safe Claims rule as the 87.6% number (LOW/MEDIUM only).
+
+### Results (both profiles, same 119 frames)
+
+| Profile | N | Accuracy | LOW recall | MEDIUM precision / recall | predicted MEDIUM | predicted HIGH | no detection |
+|---|---|---|---|---|---|---|---|
+| default `yolov8s-pose` @ 640 | 119 | **0.84% (1/119)** | **0.00 (0/117)** | 0.011 / 0.50 | 93 | 24 | 2 |
+| capacity `yolov8n-pose` @ 320 | 119 | **0.84% (1/119)** | **0.00 (0/117)** | 0.016 / 0.50 | 64 | 37 | 18 |
+
+Occluded rows excluded (N=111): default **0.90% (1/111)**, capacity
+**0.90% (1/111)** — the 8 occluded frames are not what drives the result.
+
+Confusion (rows = human, cols = predicted), default profile:
+
+| | LOW | MEDIUM | HIGH | no detection |
+|---|---|---|---|---|
+| LOW (117) | 0 | 92 | 23 | 2 |
+| MEDIUM (2) | 0 | 1 | 1 | 0 |
+
+The capacity profile differs only by moving 29 LOW rows from MEDIUM to HIGH and
+by 16 extra no-detections (18 vs 2): detection completeness at 320 px is
+**101/119 (84.9%)** vs **117/119 (98.3%)** at 640 px.
+
+### Verdict
+
+- **Keep `yolov8s-pose` @ 640 as the default profile.** The capacity profile is
+  not more accurate (identical 1/119) *and* loses 16 detections, so the
+  measured capacity gain (2 streams within budget at n/320, `ccbcfbe`) is the
+  only thing n/320 buys — accuracy data give no reason to switch.
+- **No cloud accuracy claim may be made.** Both profiles are effectively
+  non-discriminative against this truth set: LOW recall is 0.00 and the head
+  never emits LOW at all. The risk head needs human-labelled training data
+  before any number is quoted.
+- **Do not quote the artifact's own `metrics`** (`yolo_risk_model.pkl`:
+  `test_accuracy 0.9413`, `n_samples 80454`) — that is agreement with its
+  rule-derived training labels, not with human assessors.
+- **The Safe Claims 87.6% belongs to the on-premise backend engine and is
+  untouched by this section.** These numbers are scoped to the cloud engine,
+  this dataset (N=119, one site, LOW-heavy) and this date.
+
+Reproduce:
+
+```bash
+python scripts/eval_cloud_accuracy.py --label default-s640
+YOLO_MODEL=yolov8n-pose.pt YOLO_IMGSZ=320 \
+  python scripts/eval_cloud_accuracy.py --label capacity-n320
+```
+
+---
+
 ## NOT MEASURED (do not quote)
 
 | Item | Why |
@@ -231,7 +305,7 @@ That sentence is contradicted by the measurements and must not be written.
 | 8 workers per feed | available footage is single-worker clips, so 8 real tracks per feed cannot be produced |
 | 4-hour continuous run | all runs here are 15–120 s; the harness supports `--seconds 14400` but the full run was not executed |
 | ByteTrack-specific counters | ByteTrack cannot be imported in this ultralytics build |
-| Accuracy / detection quality | out of scope by task constraint |
+| Backend-engine accuracy | out of scope for this pack; the pre-existing Safe Claims 87.6% is the only human-ground-truth number for that engine. Cloud-engine accuracy IS measured above. |
 | Frame-drop rate in compute mode | no FFmpeg decoder runs, so decoded stays 0; use `--urls <rtsp...>` |
 | Clip encode cost as a share of latency | clips *are* written under load (measured above) but encode/write is inside frame latency |
 | Camera-socket-drop detection latency | ffmpeg drains its buffer for minutes; the drill uses a deterministic client-kill instead |
@@ -249,8 +323,10 @@ That sentence is contradicted by the measurements and must not be written.
 | Clip under load (224 clips) | `recordings/clips/soak-*/` |
 | Soak summaries | `outputs/soak/*_summary.json` |
 | Capacity split + sizing | `docs/SIZING_SOAK_CLOUD.md` |
-| Cloud tests | `yolo_cloud/tests/` (96) |
-| Backend tests | `backend_api/tests/` (397 passed / 17 failed / 13 errors) |
+| Cloud accuracy (both profiles) | `scripts/eval_cloud_accuracy.py` → JSON report (N=119) |
+| Cloud tests | `yolo_cloud/tests/` (121) |
+| Backend tests | `backend_api/tests/` (425 passed / 0 failed / 0 errors) |
 
 **Commits:** `525090a` (TRL-6 blockers), `82a3231` (P0 security batch),
-`217edf8` (test config drift + pixel-guard crash fix).
+`217edf8` (test config drift + pixel-guard crash fix), `0de8d40` (fail-closed,
+model/manifest contract, single-yield lifespan → backend gate green).
