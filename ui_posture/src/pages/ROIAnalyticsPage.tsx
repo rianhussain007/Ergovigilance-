@@ -36,10 +36,11 @@ export default function ROIAnalyticsPage() {
   useEffect(() => {
     // Authenticated fetches (apiFetch attaches the bearer token — raw
     // fetch here 401'd silently and the page computed ROI from zeros).
+    // limit=200: the largest page the sessions/alerts endpoints accept.
     Promise.all([
       apiFetch('/api/dashboard').then(r => r.json()).catch(() => ({})),
-      apiFetch('/api/sessions?limit=1000').then(r => r.json()).catch(() => ({ sessions: [] })),
-      apiFetch('/api/alerts?limit=1000').then(r => r.json()).catch(() => ({ alerts: [] })),
+      apiFetch('/api/sessions?limit=200').then(r => r.json()).catch(() => ({ sessions: [] })),
+      apiFetch('/api/alerts?limit=200').then(r => r.json()).catch(() => ({ alerts: [] })),
     ]).then(([dashboard, sessionsData, alertsData]) => {
       const sessions = sessionsData.sessions || [];
       const alerts = alertsData.alerts || [];
