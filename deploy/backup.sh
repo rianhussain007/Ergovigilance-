@@ -13,12 +13,19 @@
 # Usage:
 #   ./backup.sh                    # Full backup
 #   ./backup.sh --db-only          # Database only
-#   ./backup.sh --retention 30     # Keep last 30 backups
+#   ./backup.sh --retention=30     # Keep last 30 backups
+#   ./backup.sh --encrypt          # AES-256 the archive (BACKUP_PASSPHRASE required)
 #
-# Requires: pg_dump, tar, gzip
+# Requires: pg_dump, tar, gzip (+ openssl for --encrypt, docker for
+# capturing the compose auth DB)
 # ══════════════════════════════════════════════════════════════════
 
 set -euo pipefail
+
+# All paths below are repo-relative (sessions live in outputs/sessions, the
+# auth DB under backend_api/) — anchor to the repo root so cron jobs that
+# start in another directory still back up the right files.
+cd "$(dirname "$0")/.."
 
 # Configuration
 BACKUP_DIR="${BACKUP_DIR:-./backups}"
@@ -45,12 +52,18 @@ mkdir -p "${BACKUP_DIR}/${BACKUP_NAME}"
 
 # Parse arguments
 DB_ONLY=false
+ENCRYPT=false
 for arg in "$@"; do
     case $arg in
         --db-only) DB_ONLY=true ;;
+        --encrypt) ENCRYPT=true ;;
         --retention=*) RETENTION_DAYS="${arg#*=}" ;;
     esac
 done
+
+if [ "$ENCRYPT" = true ] && [ -z "${BACKUP_PASSPHRASE:-}" ]; then
+    error "--encrypt requires BACKUP_PASSPHRASE to be set"
+fi
 
 log "Starting backup: ${BACKUP_NAME}"
 log "Backup directory: ${BACKUP_DIR}/${BACKUP_NAME}"
@@ -66,10 +79,17 @@ PGPASSWORD="${DB_PASSWORD:-}" pg_dump \
     -Z 9 \
     -f "${BACKUP_DIR}/${BACKUP_NAME}/database.dump" 2>/dev/null || {
         warn "pg_dump failed — trying SQLite fallback"
-        # Fallback to SQLite if PostgreSQL not available
+        # Fallback to SQLite if PostgreSQL not available (bare-metal layout)
         if [ -f "backend_api/local_auth.db" ]; then
             cp backend_api/local_auth.db "${BACKUP_DIR}/${BACKUP_NAME}/local_auth.db"
             log "SQLite database backed up"
+        elif command -v docker >/dev/null 2>&1; then
+            # Compose deployments: the auth DB lives inside the
+            # ergovigilance-db volume, not on the host filesystem.
+            docker compose cp backend:/data/local_auth.db \
+                "${BACKUP_DIR}/${BACKUP_NAME}/local_auth.db" >/dev/null 2>&1 \
+                && log "SQLite database backed up (from compose volume)" \
+                || warn "Auth DB not captured (stack not running, or no local_auth.db)"
         fi
     }
 
@@ -81,8 +101,20 @@ fi
 # ── 2. Session Data Backup ──────────────────────────────────────
 if [ "$DB_ONLY" = false ]; then
     log "Backing up session data..."
-    if [ -d "sessions" ]; then
-        tar -czf "${BACKUP_DIR}/${BACKUP_NAME}/sessions.tar.gz" sessions/ 2>/dev/null || true
+    # Real layout is outputs/sessions (both bare-metal and compose bind
+    # mount); bare "sessions/" at the repo root never exists and the old
+    # check silently skipped every session file.
+    SESSIONS_SRC=""
+    if [ -d "outputs/sessions" ] && [ "$(ls -A outputs/sessions 2>/dev/null)" ]; then
+        SESSIONS_SRC="outputs/sessions"
+    elif [ -d "sessions" ] && [ "$(ls -A sessions 2>/dev/null)" ]; then
+        SESSIONS_SRC="sessions"
+    fi
+    if [ -n "${SESSIONS_SRC}" ]; then
+        # Archive top level is always "sessions/" so restore.sh can extract
+        # into outputs/ regardless of where it came from.
+        tar -czf "${BACKUP_DIR}/${BACKUP_NAME}/sessions.tar.gz" \
+            -C "$(dirname "${SESSIONS_SRC}")" "$(basename "${SESSIONS_SRC}")" 2>/dev/null || true
         SESSION_SIZE=$(du -h "${BACKUP_DIR}/${BACKUP_NAME}/sessions.tar.gz" 2>/dev/null | cut -f1)
         log "Sessions backup: ${SESSION_SIZE}"
     else
@@ -118,22 +150,31 @@ log "Creating final archive..."
 tar -czf "${BACKUP_DIR}/${BACKUP_NAME}.tar.gz" -C "${BACKUP_DIR}" "${BACKUP_NAME}"
 rm -rf "${BACKUP_DIR}/${BACKUP_NAME}"
 
-FINAL_SIZE=$(du -h "${BACKUP_DIR}/${BACKUP_NAME}.tar.gz" | cut -f1)
-log "Backup complete: ${BACKUP_DIR}/${BACKUP_NAME}.tar.gz (${FINAL_SIZE})"
+ARCHIVE_PATH="${BACKUP_DIR}/${BACKUP_NAME}.tar.gz"
+if [ "$ENCRYPT" = true ]; then
+    log "Encrypting archive (aes-256-cbc + pbkdf2)..."
+    openssl enc -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_PASSPHRASE \
+        -in "${ARCHIVE_PATH}" -out "${ARCHIVE_PATH}.enc"
+    rm -f "${ARCHIVE_PATH}"
+    ARCHIVE_PATH="${ARCHIVE_PATH}.enc"
+fi
+
+FINAL_SIZE=$(du -h "${ARCHIVE_PATH}" | cut -f1)
+log "Backup complete: ${ARCHIVE_PATH} (${FINAL_SIZE})"
 
 # ── 7. Cleanup Old Backups ──────────────────────────────────────
 log "Cleaning up backups older than ${RETENTION_DAYS} days..."
-find "${BACKUP_DIR}" -name "ergovigilance_backup_*.tar.gz" -mtime +${RETENTION_DAYS} -delete 2>/dev/null || true
+find "${BACKUP_DIR}" -name "ergovigilance_backup_*.tar.gz*" -mtime +${RETENTION_DAYS} -delete 2>/dev/null || true
 
-REMAINING=$(find "${BACKUP_DIR}" -name "ergovigilance_backup_*.tar.gz" | wc -l)
+REMAINING=$(find "${BACKUP_DIR}" -name "ergovigilance_backup_*.tar.gz*" | wc -l)
 log "Backups remaining: ${REMAINING}"
 
 echo ""
 log "═══════════════════════════════════════════════════════════"
 log "Backup Summary"
 log "═══════════════════════════════════════════════════════════"
-log "  Name:     ${BACKUP_NAME}.tar.gz"
+log "  Name:     $(basename "${ARCHIVE_PATH}")"
 log "  Size:     ${FINAL_SIZE}"
-log "  Location: ${BACKUP_DIR}/${BACKUP_NAME}.tar.gz"
+log "  Location: ${ARCHIVE_PATH}"
 log "  Retention: ${RETENTION_DAYS} days"
 log "═══════════════════════════════════════════════════════════"

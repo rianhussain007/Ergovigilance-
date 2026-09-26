@@ -19,6 +19,9 @@
 
 set -euo pipefail
 
+# Repo-relative paths (see backup.sh) — works from any starting directory.
+cd "$(dirname "$0")/.."
+
 # Configuration
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5432}"
@@ -60,6 +63,22 @@ if [ ! -f "${BACKUP_FILE}" ]; then
     error "Backup file not found: ${BACKUP_FILE}"
 fi
 
+# Encrypted archives (backup.sh --encrypt): decrypt first.
+DECRYPTED_FILE=""
+if [[ "${BACKUP_FILE}" == *.enc ]]; then
+    if [ -z "${BACKUP_PASSPHRASE:-}" ]; then
+        error "Encrypted backup — set BACKUP_PASSPHRASE to decrypt"
+    fi
+    DECRYPTED_FILE="$(mktemp).tar.gz"
+    log "Decrypting backup..."
+    openssl enc -d -aes-256-cbc -pbkdf2 -salt -pass env:BACKUP_PASSPHRASE \
+        -in "${BACKUP_FILE}" -out "${DECRYPTED_FILE}" || {
+        rm -f "${DECRYPTED_FILE}"
+        error "Decryption failed — wrong BACKUP_PASSPHRASE?"
+    }
+    BACKUP_FILE="${DECRYPTED_FILE}"
+fi
+
 log "Backup file: ${BACKUP_FILE}"
 BACKUP_SIZE=$(du -h "${BACKUP_FILE}" | cut -f1)
 log "Backup size: ${BACKUP_SIZE}"
@@ -86,6 +105,7 @@ if [ "$DRY_RUN" = true ]; then
     [ -f "${BACKUP_DIR}/recordings.tar.gz" ] && log "  ✓ Recorded videos"
     [ -d "${BACKUP_DIR}/config" ] && log "  ✓ Configuration files"
     rm -rf "${TEMP_DIR}"
+    if [ -n "${DECRYPTED_FILE}" ]; then rm -f "${DECRYPTED_FILE}"; fi
     exit 0
 fi
 
@@ -98,6 +118,7 @@ read -p "Type 'RESTORE' to confirm: " CONFIRM
 if [ "$CONFIRM" != "RESTORE" ]; then
     log "Restore cancelled"
     rm -rf "${TEMP_DIR}"
+    if [ -n "${DECRYPTED_FILE}" ]; then rm -f "${DECRYPTED_FILE}"; fi
     exit 0
 fi
 
@@ -124,9 +145,12 @@ if [ "$DB_ONLY" = false ]; then
     # ── 2. Restore Session Data ──────────────────────────────────
     if [ -f "${BACKUP_DIR}/sessions.tar.gz" ]; then
         log "Restoring session data..."
-        rm -rf sessions/
-        tar -xzf "${BACKUP_DIR}/sessions.tar.gz"
-        log "Sessions restored"
+        # Archive top level is "sessions/"; the app reads outputs/sessions
+        # (both layouts archive the same top-level name — see backup.sh).
+        mkdir -p outputs
+        rm -rf outputs/sessions
+        tar -xzf "${BACKUP_DIR}/sessions.tar.gz" -C outputs
+        log "Sessions restored to outputs/sessions"
     fi
 
     # ── 3. Restore Recorded Videos ────────────────────────────────
@@ -147,6 +171,9 @@ fi
 
 # Cleanup
 rm -rf "${TEMP_DIR}"
+if [ -n "${DECRYPTED_FILE}" ]; then
+    rm -f "${DECRYPTED_FILE}"
+fi
 
 echo ""
 log "═══════════════════════════════════════════════════════════"
