@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getStoredToken } from '@/src/auth/AuthContext';
+import { useStreamToken } from '@/src/hooks/useStreamToken';
 import { apiFetch } from '@/src/services/apiClient';
 import { CheckCircle2, XCircle, Loader2, Video, Sun, User, ScanFace, Camera as CameraIcon, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router';
@@ -49,6 +50,11 @@ export default function SetupWizardPage() {
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Scoped stream token for the MJPEG <img> (shared hook). Falls back to
+  // the legacy JWT path below when minting fails — never a blank feed
+  // without explanation (the old code always sent the API JWT, which the
+  // backend rejects with 401).
+  const streamToken = useStreamToken(true);
   const token = getStoredToken();
 
   useEffect(() => {
@@ -110,7 +116,7 @@ export default function SetupWizardPage() {
             </div>
             <div className="rounded-lg overflow-hidden bg-black">
               <img
-                src={`/video/feed?overlay=true&token=${encodeURIComponent(token || '')}`}
+                src={`/video/feed?overlay=true&${streamToken ? `stream_token=${encodeURIComponent(streamToken)}` : `token=${encodeURIComponent(token || '')}`}`}
                 alt="Live camera with pose overlay"
                 className="w-full h-auto"
               />

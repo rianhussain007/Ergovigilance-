@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { VideoOff, Maximize, Minimize, Camera as Snapshot, Monitor, Activity, FileText, ShieldAlert, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/src/hooks/useToast';
+import { useStreamToken } from '@/src/hooks/useStreamToken';
 import { getStoredToken } from '@/src/auth/AuthContext';
 
 interface CameraPanelProps {
@@ -32,44 +33,9 @@ export function CameraPanel({ status, workerName, task, reconnecting, onCaptureR
   const { addToast } = useToast();
   const isActive = status === 'active';
 
-  // Short-lived token scoped ONLY to the MJPEG stream (POST /video/stream-token).
-  // Query strings end up in browser history and server access logs — they must
-  // carry this ~10-minute video-only token, never the long-lived API JWT.
-  const [videoToken, setVideoToken] = useState<string | null>(null);
-  useEffect(() => {
-    if (!isActive) {
-      setVideoToken(null);
-      return;
-    }
-    let cancelled = false;
-    const mint = async () => {
-      try {
-        const res = await fetch('/video/stream-token', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${getStoredToken() ?? ''}` },
-        });
-        if (!res.ok) throw new Error(`stream-token ${res.status}`);
-        const data = await res.json();
-        if (!cancelled && data?.token) setVideoToken(data.token);
-      } catch {
-        if (!cancelled) setVideoToken(null);
-      }
-    };
-    void mint();
-    // Re-mint well before the backend's 10-minute expiry.
-    const interval = setInterval(mint, 8 * 60 * 1000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [isActive, retryKey]);
-
-  // FPS counter (shown while session is active)
-  useEffect(() => {
-    if (!isActive) return;
-    const interval = setInterval(() => setFps(29 + Math.random() * 2), 2000);
-    return () => clearInterval(interval);
-  }, [isActive]);
+  // Short-lived token scoped ONLY to the MJPEG stream (shared hook —
+  // query strings must never carry the long-lived API JWT).
+  const videoToken = useStreamToken(isActive);
 
   // Reset stream state when session starts/stops. Bump the stream key so the
   // <img> remounts fresh — otherwise React keeps the already-loaded DOM node

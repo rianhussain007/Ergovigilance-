@@ -5,6 +5,7 @@ import { SectionHeader, LoadingCard, ErrorCard, EmptyState } from '@/src/compone
 import { getCameras } from '@/src/services/dashboardService';
 import { apiFetch } from '@/src/services/apiClient';
 import { getStoredToken } from '@/src/auth/AuthContext';
+import { useStreamToken } from '@/src/hooks/useStreamToken';
 import type { CameraInfo } from '@/src/types/api';
 
 const riskColors: Record<string, string> = { low: 'text-green-400', moderate: 'text-orange-400', high: 'text-red-400' };
@@ -43,10 +44,14 @@ function CameraTile({ cam }: { cam: CameraInfo }) {
   const [showOverlay, setShowOverlay] = useState(true);
   const token = getStoredToken();
   const overlayParam = showOverlay ? '' : '&overlay=false';
-  const feedSrc = `/video/feed?camera_id=${encodeURIComponent(cam.id)}${token ? `&token=${encodeURIComponent(token)}` : ''}${overlayParam}`;
 
   // Only attempt live feed for streaming cameras (not available/idle)
   const isStreaming = cam.status === 'streaming';
+  const streamToken = useStreamToken(isStreaming);
+  const authParam = streamToken
+    ? `&stream_token=${encodeURIComponent(streamToken)}`
+    : token ? `&token=${encodeURIComponent(token)}` : '';
+  const feedSrc = `/video/feed?camera_id=${encodeURIComponent(cam.id)}${authParam}${overlayParam}`;
   const showFeed = isStreaming && !feedError;
 
   return (

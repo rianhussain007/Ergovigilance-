@@ -401,7 +401,7 @@ export default function CloudOnboardingPage() {
               <ArrowLeft className="w-4 h-4" />
               Back
             </button>
-            {step.id !== 'camera' && step.id !== 'test' && (
+            {step.id !== 'camera' && (
               <button
                 onClick={goNext}
                 className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-bold hover:bg-blue-500 transition-colors"
