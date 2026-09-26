@@ -4,7 +4,7 @@ Companion to `docs/TRL6_EVIDENCE.md` (TRL-6 evidence) and
 `docs/P0_REVERIFICATION.md` (hardening status). Written 2026-09-26;
 synced 2026-09-26 (Phase A): §2/§3/§5 now reflect the merged SHAs
 (merge `139f2da`), follow-ups `efa8b15`/`83aa528`/`5d71cc0`, and current
-gates (backend 467 / cloud 163 / tsc exit 0).
+gates (backend 472 / cloud 163 / tsc exit 0).
 
 ## 1. What TRL-7 means for this product
 
@@ -45,8 +45,8 @@ the C4 work instead of queueing behind it.
 ## 3. In-repo workstream (C4) — ordered, each its own SHA
 
 All seven landed 2026-09-26 as one SHA each after the TRL-6 soak (merge
-`139f2da`); gates green (backend 467 / cloud 163 / tsc exit 0, re-run
-2026-09-26 after the QA fix pass).
+`139f2da`); gates green (backend 472 / cloud 163 / tsc exit 0, re-run
+2026-09-26 covering the U1/U2 commits).
 Each item keeps its original wording below, followed by its landing SHA.
 
 1. **P0-6 privacy retention unification** — one settings source of truth

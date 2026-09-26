@@ -41,7 +41,7 @@ which is exactly the TRL-7 column of `docs/TRL7_QUALIFICATION_PLAN.md`.
 
 - Verdicts cite `file:line` from HEAD (`5d71cc0`, post-merge `139f2da`),
   never file length.
-- Full gate green: backend 467 (0 failures), cloud 163, tsc exit 0
-  (re-run 2026-09-26 after the QA fix pass). Agent 2 owns the final
-  re-run after its TRL-8 lane.
+- Full gate green: backend 472 (0 failures), cloud 163, tsc exit 0
+  (re-run 2026-09-26 covering the U1/U2 commits). Agent 2 owns the
+  final re-run after its TRL-8 lane.
 - Safe Claims language untouched; no accuracy claims of any kind.
