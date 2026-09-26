@@ -83,6 +83,21 @@ def _ensure_consent_table(db):
         conn.commit()
 
 
+def _worker_in_scope(conn, worker_id: str, org_id: int | None) -> bool:
+    """True when the worker exists and belongs to the caller's org.
+
+    Legacy seed rows with NULL org stay visible to everyone (demo data).
+    Missing or foreign-org workers return False, and callers answer 404
+    (never disclose another tenant's team by existence).
+    """
+    row = conn.execute(
+        "SELECT org_id FROM workers WHERE worker_id = ?", (worker_id,)
+    ).fetchone()
+    if row is None:
+        return False
+    return row[0] is None or org_id is None or row[0] == org_id
+
+
 @router.get("/worker-consents")
 async def get_worker_consents(current_user=Depends(get_current_user)):
     """Get consent status for all workers."""
@@ -91,8 +106,16 @@ async def get_worker_consents(current_user=Depends(get_current_user)):
     with get_connection() as conn:
         _ensure_consent_table(conn)
 
-        # Get all workers
-        cursor = conn.execute("SELECT worker_id, name, department FROM workers ORDER BY name")
+        # Get all workers visible to this org: own workers plus legacy
+        # seed rows with no org (demo data). Never leak another org's team.
+        if current_user.org_id is None:
+            cursor = conn.execute("SELECT worker_id, name, department FROM workers ORDER BY name")
+        else:
+            cursor = conn.execute(
+                "SELECT worker_id, name, department FROM workers "
+                "WHERE org_id IS NULL OR org_id = ? ORDER BY name",
+                (current_user.org_id,),
+            )
         workers_db = cursor.fetchall()
 
         # Get consent records
@@ -150,6 +173,9 @@ async def grant_consent(
     with get_connection() as conn:
         _ensure_consent_table(conn)
 
+        if not _worker_in_scope(conn, worker_id, current_user.org_id):
+            raise HTTPException(status_code=404, detail="Worker not found")
+
         now = datetime.now(timezone.utc).isoformat()
         expiry = (datetime.now(timezone.utc) + timedelta(days=CONSENT_POLICY["retention_days"])).isoformat()
 
@@ -181,6 +207,9 @@ async def deny_consent(
     with get_connection() as conn:
         _ensure_consent_table(conn)
 
+        if not _worker_in_scope(conn, worker_id, current_user.org_id):
+            raise HTTPException(status_code=404, detail="Worker not found")
+
         now = datetime.now(timezone.utc).isoformat()
         conn.execute("""
             INSERT OR REPLACE INTO consent_records
@@ -205,6 +234,9 @@ async def withdraw_consent(
 
     with get_connection() as conn:
         _ensure_consent_table(conn)
+
+        if not _worker_in_scope(conn, worker_id, current_user.org_id):
+            raise HTTPException(status_code=404, detail="Worker not found")
 
         now = datetime.now(timezone.utc).isoformat()
         conn.execute("""
