@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router';
+import { apiFetch } from '@/src/services/apiClient';
 import {
   CheckCircle, XCircle, AlertTriangle, RefreshCw, Clock,
   Server, Database, Globe, Cpu, Shield
@@ -76,9 +77,11 @@ export default function StatusPage() {
       details: 'This page is loading — dashboard is operational',
     });
 
-    // Check Database
+    // Check Database via the authenticated settings read (backend + DB
+    // alive). The old raw fetch never sent the bearer token, so this row
+    // read "degraded" on every load for every logged-in user.
     try {
-      const res = await fetch('/api/settings', { signal: AbortSignal.timeout(5000) });
+      const res = await apiFetch('/api/settings', { signal: AbortSignal.timeout(5000) });
       results.push({
         name: 'Database',
         status: res.ok ? 'operational' : 'degraded',
@@ -107,11 +110,15 @@ export default function StatusPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const overallStatus = services.every(s => s.status === 'operational')
-    ? 'operational'
-    : services.some(s => s.status === 'down')
-      ? 'down'
-      : 'degraded';
+  // Empty list (first load) is "unknown", not operational — [].every()
+  // is vacuously true, which painted a false green banner on mount.
+  const overallStatus = services.length === 0
+    ? 'unknown'
+    : services.every(s => s.status === 'operational')
+      ? 'operational'
+      : services.some(s => s.status === 'down')
+        ? 'down'
+        : 'degraded';
 
   const statusColors = {
     operational: 'text-green-400',

@@ -323,7 +323,7 @@ export default function CloudCamerasPage() {
                       <span className="text-red-300 font-bold">REC</span>
                     </div>
                     <div className="absolute bottom-1 left-1 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded text-[9px]">
-                      <span className="text-white">{cam.frames_processed.toLocaleString()} frames</span>
+                      <span className="text-white">{(cam.frames_processed ?? 0).toLocaleString()} frames</span>
                       <span className="text-slate-400">|</span>
                       <span className="text-white">{cam.persons_tracked} workers</span>
                     </div>
@@ -339,7 +339,7 @@ export default function CloudCamerasPage() {
                 <div className="grid grid-cols-4 gap-2 text-xs mb-3">
                   <div className="text-center p-2 rounded-lg bg-white/5">
                     <p className="text-slate-500">Frames</p>
-                    <p className="text-white font-medium">{cam.frames_processed.toLocaleString()}</p>
+                    <p className="text-white font-medium">{(cam.frames_processed ?? 0).toLocaleString()}</p>
                   </div>
                   <div className="text-center p-2 rounded-lg bg-white/5">
                     <p className="text-slate-500">Workers</p>
