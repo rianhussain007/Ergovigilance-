@@ -180,3 +180,44 @@ imported across modules
 
 **Report Generated:** 2026-08-19  
 **Next Review:** After Docker verification + auth-ordering fix
+
+---
+
+# QA Pass — 2026-09-26 (click-through + fix verification)
+
+**Method:** headless-browser route matrix (28/28 routes, 3 roles) +
+targeted suites. Prior report left intact above; this section supersedes
+its counts.
+
+## Gates (final tree)
+
+| Suite | Result |
+|---|---|
+| Backend pytest | **475 passed, 0 failed, 1 skipped** |
+| Cloud pytest | **163 passed** |
+| `tsc --noEmit` | exit 0 |
+| Vitest | **76/76** (one transient timing flake under parallel load, green on clean re-run) |
+| Browser matrix | **28/28 load, 0 bounces, 0 app errors** |
+
+## Fix verification (each reproduced before/after in-browser unless noted)
+
+- Role-guard bounces (`/cloud-onboarding`, `/architecture`, `/webcam-demo` + 9 latent) → `routes.test.ts` (67 tests) locks sidebar/guard sync
+- `nav.webcam` raw label → keys added en/hi/zh
+- Crushed layouts → theme-shadowed `max-w-*` replaced; card measured 66px → 512px in-browser with screenshot proof
+- Model-dashboard blank error → allSettled + backend fallback + retry; banned 94.1%/97.6% rows removed
+- Fake Settings Save → real `POST /settings`; fake RTSP tester → true probe endpoint; onboarding fakes → honest errors; stale `/api/sessions/start` → real endpoint
+- Vite `/api` prefix swallowing `/api-docs` → anchored proxy keys; nginx `/docs` + `/openapi.json` + `/video/` locations added
+- Silent 401s (ROI, settings notifications) → `apiFetch`; ROI 422s → `limit=200`; consent double-prefix → single mount (openapi table verified)
+- Add-camera crash (`toLocaleString` on undefined) → guarded
+- StatusPage false-degraded (unauthenticated probe) + false-green empty list → fixed
+- Video-feed 401s → shared `useStreamToken()` hook on all three consumers
+- Cloud-onboarding step-4 dead end → Next button; RTSP delete-by-wrong-id → delete-by-returned-id
+- Cloud-core hang on dead hosts → ffmpeg `-timeout`/`-stimeout` 10 s bounds + 5 live orphans reaped; add/get/remove stays responsive (timed proof)
+- Consent cross-tenant leak → org scoping + ghost-row 404s (browser roundtrip: granted → withdrawn)
+- Demo dead → 30 s sample bundled (gitignored) + docs; verified live (person detected @ 7.8 fps)
+
+## Remaining (not code defects)
+
+- Vite dep-optimization staleness after lockfile bumps → restart `npm run dev` (seen once, resolved by restart)
+- Physical-camera paths (webcam demo, live RTSP) → NEEDS-HUMAN with real hardware
+- Live LE issuance, pen-test, pilot fieldwork → tracked in `TRL8_9_QUALIFICATION_PLAN.md`
