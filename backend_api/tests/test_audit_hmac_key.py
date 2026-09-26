@@ -37,6 +37,9 @@ def test_chain_verifies_across_restart(monkeypatch, tmp_path):
     key_file = tmp_path / "audit_hmac.key"
     monkeypatch.delenv("AUDIT_HMAC_KEY", raising=False)
     monkeypatch.setenv("AUDIT_HMAC_KEY_FILE", str(key_file))
+    # Start from a cold cache: an earlier test in the suite may have warmed
+    # _HMAC_KEY_CACHE with a different key (monkeypatch only restores env).
+    monkeypatch.setattr(audit_log, "_HMAC_KEY_CACHE", None)
 
     entry_data = json.dumps({"event": "user_login"}, sort_keys=True)
     signed = audit_log._hmac_chain("0" * 64, entry_data)
