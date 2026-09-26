@@ -43,6 +43,7 @@ export default function CloudCamerasPage() {
   const [newCam, setNewCam] = useState({ id: '', name: '', url: '' });
   const [addingError, setAddingError] = useState('');
   const [healthStatus, setHealthStatus] = useState<any>(null);
+  const [coreDown, setCoreDown] = useState(false);
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
 
   const fetchCameras = async () => {
@@ -62,9 +63,15 @@ export default function CloudCamerasPage() {
   const fetchHealth = async () => {
     try {
       const res = await fetch('/cloud-api/cloud/health');
-      if (res.ok) setHealthStatus(await res.json());
+      if (res.ok) {
+        setHealthStatus(await res.json());
+        setCoreDown(false);
+      } else {
+        setCoreDown(true);
+      }
     } catch {
       setHealthStatus(null);
+      setCoreDown(true);
     }
   };
 
@@ -240,8 +247,21 @@ export default function CloudCamerasPage() {
         </motion.div>
       )}
 
+      {/* Core unreachable — the empty state below would otherwise lie
+          ("no cameras" when we simply cannot reach the service) */}
+      {coreDown && (
+        <div className="flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>
+            Cloud core unreachable — camera list unavailable. Start it:{' '}
+            <code className="rounded bg-black/30 px-1">python -m uvicorn yolo_cloud.api:create_app --factory --port 8100</code>{' '}
+            (see docs/DEV_START.md).
+          </span>
+        </div>
+      )}
+
       {/* No cameras */}
-      {!loading && cameras.length === 0 && (
+      {!loading && cameras.length === 0 && !coreDown && (
         <div className="flex flex-col items-center justify-center py-20 px-8">
           <div className="rounded-2xl bg-white/5 border border-white/10 p-8 flex flex-col items-center text-center w-full max-w-lg">
             <div className="w-20 h-20 rounded-full bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-6">

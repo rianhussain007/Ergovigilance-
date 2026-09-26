@@ -37,42 +37,40 @@ export default function ModelDashboardPage() {
   const [comparison, setComparison] = useState<ComparisonData | null>(null);
   const [yoloDetail, setYoloDetail] = useState<Record<string, ModelDetail>>({});
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [coreDown, setCoreDown] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
-    Promise.all([
-      fetch('/cloud-api/cloud/models/compare').then(r => r.json()),
-      fetch('/cloud-api/cloud/models/metrics').then(r => r.json()),
-    ])
-      .then(([comp, detail]) => {
-        setComparison(comp);
-        setYoloDetail(detail);
-        setLoading(false);
-      })
-      .catch(err => {
-        setError(err.message);
-        setLoading(false);
-      });
-  }, []);
+    let cancelled = false;
+    const load = async () => {
+      setLoading(true);
+      setCoreDown(false);
+      // Independent fetches: a dead cloud core must not blank the whole
+      // page (previously Promise.all rejected on the first failure).
+      const [comp, detail] = await Promise.allSettled([
+        fetch('/cloud-api/cloud/models/compare').then(r => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.json();
+        }),
+        fetch('/cloud-api/cloud/models/metrics').then(r => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.json();
+        }),
+      ]);
+      if (cancelled) return;
+      if (comp.status === 'fulfilled') setComparison(comp.value);
+      else setCoreDown(true);
+      if (detail.status === 'fulfilled') setYoloDetail(detail.value);
+      setLoading(false);
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [retryCount]);
 
   if (loading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="mx-auto max-w-4xl p-8">
-        <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-6 text-red-400">
-          <AlertTriangle className="mb-2 h-5 w-5" />
-          <p>Failed to load model metrics: {error}</p>
-          <p className="mt-2 text-sm text-red-400/70">
-            Make sure the YOLO cloud core is running on port 8100.
-          </p>
-        </div>
       </div>
     );
   }
@@ -85,6 +83,46 @@ export default function ModelDashboardPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6">
+      {coreDown && (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-5">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+            <div className="flex-1">
+              <p className="font-semibold text-amber-300">YOLO cloud core unreachable</p>
+              <p className="mt-1 text-sm text-amber-200/70">
+                Cloud model data is unavailable. Start the core with{' '}
+                <code className="rounded bg-black/30 px-1">python -m uvicorn yolo_cloud.api:create_app --factory --port 8100</code>{' '}
+                (see docs/DEV_START.md). Validated on-premise data is shown below.
+              </p>
+            </div>
+            <button
+              onClick={() => setRetryCount(c => c + 1)}
+              className="shrink-0 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-300 transition hover:bg-amber-500/20"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
+      {coreDown && !comparison && (
+        <div className="rounded-xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/5 to-emerald-500/10 p-6">
+          <div className="mb-4 flex items-center gap-2">
+            <Target className="h-5 w-5 text-emerald-400" />
+            <h2 className="text-lg font-semibold text-white">MediaPipe Core — validated</h2>
+            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-400">
+              ON-PREMISE
+            </span>
+          </div>
+          <div className="space-y-3">
+            <InfoRow label="Ground-Truth Accuracy" value="87.6% (500 human frames, LOW/MEDIUM)" highlight />
+            <InfoRow label="HIGH Bands" value="Unvalidated — no claim made" />
+            <InfoRow label="Methodology" value="RULA/REBA-informed thresholds + HistGradientBoosting" />
+          </div>
+          <a href="/validation" className="mt-4 inline-block text-sm font-medium text-emerald-400 hover:underline">
+            Open the Validation page for full methodology →
+          </a>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="rounded-lg bg-primary/10 p-2">
