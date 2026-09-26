@@ -2,7 +2,7 @@
 
 **Duration:** 5-7 minutes  
 **Audience:** Factory managers, EHS directors, IT teams  
-**Goal:** Show how ErgoVigilance prevents workplace injuries in real-time
+**Goal:** Show how ErgoVigilance flags risky posture in real-time
 
 ---
 
@@ -12,7 +12,7 @@
 **Script:**
 > "Every year, musculoskeletal disorders cost US employers $20 billion. Workers lifting boxes wrong, reaching too far, sitting poorly for hours — these injuries are preventable, but nobody's watching until it's too late.
 > 
-> ErgoVigilance changes that. It's an AI-powered system that watches workers through ordinary cameras, detects unsafe postures in real-time, and prevents injuries before they happen."
+> ErgoVigilance changes that. It's an AI-powered system that watches workers through ordinary cameras, detects unsafe postures in real-time, and flags risky patterns early for review."
 
 ---
 
@@ -24,7 +24,7 @@
 **Script:**
 > "Let me show you how it works. Here's our live monitoring dashboard.
 > 
-> [Point to camera feed] The system is analyzing the worker's pose in real-time — 30 frames per second. It's tracking 33 body landmarks: shoulders, elbows, hips, knees, neck.
+> [Point to camera feed] The system is analyzing the worker's pose in real-time. It's tracking 33 body landmarks: shoulders, elbows, hips, knees, neck.
 > 
 > [Point to risk score] See this risk score? It's calculated using RULA and REBA — the same standards OSHA recommends. Right now it's LOW — the worker is standing upright.
 > 
@@ -35,7 +35,7 @@
 > "The system detected the unsafe posture instantly. It's firing an alert to the supervisor AND giving the worker plain-language feedback: 'Straighten your back, bend at the knees.'"
 
 **Key Points:**
-- Real-time pose detection (30 FPS)
+- Real-time pose detection
 - RULA/REBA standard-method scoring
 - Instant alerts to supervisor and worker
 - Plain-language guidance
@@ -142,9 +142,7 @@
 
 **Script:**
 > "We believe in AI transparency. Here you can see exactly how the models work:
-> - 88.6% risk classification F1
-> - 86.4% task classification F1
-> - 87.6% agreement with human assessors on 500 labeled frames (validation)
+> - 87.6% agreement with human assessors on 500 labeled frames (LOW/MEDIUM; HIGH unvalidated)
 > - Side-by-side comparison with the on-premise system
 > - Confusion matrices showing where the AI excels
 > 

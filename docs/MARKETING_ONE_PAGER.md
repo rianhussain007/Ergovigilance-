@@ -9,7 +9,7 @@
 
 ## 💡 The Solution
 
-ErgoVigilance uses **AI-powered computer vision** to monitor worker posture in real-time, detecting risky positions before injuries happen — **no wearables required**.
+ErgoVigilance uses **AI-powered computer vision** to monitor worker posture in real-time, flagging risky positions early for supervisor review — **no wearables required**.
 
 ### How It Works
 
@@ -23,10 +23,10 @@ ErgoVigilance uses **AI-powered computer vision** to monitor worker posture in r
 
 | Feature | Description |
 |---------|-------------|
-| **Real-time Monitoring** | 30+ FPS pose tracking with per-joint risk coloring |
-| **Risk Detection** | 88.6% accuracy on HIGH/LOW/MEDIUM classification |
-| **Task Recognition** | 86.4% accuracy identifying Assembly, Inspection, Lifting, Seated work |
-| **Multi-camera** | Monitor unlimited cameras across factory floors |
+| **Real-time Monitoring** | Real-time pose tracking with per-joint risk coloring |
+| **Risk Detection** | Human-validated screening (87.6% LOW/MEDIUM agreement; HIGH unvalidated — see Validation page) |
+| **Task Recognition** | Assembly, Inspection, Lifting, Seated work (research track) |
+| **Multi-camera** | 1–50+ cameras by tier, across factory floors |
 | **Cloud + On-Premise** | YOLO cloud (RTSP) or MediaPipe local (webcam) |
 | **Compliance Reports** | Auto-generated PDF/CSV for OSHA/ISO 45001 audits |
 | **Worker Management** | Employee profiles, consent tracking, risk history |
@@ -52,7 +52,7 @@ ErgoVigilance uses **AI-powered computer vision** to monitor worker posture in r
 
 | | ErgoVigilance | Intenseye | Traditional |
 |---|---|---|---|
-| **Real-time** | ✅ 30 FPS | ✅ | ❌ |
+| **Real-time** | ✅ Real-time | ✅ | ❌ |
 | **RULA/REBA** | ✅ AI-informed | ✅ | Manual |
 | **On-Premise** | ✅ Free tier | ❌ | N/A |
 | **RTSP Cloud** | ✅ | ✅ | N/A |
@@ -62,9 +62,9 @@ ErgoVigilance uses **AI-powered computer vision** to monitor worker posture in r
 
 ## 📈 Business Impact
 
-- **40% reduction** in MSD-related incidents (industry average)
-- **$15,000 savings** per prevented injury (OSHA estimate)
-- **2-hour ROI** per camera (at $299/mo vs. one injury cost)
+- **40% reduction** in MSD-related incidents (industry benchmark, not our measured result)
+- **$42,000 savings** per prevented injury (industry benchmark, not our measured result)
+- Pays for itself with one prevented injury ($42k benchmark vs. $299/mo — arithmetic, not a measured ROI)
 
 ## 🚀 Getting Started
 
@@ -81,4 +81,4 @@ ErgoVigilance uses **AI-powered computer vision** to monitor worker posture in r
 
 ---
 
-*ErgoVigilance — Preventing injuries before they happen.*
+*ErgoVigilance — AI-assisted ergonomic screening for safer floors.*

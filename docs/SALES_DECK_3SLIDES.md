@@ -74,4 +74,4 @@
 - [ ] "Badge/QR or anonymous modes" — worker identity engine (shipped)
 - [ ] "Evidence package" — one-click zip from Session History (shipped)
 - [ ] "No cloud, offline-first" — SQLite + local Ollama, no external calls in the monitoring path
-- [ ] Do NOT claim: a specific accuracy number (ground-truth evaluation still pending), "139 sessions" (actual: ~96–107), or medical certification
+- [ ] Do NOT claim a specific accuracy number except 87.6% LOW/MEDIUM with caveats (ground truth exists now: `results/ground_truth_evaluation.json`), "139 sessions" (actual: ~96–107), or medical certification

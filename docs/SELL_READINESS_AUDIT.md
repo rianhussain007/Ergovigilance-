@@ -83,3 +83,14 @@ paid engagement* — **user action**, confirm before selling.
 - Safe Claims Sheet untouched; this audit fixes copy *toward* it.
 - Every cite is `file:line` verified at HEAD (`5d71cc0`) this session.
 - No product code changed; no Agent 2 / deploy-session files touched.
+
+## 7. Funnel map (Q6: keep three offers, one map)
+
+| Offer | Entry point | Converts to | Owner doc |
+|---|---|---|---|
+| Free 2-week pilot | Deck slide 3, `/validation` CTA | Paid assessment report, or Cloud trial | `SALES_DECK_3SLIDES.md:49-59` |
+| Paid assessment (₹19,999–79,999) | Outreach / assessment page | Free pilot on same station → Cloud/Enterprise, 50% credit within 60 days | `ASSESSMENT_PRICING.md:15-19,31-33` |
+| 14-day trial button | Pricing page | Stripe checkout → Cloud (needs live keys + trial clock, F-03/F-04) | `PricingPage.tsx:104,241` |
+
+Sales rule: one offer per conversation; assessment data never
+auto-enrolls in SaaS (`ASSESSMENT_PRICING.md:33`).

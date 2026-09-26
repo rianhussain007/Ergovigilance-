@@ -35,7 +35,7 @@ ErgoVigilance watches a worker through an ordinary webcam, detects body pose in 
 | **Backend API** | FastAPI (Python 3.11+), Pydantic, SQLite/PostgreSQL |
 | **AI Core (On-Premise)** | MediaPipe Pose (33 keypoints), YOLOv8 (person detection), YuNet (face), SFace (identity) |
 | **AI Core (Cloud)** | YOLOv8-pose (17 keypoints COCO), ByteTrack (worker tracking), RTSP stream ingestion |
-| **ML Models** | HistGradientBoosting (task + risk classification, 97.6% accuracy, 7 task classes) |
+| **ML Models** | HistGradientBoosting (task + risk classification, 7 task classes — see Model Accuracy below) |
 | **Deployment** | Docker Compose (4 services), Windows Service scripts, `.env`-driven config |
 
 ## Quick Start
@@ -81,7 +81,7 @@ DEMO_MODE=true docker compose up -d
 ## Key Features
 
 ### Live Monitoring
-- Real-time pose estimation at 30 FPS
+- Real-time pose estimation (rate depends on hardware — see Sizing)
 - 12 biomechanical features (neck, trunk, shoulders, knees, wrists, stance)
 - RULA/REBA standard-method risk scoring
 - Temporal hysteresis (level dwell) to prevent alert flickering
@@ -123,8 +123,8 @@ DEMO_MODE=true docker compose up -d
 - RTSP CCTV stream ingestion via FFmpeg
 - YOLOv8-pose inference (17 COCO keypoints)
 - ByteTrack worker tracking across frames
-- ML-trained risk classifier (94.1% accuracy)
-- ML-trained task classifier (97.6% accuracy, 7 classes)
+- ML-trained risk classifier (research track — see Model Accuracy)
+- ML-trained task classifier, 7 classes (research track — see Model Accuracy)
 - Real-time WebSocket camera data streaming
 - PDF/CSV report generation (daily/weekly)
 - Model versioning with export/import/rollback
@@ -234,8 +234,8 @@ posture_analysis/
 │   │   └── auth/               #   Auth context + providers
 │   └── vitest.config.ts        #   9 tests (7 smoke + 2 interaction)
 ├── models/                     # ML model files
-│   ├── yolo_risk_model.pkl     #   Risk classifier (94.1% accuracy)
-│   ├── yolo_task_model.pkl     #   Task classifier (97.6% accuracy)
+│   ├── yolo_risk_model.pkl     #   Risk classifier (YOLO holdout, REBA-derived — not product accuracy)
+│   ├── yolo_task_model.pkl     #   Task classifier (YOLO holdout — not product accuracy)
 │   ├── best_model.pkl          #   MediaPipe risk model
 │   └── task_model_v3.pkl       #   MediaPipe task model
 ├── scripts/                    # Training, labeling, evaluation
@@ -285,7 +285,7 @@ cd ui_posture && npm run build
 
 - **Risk scoring**: Rule-based RULA/REBA-informed thresholds on 12 biomechanical features (not a black box)
 - **Task classifier**: HistGradientBoosting, 76.9% self-consistency on held-out split (training labels are auto-generated)
-- **Risk calibration**: HistGradientBoosting → REBA band, 91.8% holdout accuracy
+- **Risk calibration**: HistGradientBoosting → REBA band, 91.8% holdout agreement (calibration advisory, not product accuracy)
 
 The Validation Page (`/validation`) presents these numbers honestly to customers, including what we do and don't claim. See `results/ground_truth_evaluation.json` for the full evaluation.
 
