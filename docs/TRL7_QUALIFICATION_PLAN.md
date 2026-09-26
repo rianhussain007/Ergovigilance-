@@ -1,7 +1,10 @@
 # TRL-7 Qualification Plan — definition, in-repo workstream, executable pilot
 
 Companion to `docs/TRL6_EVIDENCE.md` (TRL-6 evidence) and
-`docs/P0_REVERIFICATION.md` (hardening status). Written 2026-09-26.
+`docs/P0_REVERIFICATION.md` (hardening status). Written 2026-09-26;
+synced 2026-09-26 (Phase A): §2/§3/§5 now reflect the merged SHAs
+(merge `139f2da`), follow-ups `efa8b15`/`83aa528`/`5d71cc0`, and current
+gates (backend 453 / cloud 142 / tsc exit 0).
 
 ## 1. What TRL-7 means for this product
 
@@ -34,42 +37,68 @@ the C4 work instead of queueing behind it.
 
 | Claim | Already in hand | Missing | Owner |
 |---|---|---|---|
-| C1 sustained operation | 4-hour soak capability (`--seconds 14400`), moov/idx1 guard (0/628 + 0/270 truncated), graceful soak teardown, `restart: unless-stopped` compose (`docker-compose.yml:24,59,82,110`) | 2 consecutive weeks at the site with the uptime/clip-integrity metrics of §4.4 collected daily | Site |
+| C1 sustained operation | 4-hour soak capability (`--seconds 14400`), moov/idx1 guard (Run C: 5021 clips / 0 truncated over 4 h), graceful soak teardown, `restart: unless-stopped` compose (`docker-compose.yml:24,65,88,121`) | 2 consecutive weeks at the site with the uptime/clip-integrity metrics of §4.4 collected daily | Site |
 | C2 non-builder users | RBAC 4-role, alert acknowledge/review/PDF flows, MFA (`bc093f6`) | ≥ 2 operators completing the daily workflow unassisted for ≥ 5 days; 1 usability incident log | Site |
-| C3 trusted output | 87.6% LOW/MEDIUM Safe Claims number; spot-check sheet drafted (`outputs/tri6_demo/spotcheck/`); 21 identity tests | Human approval of spot-check; ergonomist review of pilot alert sample; agreement stats | User + ergonomist |
-| C4 product hardening | 4/10 P0 CLOSED, 3 PARTIAL | 3 OPEN + 3 PARTIAL closed (§3) | In-repo (this agent) |
+| C3 trusted output | 87.6% LOW/MEDIUM Safe Claims number; spot-check sheet human-reviewed (`2610e32`: 2 HIGH confirmed, 3 over-warn rejected, 7 unrateable — process evidence only); 21 identity tests | Ergonomist review of pilot alert sample; agreement stats | User + ergonomist |
+| C4 product hardening | 7/10 P0 CLOSED, 3 PARTIAL, 0 OPEN (`docs/P0_REVERIFICATION.md`; landing SHAs in §3) | 3 PARTIAL evidence gaps only: live TLS issuance, retention consent scoping, restore-drill RTO (§3) | In-repo (Agent 1 — done 2026-09-26) |
 
 ## 3. In-repo workstream (C4) — ordered, each its own SHA
 
-Run these **after** the TRL-6 consolidation soak frees the CPU; gates
-(`backend 425 / cloud 134 / tsc`) run once at the end over everything.
+All seven landed 2026-09-26 as one SHA each after the TRL-6 soak (merge
+`139f2da`); gates green at HEAD (backend 453 / cloud 142 / tsc exit 0).
+Each item keeps its original wording below, followed by its landing SHA.
 
 1. **P0-6 privacy retention unification** — one settings source of truth
    (e.g. `RETENTION_DAYS` + per-store overrides) replacing audit 365
    (`audit_log.py:35`), DB 90 (`db_backend.py:282`), recordings 30
    (`storage_manager.py:31`), sessions/alerts (`api.py:1052-1053`).
    Tests: config resolution + each store's cleanup honoring it.
+   Landed `8067aad` (owner `retention.py:120`, keys `:128-129`,
+   overrides `:82-86`, `run_retention()` `:315-340`; EFFECTIVE boot log
+   `main.py:142-146`) + `efa8b15` (Postgres telemetry prune
+   `postgres.py:392`, 5 tests in `test_postgres_prune.py`). Consent/login
+   policies stay separate by design — the register's remaining PARTIAL
+   scope.
 2. **P0-8 audit integrity** — set `AUDIT_HMAC_KEY` via compose (fail-closed
    `:?` like `docker-compose.yml:41`), drop the ephemeral
    `token_hex(32)` default (`audit_log.py:38`), mount an `audit_logs`
    volume, align the empty-default `AUTH_JWT_SECRET` at
-   `docker-compose.yml:104` with the `:?` gate.
+    `docker-compose.yml:104` with the `:?` gate.
+    Landed `61423d5` (resolution `audit_log.py:55`, boot `main.py:126`,
+    volume `docker-compose.yml:54`; 6 tests green).
 3. **P0-9 PDF path** — either add a Chromium stage to
-   `backend_api/Dockerfile` or implement + test the documented
-   "optional" fallback; verify `/api/cloud/reports/pdf` in a container.
+    `backend_api/Dockerfile` or implement + test the documented
+    "optional" fallback; verify `/api/cloud/reports/pdf` in a container.
+    Landed `bcf904e` + `3d9f316` (layer `Dockerfile:20-21`, 503 mapping
+    `report_pdf.py:78`); in-container render proven as uid 999 (7712 B PDF).
 4. **P0-10 metrics disclosure** — decision + code: keep `/healthz`,
    `/readyz` open (healthchecks require it, `ops.py:9`) but gate
-   `/metrics` (`ops.py:93`) behind auth or an allowlist.
+    `/metrics` (`ops.py:93`) behind auth or an allowlist.
+    Landed `ab9c3e4` (gate `ops.py:53-78`, `/metrics` carries the
+    dependency `ops.py:125`); live smoke: 403 without token / 200 with
+    bearer, probes open by design.
 5. **P0-3 TLS issuance** — script/verify the Let's Encrypt path against a
-   staged host (or document self-hosted cert rotation); handshake proof
-   attached to the doc.
+    staged host (or document self-hosted cert rotation); handshake proof
+    attached to the doc.
+    Landed `c7d6cd1` (`certs/issue_letsencrypt.sh:1`) + self-signed
+    handshake drill (HTTPS 200 / HTTP→301 / `CN=localhost`, request-time
+    upstream `nginx.tls.conf.example:63` via `5d71cc0`; hermetic script
+    `deploy/tls_handshake_drill.sh`). Live LE issuance deferred — no
+    domain on record.
 6. **P0-7 backup drill** — run `restore.sh` into a throwaway container,
-   record RTO + integrity result; encrypt the archive.
+    record RTO + integrity result; encrypt the archive.
+    Landed `aaf102d` (sessions `backup.sh:104-109`, `--encrypt` `:59`,
+    decrypt `restore.sh:76`, `--yes` `:60`) + `83aa528` (pg_restore flags
+    `:134`, hermetic drill `deploy/backup_restore_drill.sh`); compose-cp
+    from a live stack + dry-run proven. Timed RTO run pending.
 7. **Recordings disk guard** — clip floods are currently bounded only by
    alert cooldown (`ingestion.py:816`); add a low-watermark prune
    (delete oldest clips below N GB free) + metric, test with a fake
-   filesystem. *This is the one operational failure mode the 4-hour run
-   cannot prove absent (disk headroom on this host).*
+    filesystem. *This is the one operational failure mode the 4-hour run
+    cannot prove absent (disk headroom on this host).*
+    Landed `d4aecdd` (guard `yolo_cloud/disk_guard.py`, watermark
+    `CLIP_MIN_FREE_GB` at `docker-compose.yml:111`, counters on
+    `/cloud/health`; 8 tests green).
 
 Out of scope here (defer, listed honestly): pen-test, DPIA/SOC2, HA,
 fleet/SSO — the register's P1 column (`DEEP_AUDIT_REPORT.md:255-259`),
@@ -97,12 +126,12 @@ capture and check trial frames.
 
 ### 4.2 Setup day (Day 0)
 
-- [ ] Deploy: `docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d` (TLS overlay per `docker-compose.yml:76-77`, certs via `certs/README.md`); verify `/readyz`.
+- [ ] Deploy: `docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d` (TLS overlay per `docker-compose.yml:81-84`, mounts `docker-compose.tls.yml:20`, certs via `certs/README.md` or `certs/issue_letsencrypt.sh`); verify `/readyz`.
 - [ ] Cameras: 2 for pilot (per Safe Claims: 1–2 cameras, controlled pilot). RTSP feeds into the cloud core; verify per-cam FPS ≥ target with `scripts/soak_cloud.py --urls ... --seconds 120` (this doubles as the site's baseline latency row).
 - [ ] Consent: posted notice + per-worker consent record (worker_consent flow) before any recording; face recognition **off** unless separately consented — badge/QR is the default identity path (21 tests, `yolo_cloud/tests/test_identity.py`).
 - [ ] Accounts: 1 supervisor + 2 operators, MFA enrolled (`POST /auth/login/mfa` path), no shared logins.
 - [ ] Baseline: ergonomist walks the line, records existing RULA/REBA observations (this is the pre-pilot reference, not a product output).
-- [ ] Export: retention + clock/NTP check; disk watermark confirmed (§3.7 guard if landed, else manual free-space check daily).
+- [ ] Export: retention + clock/NTP check; disk watermark confirmed (§3.7 guard landed `d4aecdd` — keep the daily free-space check as backup).
 
 ### 4.3 Daily operation (Days 1–14) — the C2 loop
 
@@ -156,9 +185,11 @@ evidence pack (same style as TRL-6). Verdict wording candidates:
 
 | When | What | Owner |
 |---|---|---|
-| Now | TRL-6 consolidation (4 h soak, UDP probe, doc reconcile) | Agent 2 |
-| Now | C4 workstream §3 prep + this plan | Agent 1 (this session) |
+| Done 2026-09-26 | TRL-6 consolidation (4 h soak, UDP probe, doc reconcile) + TRL-6 CLOSED (`2610e32`) | Agent 2 ✓ |
+| Done 2026-09-26 | C4 workstream §3 (7 SHAs, merge `139f2da`) + this plan sync | Agent 1 (this session) ✓ |
 | Done 2026-09-26 | Spot-check sheet human-reviewed → TRL-6 closed (2 HIGH / 3 over-warn / 7 unrateable) | **User** ✓ |
+| Next | Sell-readiness audit (`docs/SELL_READINESS_AUDIT.md`), assessment-led funnel | Agent 1 |
+| Next | Final gates re-run + TRL-8 P1 supply-chain lane | Agent 2 |
 | This week | Site selected against §4.1; Day 0 executed | **User + site** |
 | Weeks 1–2 | §4.3–4.4 daily loop | Site operators |
 | Week 3 | §4.5 label handoff | Ergonomist |
