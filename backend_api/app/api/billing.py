@@ -74,6 +74,49 @@ def plan_limits_for_tier(tier: str) -> tuple[str, int | None]:
     return info["plan"], info["cameras"]
 
 
+def _checkout_discounts(coupon: str | None) -> list[dict] | None:
+    """Translate an assessment-credit promotion code into Stripe discounts.
+
+    Pure helper (no stripe import) so the mapping is unit-testable without
+    live keys. The office creates the promotion code in the Stripe
+    dashboard (e.g. 50% off 3 months for assessment conversion); the buyer
+    passes it as ``coupon``. Returns None when no coupon was supplied.
+    """
+    code = (coupon or "").strip()
+    if not code:
+        return None
+    return [{"promotion_code": code}]
+
+
+TRIAL_DAYS = 14
+
+
+def trial_status(org: dict | None, now: datetime | None = None) -> dict:
+    """Soft trial signal for pilot-plan orgs (sell-readiness F-03).
+
+    Returns {"trial_expired": bool, "trial_days_left": int | None}.
+    Only plan=="pilot" is ever trial-bound (14 days from creation, matching
+    the Stripe trial and the Pricing page promise); paid/self-hosted plans
+    report not-expired. Unparseable/missing dates degrade to not-expired —
+    never lock anyone out on a date bug. The frontend renders the banner
+    (Agent 2 lane); enforcement stays at Starter-parity caps.
+    """
+    org = org or {}
+    if org.get("plan") != "pilot":
+        return {"trial_expired": False, "trial_days_left": None}
+    try:
+        created = datetime.fromisoformat(str(org.get("created_at", "")))
+    except ValueError:
+        return {"trial_expired": False, "trial_days_left": None}
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    now = now or datetime.now(timezone.utc)
+    left = TRIAL_DAYS - (now - created).days
+    if left < 0:
+        return {"trial_expired": True, "trial_days_left": 0}
+    return {"trial_expired": False, "trial_days_left": left}
+
+
 def _apply_subscription_event(kind: str, obj: dict) -> None:
     """Map a Stripe event onto the org plan. Never raises.
 
@@ -135,7 +178,10 @@ async def create_checkout_session(
 ):
     """Create a Stripe Checkout session for the Cloud tier.
 
-    Body: {"tier": "cloud"} or {"tier": "cloud", "success_url": "...", "cancel_url": "..."}
+    Body: {"tier": "cloud"} or {"tier": "cloud", "coupon": "<promotion_code>",
+    "success_url": "...", "cancel_url": "..."}. The optional coupon carries
+    the assessment-conversion credit (promotion code created in the Stripe
+    dashboard, e.g. 50% off the first 3 months).
     Returns: {"checkout_url": "https://checkout.stripe.com/..."}
     """
     if not STRIPE_SECRET_KEY:
@@ -161,12 +207,13 @@ async def create_checkout_session(
 
     success_url = body.get("success_url", "http://localhost:3000/settings?billing=success")
     cancel_url = body.get("cancel_url", "http://localhost:3000/pricing")
+    discounts = _checkout_discounts(body.get("coupon"))
 
     try:
         import stripe
         stripe.api_key = STRIPE_SECRET_KEY
 
-        session = stripe.checkout.Session.create(
+        session_params: dict = dict(
             mode="subscription",
             payment_method_types=["card"],
             line_items=[{
@@ -190,6 +237,9 @@ async def create_checkout_session(
                 },
             },
         )
+        if discounts is not None:
+            session_params["discounts"] = discounts
+        session = stripe.checkout.Session.create(**session_params)
 
         return {"checkout_url": session.url, "session_id": session.id}
 

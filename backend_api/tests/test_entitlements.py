@@ -133,3 +133,56 @@ def test_admin_plan_patch_and_rbac(client: TestClient):
         headers=_auth(op_token),
     )
     assert forbidden.status_code == 403
+
+
+def test_checkout_discounts_builder():
+    from app.api.billing import _checkout_discounts
+
+    assert _checkout_discounts(None) is None
+    assert _checkout_discounts("") is None
+    assert _checkout_discounts("   ") is None
+    assert _checkout_discounts("promo_assess50") == [{"promotion_code": "promo_assess50"}]
+
+
+def test_checkout_requires_stripe_even_with_coupon(client: TestClient):
+    # No STRIPE_SECRET_KEY in the test env: 503 before any stripe import,
+    # coupon or not (fail-safe ordering).
+    data = _signup(client, "coupon503")
+    resp = client.post(
+        "/api/billing/checkout",
+        json={"tier": "cloud", "coupon": "promo_assess50"},
+        headers=_auth(data["token"]),
+    )
+    assert resp.status_code == 503
+
+
+def test_trial_status_pure():
+    from datetime import datetime, timezone
+
+    from app.api.billing import TRIAL_DAYS, trial_status
+
+    assert TRIAL_DAYS == 14
+    now = datetime(2026, 9, 26, tzinfo=timezone.utc)
+    fresh = {"plan": "pilot", "created_at": "2026-09-26T00:00:00+00:00"}
+    assert trial_status(fresh, now) == {"trial_expired": False, "trial_days_left": 14}
+    old = {"plan": "pilot", "created_at": "2026-09-01T00:00:00+00:00"}
+    expired = trial_status(old, now)
+    assert expired["trial_expired"] is True
+    assert expired["trial_days_left"] == 0
+    paid = {"plan": "professional", "created_at": "2020-01-01T00:00:00+00:00"}
+    assert trial_status(paid, now) == {"trial_expired": False, "trial_days_left": None}
+    assert trial_status({"plan": "pilot", "created_at": "garbage"}, now) == {
+        "trial_expired": False,
+        "trial_days_left": None,
+    }
+    assert trial_status({}, now) == {"trial_expired": False, "trial_days_left": None}
+    assert trial_status(None, now) == {"trial_expired": False, "trial_days_left": None}
+
+
+def test_current_org_carries_trial_signal(client: TestClient):
+    data = _signup(client, "trial")  # fresh pilot org
+    me = client.get("/api/orgs/current", headers=_auth(data["token"]))
+    assert me.status_code == 200, me.text
+    body = me.json()
+    assert body["trial_expired"] is False
+    assert body["trial_days_left"] == 14

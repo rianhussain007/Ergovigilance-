@@ -25,6 +25,18 @@ class OrganizationResponse(BaseModel):
     max_cameras: int
     max_workers: int
     created_at: str
+    trial_expired: bool = False
+    trial_days_left: Optional[int] = None
+
+
+def _with_trial_status(org: OrganizationResponse, row: dict) -> OrganizationResponse:
+    """Attach the soft trial signal (sell-readiness F-03)."""
+    from app.api.billing import trial_status
+
+    status = trial_status(row)
+    org.trial_expired = status["trial_expired"]
+    org.trial_days_left = status["trial_days_left"]
+    return org
 
 
 class OrganizationListResponse(BaseModel):
@@ -63,6 +75,8 @@ async def list_organizations(
             ).fetchall()
 
     orgs = [OrganizationResponse(**dict(r)) for r in rows]
+    for org, row in zip(orgs, rows):
+        _with_trial_status(org, dict(row))
     return OrganizationListResponse(
         organizations=orgs,
         current_org_id=user.org_id,
@@ -87,7 +101,7 @@ async def get_current_organization(
     if row is None:
         raise HTTPException(status_code=404, detail="Organization not found")
 
-    return OrganizationResponse(**dict(row))
+    return _with_trial_status(OrganizationResponse(**dict(row)), dict(row))
 
 
 @router.get("/orgs/{org_id}", response_model=OrganizationResponse)
@@ -106,7 +120,7 @@ async def get_organization(
     if row is None:
         raise HTTPException(status_code=404, detail="Organization not found")
 
-    return OrganizationResponse(**dict(row))
+    return _with_trial_status(OrganizationResponse(**dict(row)), dict(row))
 
 
 @router.patch("/orgs/{org_id}/plan", response_model=OrganizationResponse)
@@ -137,4 +151,4 @@ async def update_organization_plan(
             (org_id,)
         ).fetchone()
 
-    return OrganizationResponse(**dict(row))
+    return _with_trial_status(OrganizationResponse(**dict(row)), dict(row))
