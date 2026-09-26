@@ -37,6 +37,9 @@ os.environ["SESSION_RETENTION_DAYS"] = "0"
 os.environ["RECORDING_RETENTION_DAYS"] = "0"
 os.environ["RECORDINGS_MAX_GB"] = "0"
 os.environ["RETENTION_INTERVAL_HOURS"] = "1000"
+# Stats-endpoint gate: force the "no token configured" branch (P0-10) so a
+# METRICS_TOKEN leaking into the CI/dev shell cannot flip test behavior.
+os.environ["METRICS_TOKEN"] = ""
 # The code default is DEBUG=false, which hard-requires a strong
 # AUTH_JWT_SECRET at import time — tests opt into dev mode explicitly.
 os.environ["DEBUG"] = "true"

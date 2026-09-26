@@ -5,17 +5,22 @@
   (database reachable, and in live mode the monitoring service is initialized).
 - ``/metrics``  — Prometheus text exposition (via prometheus-client).
 
-These live at the root (not under ``/api``) so load balancers, orchestrators,
-and Docker healthchecks can probe them without auth.
+Probe endpoints (``/healthz``, ``/readyz``, ``/health``) stay unauthenticated
+so load balancers and healthchecks can reach them. The stats endpoints that
+disclose internals — ``/metrics``, ``/sla``, ``/storage``, ``/cache``,
+``/queries``, ``/logs``, ``/recovery`` — require the ``METRICS_TOKEN``
+bearer (P0-10); without a configured token they are only served when
+``DEBUG=true``.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+import secrets
 from typing import Any
 
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
@@ -43,6 +48,34 @@ HTTP_REQUESTS = Counter(
 )
 ACTIVE_SESSIONS = Gauge("ergo_active_sessions", "Active monitoring sessions (0 or 1 for the local service)")
 UPTIME = Gauge("ergo_uptime_seconds", "Seconds since the API process started")
+
+
+def _ops_authorized(request: Request) -> bool:
+    """Stats endpoints: METRICS_TOKEN bearer when configured, else DEBUG only."""
+    token = os.getenv("METRICS_TOKEN", "").strip()
+    if not token:
+        return bool(settings.DEBUG)
+    auth = request.headers.get("authorization", "")
+    provided = auth[7:] if auth[:7].lower() == "bearer " else ""
+    if not provided:
+        provided = request.headers.get("x-metrics-token", "")
+    return secrets.compare_digest(provided, token)
+
+
+def require_ops_token(request: Request) -> None:
+    """Dependency for internal-stats endpoints (health probes are exempt)."""
+    if not _ops_authorized(request):
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Stats endpoints require METRICS_TOKEN (Authorization: Bearer <token> "
+                "or X-Metrics-Token). A configured token is enforced even in DEBUG; "
+                "no token is only allowed when DEBUG=true."
+            ),
+        )
+
+
+OPS_TOKEN_DEP = [Depends(require_ops_token)]
 
 
 def _live_service_initialized() -> bool:
@@ -89,7 +122,7 @@ async def readyz() -> JSONResponse:
     )
 
 
-@router.get("/metrics", include_in_schema=False)
+@router.get("/metrics", include_in_schema=False, dependencies=OPS_TOKEN_DEP)
 async def metrics() -> Response:
     """Prometheus metrics in text exposition format."""
     ACTIVE_SESSIONS.set(_active_session_count())
@@ -97,14 +130,14 @@ async def metrics() -> Response:
     return Response(content=generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST)
 
 
-@router.get("/sla", include_in_schema=False)
+@router.get("/sla", include_in_schema=False, dependencies=OPS_TOKEN_DEP)
 async def sla_status() -> dict:
     """SLA compliance status — availability, response times, incidents."""
     from app.core.sla_monitor import sla_monitor
     return sla_monitor.get_status()
 
 
-@router.get("/storage", include_in_schema=False)
+@router.get("/storage", include_in_schema=False, dependencies=OPS_TOKEN_DEP)
 async def storage_stats() -> dict:
     """Storage usage — recordings, alerts, reports, disk space."""
     from app.core.storage_manager import storage_manager
@@ -134,28 +167,28 @@ async def storage_stats() -> dict:
     }
 
 
-@router.get("/cache", include_in_schema=False)
+@router.get("/cache", include_in_schema=False, dependencies=OPS_TOKEN_DEP)
 async def cache_stats() -> dict:
     """Response cache statistics — hit rate, entries, memory usage."""
     from app.core.response_cache import response_cache
     return response_cache.get_stats()
 
 
-@router.get("/queries", include_in_schema=False)
+@router.get("/queries", include_in_schema=False, dependencies=OPS_TOKEN_DEP)
 async def query_stats() -> dict:
     """Database query performance — slow queries, top queries, latency."""
     from app.core.query_monitor import query_monitor
     return query_monitor.get_stats()
 
 
-@router.get("/logs", include_in_schema=False)
+@router.get("/logs", include_in_schema=False, dependencies=OPS_TOKEN_DEP)
 async def log_stats() -> dict:
     """Logging configuration and file sizes."""
     from app.core.log_config import get_log_stats
     return get_log_stats()
 
 
-@router.get("/recovery", include_in_schema=False)
+@router.get("/recovery", include_in_schema=False, dependencies=OPS_TOKEN_DEP)
 async def recovery_stats() -> dict:
     """Auto-recovery monitor status."""
     from app.core.auto_recovery import recovery_monitor

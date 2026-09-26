@@ -126,8 +126,9 @@ The following headers are automatically applied:
 ### Prometheus Metrics
 
 ```bash
-# Available at /metrics
-curl http://localhost:8001/metrics
+# Available at /metrics — requires METRICS_TOKEN when configured
+# (Prometheus: set authorization.type: Bearer + credentials, or bearer_token)
+curl -H "Authorization: Bearer $METRICS_TOKEN" http://localhost:8001/metrics
 
 # Key metrics:
 # ergo_uptime_seconds - Server uptime

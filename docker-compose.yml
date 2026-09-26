@@ -52,6 +52,9 @@ services:
       # Audit trail lives on the persistent /data volume (auto-provisioned
       # HMAC key at /data/audit_hmac.key — survives container recreation).
       - AUDIT_LOG_DIR=/data/audit_logs
+      # Bearer for the stats endpoints (/metrics, /sla, ...); empty + DEBUG=false
+      # means those endpoints refuse (health probes stay open).
+      - METRICS_TOKEN=${METRICS_TOKEN:-}
       - PG_TIMESCALEDB=${PG_TIMESCALEDB:-false}
     volumes:
       - ergovigilance-db:/data

@@ -149,8 +149,8 @@ DEMO_MODE=true docker compose up -d
 ### Deployment & Operations
 - Docker Compose with `.env`-driven ports (4 services)
 - Windows Service scripts (`deploy/`)
-- Health probes (`/healthz`, `/readyz`, `/metrics`)
-- Data retention policy (session age, recording age, disk cap)
+- Health probes (`/healthz`, `/readyz`); stats endpoints (`/metrics`, `/sla`, ...) gated by `METRICS_TOKEN`
+- Data retention policy (session age, recording age, disk cap, audit logs, alert rows)
 - Crash-safe session recovery from checkpoints
 - CSP security headers, rate limiting, non-root Docker
 

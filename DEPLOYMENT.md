@@ -395,8 +395,9 @@ docker compose restart backend
 ### Prometheus Metrics
 
 ```bash
-# Metrics endpoint
-curl http://localhost:8000/metrics
+# Metrics endpoint — token-gated when METRICS_TOKEN is set (and always
+# refused when DEBUG=false with no token; health probes stay open)
+curl -H "Authorization: Bearer $METRICS_TOKEN" http://localhost:8000/metrics
 
 # Metrics include:
 # - Request count and latency
