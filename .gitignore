@@ -65,6 +65,8 @@ vite_startup.log
 certs/*.pem
 certs/*.key
 certs/*.crt
+certs/.domain
+backups/
 
 # Runtime configuration written by the app — site-specific, not committed:
 # Settings UI retention overrides and station ROIs drawn by a supervisor.
@@ -129,3 +131,6 @@ node_modules/
 
 # Local RTSP test rig (binaries + auto-generated TLS keys)
 tools/mediamtx/
+
+# Auto-provisioned audit HMAC key — key material, never commit
+backend_api/data/

@@ -1,17 +1,26 @@
 """Data retention & disk-usage guardrails.
 
-Enforces the platform's data-retention policy on disk artifacts:
+Single source of truth for the platform's time-based data-retention policy.
 
-- Session JSON files under ``outputs/sessions`` (per ``SESSION_RETENTION_DAYS``)
-- Recorded session directories under ``recordings/<worker>/<session>``
-  (per ``RECORDING_RETENTION_DAYS``)
-- A hard disk cap on the recordings tree (``RECORDINGS_MAX_GB``) — when
-  exceeded, the oldest sessions are evicted first.
+Policy domains (each store has one owner — do not read env knobs elsewhere):
 
-All policy knobs come from environment variables (0 disables the check).
-The functions accept explicit paths so they are unit-testable against
-temporary directories; production paths honour the same env vars the API
-modules use (``SESSIONS_DIR`` / ``RECORDINGS_DIR``).
+- Session JSON files under ``outputs/sessions`` (``session_retention_days``)
+- Recorded session dirs under ``recordings/<worker>/<session>``
+  (``recording_retention_days``) plus a hard disk cap (``recordings_max_gb``)
+- Audit-trail JSONL files in ``AUDIT_LOG_DIR`` (``audit_log_retention_days``)
+- Alert rows in the local DB (``alert_retention_days``)
+
+Deliberately separate domains with their own defaults: consent-record expiry
+(``app/api/consent.py`` ``CONSENT_POLICY`` — a legal renewal cadence, not a
+disk policy) and login-attempt throttling (``app/core/database.py``).
+Postgres telemetry rows (Tier 1) are not yet age-pruned — tracked in
+docs/P0_REVERIFICATION.md (P0-6).
+
+All knobs come from environment variables (0 disables the check) and can be
+overridden at runtime by the admin ``PUT /retention/config`` endpoint, which
+persists to ``config/retention.json``. The functions accept explicit paths so
+they are unit-testable against temporary directories; production paths honour
+the same env vars the API modules use (``SESSIONS_DIR`` / ``RECORDINGS_DIR``).
 """
 
 from __future__ import annotations
@@ -70,6 +79,8 @@ def set_retention_config(config: dict) -> tuple[dict, bool]:
         "session_retention_days": int(config.get("session_retention_days", current["session_retention_days"])),
         "recording_retention_days": int(config.get("recording_retention_days", current["recording_retention_days"])),
         "recordings_max_gb": float(config.get("recordings_max_gb", current["recordings_max_gb"])),
+        "audit_log_retention_days": int(config.get("audit_log_retention_days", current["audit_log_retention_days"])),
+        "alert_retention_days": int(config.get("alert_retention_days", current["alert_retention_days"])),
     }
     persisted = False
     try:
@@ -111,6 +122,8 @@ def retention_config() -> dict:
         "session_retention_days": _env_int("SESSION_RETENTION_DAYS", 30),
         "recording_retention_days": _env_int("RECORDING_RETENTION_DAYS", 30),
         "recordings_max_gb": _env_int("RECORDINGS_MAX_GB", 20),
+        "audit_log_retention_days": _env_int("AUDIT_LOG_RETENTION_DAYS", 365),
+        "alert_retention_days": _env_int("ALERT_RETENTION_DAYS", 30),
     }
     for key in policy:
         if key in overrides:
@@ -302,12 +315,31 @@ def run_retention() -> dict:
         "session_retention_days": cfg["session_retention_days"],
         "recording_retention_days": cfg["recording_retention_days"],
         "recordings_max_gb": cfg["recordings_max_gb"],
+        "audit_log_retention_days": cfg["audit_log_retention_days"],
+        "alert_retention_days": cfg["alert_retention_days"],
         "sessions": cleanup_sessions(cfg["session_retention_days"]),
         "recordings": cleanup_recordings(cfg["recording_retention_days"]),
         "disk_cap": enforce_recordings_cap(cfg["recordings_max_gb"]),
     }
-    logger.info("Retention run: sessions=%s recordings=%s disk_cap=%s",
-                stats["sessions"], stats["recordings"], stats["disk_cap"])
+    # Lazy imports: the audit/DB layers are heavier than file cleanup and the
+    # policy must still resolve (and be logged) if either store is unavailable.
+    try:
+        from app.core.audit_log import audit_logger
+        stats["audit_logs"] = {
+            "deleted_files": audit_logger.cleanup_old_logs(cfg["audit_log_retention_days"]),
+        }
+    except Exception as exc:  # never let one store abort the whole pass
+        logger.warning("Audit log retention pass failed: %s", exc)
+        stats["audit_logs"] = {"error": str(exc)}
+    try:
+        from app.core.database import delete_alerts_older_than
+        stats["alerts"] = {"deleted_rows": delete_alerts_older_than(cfg["alert_retention_days"])}
+    except Exception as exc:
+        logger.warning("Alert retention pass failed: %s", exc)
+        stats["alerts"] = {"error": str(exc)}
+    logger.info("Retention run: sessions=%s recordings=%s disk_cap=%s audit=%s alerts=%s",
+                stats["sessions"], stats["recordings"], stats["disk_cap"],
+                stats["audit_logs"], stats["alerts"])
     return stats
 
 

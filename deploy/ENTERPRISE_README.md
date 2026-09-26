@@ -126,8 +126,9 @@ The following headers are automatically applied:
 ### Prometheus Metrics
 
 ```bash
-# Available at /metrics
-curl http://localhost:8001/metrics
+# Available at /metrics — requires METRICS_TOKEN when configured
+# (Prometheus: set authorization.type: Bearer + credentials, or bearer_token)
+curl -H "Authorization: Bearer $METRICS_TOKEN" http://localhost:8001/metrics
 
 # Key metrics:
 # ergo_uptime_seconds - Server uptime
@@ -162,7 +163,7 @@ curl http://localhost:8001/health
 ### Automated Backups
 
 ```bash
-# Run backup
+# Run backup (sessions from outputs/sessions, auth DB from PG/SQLite/compose volume)
 ./deploy/backup.sh
 
 # Backup with 30-day retention
@@ -170,16 +171,19 @@ curl http://localhost:8001/health
 
 # Database only
 ./deploy/backup.sh --db-only
+
+# AES-256 encrypted archive (BACKUP_PASSPHRASE required; restore reads it too)
+BACKUP_PASSPHRASE=... ./deploy/backup.sh --encrypt
 ```
 
 ### Restore
 
 ```bash
-# Dry run (see what would be restored)
+# Dry run (see what would be restored; handles .enc archives)
 ./deploy/restore.sh backups/ergovigilance_backup_*.tar.gz --dry-run
 
-# Full restore
-./deploy/restore.sh backups/ergovigilance_backup_*.tar.gz
+# Full restore (sessions land in outputs/sessions — the path the app reads)
+BACKUP_PASSPHRASE=... ./deploy/restore.sh backups/ergovigilance_backup_*.tar.gz.enc
 ```
 
 ### Cron Job (Daily Backup)

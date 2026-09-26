@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable
 
@@ -556,6 +556,25 @@ def delete_alerts_for_worker(worker_id: str) -> int:
     """Delete all alert rows for a worker (used by the privacy wipe endpoint)."""
     with get_connection() as conn:
         cur = conn.execute("DELETE FROM alerts WHERE worker_id = ?", (worker_id,))
+        conn.commit()
+        return cur.rowcount
+
+
+def delete_alerts_older_than(max_age_days: int) -> int:
+    """Delete alert rows created more than ``max_age_days`` ago (0 disables).
+
+    ``created_at`` is an ISO-8601 UTC string (see ``insert_alert``); SQLite's
+    ``datetime()`` parses it, and rows whose timestamp cannot be parsed are
+    simply never matched — retention never guesses about unknown data.
+    """
+    if max_age_days <= 0:
+        return 0
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=max_age_days)).isoformat()
+    with get_connection() as conn:
+        cur = conn.execute(
+            "DELETE FROM alerts WHERE datetime(created_at) < datetime(?)",
+            (cutoff,),
+        )
         conn.commit()
         return cur.rowcount
 

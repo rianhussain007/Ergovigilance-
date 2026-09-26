@@ -1,18 +1,22 @@
-"""Session recording storage manager with auto-cleanup.
+"""Session recording storage manager — usage statistics for /ops/storage.
 
-Manages disk space for session recordings, alerts, and reports.
-Auto-deletes old files based on configurable retention policies.
+Manages disk-space reporting for session recordings, alerts, and reports.
 
-Configurable via environment:
-- STORAGE_MAX_MB: max total storage in MB (default 1000)
-- STORAGE_RETENTION_DAYS: days to keep recordings (default 30)
+The enforced data-retention policy (age limits + disk cap) lives in
+``app.services.retention`` (``run_retention``, admin API ``/retention/*``) —
+this module's ``cleanup_old_files``/``enforce_storage_limit`` are legacy
+helpers that are NOT part of that pass; do not treat them as policy.
+
+Configurable via environment (display-only):
+- STORAGE_MAX_MB: displayed cap in MB (default: RECORDINGS_MAX_GB * 1024,
+  i.e. the same cap the retention pass actually enforces)
+- STORAGE_RETENTION_DAYS: deprecated alias of RECORDING_RETENTION_DAYS
 - STORAGE_RECORDINGS_DIR: directory for recordings (default ./recordings)
 - STORAGE_ALERTS_DIR: directory for alert images (default ./alerts)
 - STORAGE_REPORTS_DIR: directory for exported reports (default ./reports)
 
 Usage:
     from app.core.storage_manager import storage_manager
-    storage_manager.cleanup_old_files()
     stats = storage_manager.get_stats()
 """
 
@@ -27,8 +31,17 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-STORAGE_MAX_MB = int(os.getenv("STORAGE_MAX_MB", "1000"))
-STORAGE_RETENTION_DAYS = int(os.getenv("STORAGE_RETENTION_DAYS", "30"))
+# Displayed cap follows the enforced policy (RECORDINGS_MAX_GB, default 20 GB);
+# an explicit STORAGE_MAX_MB still wins for back-compat.
+STORAGE_MAX_MB = int(
+    os.getenv("STORAGE_MAX_MB")
+    or str(int(float(os.getenv("RECORDINGS_MAX_GB", "20")) * 1024))
+)
+# Legacy alias: STORAGE_RETENTION_DAYS predates the unified policy knob
+# RECORDING_RETENTION_DAYS — the canonical name wins when both are unset-ish.
+STORAGE_RETENTION_DAYS = int(
+    os.getenv("STORAGE_RETENTION_DAYS") or os.getenv("RECORDING_RETENTION_DAYS", "30")
+)
 RECORDINGS_DIR = Path(os.getenv("STORAGE_RECORDINGS_DIR", "./recordings"))
 ALERTS_DIR = Path(os.getenv("STORAGE_ALERTS_DIR", "./alerts"))
 REPORTS_DIR = Path(os.getenv("STORAGE_REPORTS_DIR", "./reports"))

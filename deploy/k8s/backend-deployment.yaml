@@ -45,6 +45,16 @@ spec:
                 secretKeyRef:
                   name: ergovigilance-secrets
                   key: jwt-secret
+            - name: AUDIT_HMAC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ergovigilance-secrets
+                  key: audit-hmac-key
+            - name: METRICS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ergovigilance-secrets
+                  key: metrics-token
             - name: SMTP_HOST
               valueFrom:
                 secretKeyRef:

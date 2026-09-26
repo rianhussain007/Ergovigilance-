@@ -30,7 +30,7 @@ from app.api.ops import router as ops_router
 from app.api.ops import http_metrics_middleware as metrics_middleware
 from app.api.websocket import router as ws_router
 from backend.services.live_monitor import init_live_service
-from backend.services.retention import run_retention
+from backend.services.retention import retention_config, run_retention
 from app.core.database import init_local_database
 from backend.services.assistant import load_corpus
 
@@ -119,6 +119,12 @@ async def lifespan(app: FastAPI):
         )
     init_local_database()
 
+    # Fail fast if the audit chain key cannot be resolved (P0-8): a boot-time
+    # refusal beats a 500 on the first audited event. With DEBUG=false this
+    # raises unless AUDIT_HMAC_KEY is set or the key file is writable.
+    from app.core.audit_log import ensure_hmac_key
+    ensure_hmac_key()
+
     # Tier 1: when DATABASE_URL is configured, create the Postgres telemetry
     # tables (non-blocking, never raises — file mode continues if it fails).
     try:
@@ -133,11 +139,17 @@ async def lifespan(app: FastAPI):
 
     retention_task = asyncio.create_task(_retention_loop())
     digest_task = asyncio.create_task(_digest_loop())
+    # Log the EFFECTIVE policy (env defaults + config/retention.json admin
+    # overrides), not the raw env, so the startup line never lies.
+    policy = retention_config()
     logger.info(
-        "Data retention active (session_days=%.0f recording_days=%.0f cap=%.0f GB, interval=%.1fh)",
-        float(os.getenv("SESSION_RETENTION_DAYS", "30")),
-        float(os.getenv("RECORDING_RETENTION_DAYS", "30")),
-        float(os.getenv("RECORDINGS_MAX_GB", "20")),
+        "Data retention active (session_days=%.0f recording_days=%.0f cap=%.0f GB "
+        "audit_days=%.0f alert_days=%.0f, interval=%.1fh)",
+        policy["session_retention_days"],
+        policy["recording_retention_days"],
+        policy["recordings_max_gb"],
+        policy["audit_log_retention_days"],
+        policy["alert_retention_days"],
         RETENTION_INTERVAL_HOURS,
     )
 

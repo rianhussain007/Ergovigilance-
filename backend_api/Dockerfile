@@ -1,8 +1,9 @@
 FROM python:3.12-slim
 
 # ── System dependencies for OpenCV ─────────────────────────────────
-# Minimal set: just what MediaPipe + OpenCV need. Skip Playwright
-# (only needed for PDF export — install separately if required).
+# Minimal set: just what MediaPipe + OpenCV need, plus the shared libraries
+# and fonts Playwright's headless Chromium needs for PDF report export
+# (P0-9: the pip package alone cannot launch without the browser).
 RUN apt-get update && apt-get install -y --no-install-recommends \
        libgl1 libglib2.0-0 libgomp1 \
     && rm -rf /var/lib/apt/lists/*
@@ -11,6 +12,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY backend_api/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir --retries 3 --timeout 120 \
     -r /tmp/requirements.txt && rm /tmp/requirements.txt
+
+# Headless Chromium shell for PDF report export (--only-shell = no UI,
+# smaller download; --with-deps pulls the exact OS libraries it links).
+# Shared path (not /root/.cache) so the non-root runtime user can exec it;
+# the env var must persist so playwright finds the browser at runtime too.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN python -m playwright install --with-deps --only-shell chromium \
+    && rm -rf /var/lib/apt/lists/*
 
 # ── Non-root user ──────────────────────────────────────────────────
 RUN groupadd -r ergovigilance && useradd -r -g ergovigilance -d /app -s /sbin/nologin ergovigilance
@@ -23,7 +32,7 @@ COPY models/ ./models/
 
 # ── Data directories (writable by app user) ───────────────────────
 RUN mkdir -p /data/sessions /data/recordings /data/reports \
-    && chown -R ergovigilance:ergovigilance /app /data
+    && chown -R ergovigilance:ergovigilance /app /data /ms-playwright
 
 USER ergovigilance
 

@@ -63,6 +63,7 @@ async def health():
     """Health check for the cloud service."""
     service = get_cloud_service()
     cameras = service.get_all_cameras()
+    from yolo_cloud import disk_guard
     return {
         "status": "healthy",
         "engine": "yolov8-pose",
@@ -70,6 +71,7 @@ async def health():
         "cameras_configured": len(cameras),
         "cameras_active": sum(1 for c in cameras if c.get("is_active")),
         "device": settings.YOLO_DEVICE,
+        "disk_guard": disk_guard.stats_snapshot(),
     }
 
 

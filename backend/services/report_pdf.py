@@ -61,11 +61,28 @@ async def close_browser() -> None:
 
 
 async def _get_browser() -> Browser:
-    """Return shared browser instance, relaunching if crashed."""
+    """Return shared browser instance, relaunching if crashed.
+
+    A missing Playwright package or Chromium binary (P0-9) maps to HTTP 503
+    with an actionable fix instead of an opaque 500 — PDF export must fail
+    loudly but gracefully in slim containers.
+    """
     global _browser
     if _browser is None or not _browser.is_connected():
         logger.info("Browser disconnected — launching new instance")
-        await init_browser()
+        try:
+            await init_browser()
+        except Exception as exc:  # noqa: BLE001 - any launch failure is 503
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "PDF export is unavailable: headless Chromium failed to start "
+                    f"({type(exc).__name__}: {str(exc)[:200]}). Fix: run "
+                    "`playwright install chromium` in this environment "
+                    "(backend_api/Dockerfile does this for container deployments)."
+                ),
+            ) from exc
     return _browser
 
 
