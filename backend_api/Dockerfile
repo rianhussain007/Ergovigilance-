@@ -15,6 +15,9 @@ RUN pip install --no-cache-dir --retries 3 --timeout 120 \
 
 # Headless Chromium shell for PDF report export (--only-shell = no UI,
 # smaller download; --with-deps pulls the exact OS libraries it links).
+# Shared path (not /root/.cache) so the non-root runtime user can exec it;
+# the env var must persist so playwright finds the browser at runtime too.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN python -m playwright install --with-deps --only-shell chromium \
     && rm -rf /var/lib/apt/lists/*
 
@@ -29,7 +32,7 @@ COPY models/ ./models/
 
 # ── Data directories (writable by app user) ───────────────────────
 RUN mkdir -p /data/sessions /data/recordings /data/reports \
-    && chown -R ergovigilance:ergovigilance /app /data
+    && chown -R ergovigilance:ergovigilance /app /data /ms-playwright
 
 USER ergovigilance
 
