@@ -85,6 +85,29 @@ spec:
                   name: ergovigilance-secrets
                   key: stripe-secret
                   optional: true
+            # Write-path analysis (P1 readOnlyRootFilesystem): every directory
+            # the app creates files in lives on the /data emptyDir below.
+            # WEB_CONCURRENCY=1 is load-bearing — multiple uvicorn workers race
+            # run_migrations() on a fresh DB (duplicate column / no such table)
+            # and the pod crash-loops without it.
+            - name: WEB_CONCURRENCY
+              value: "1"
+            - name: HOME
+              value: /tmp
+            - name: AUTH_DB_PATH
+              value: /data/local_auth.db
+            - name: AUDIT_LOG_DIR
+              value: /data/audit_logs
+            - name: SESSIONS_DIR
+              value: /data/sessions
+            - name: REPORTS_DIR
+              value: /data/reports
+            - name: STORAGE_REPORTS_DIR
+              value: /data/reports
+            - name: STORAGE_RECORDINGS_DIR
+              value: /data/recordings
+            - name: STORAGE_ALERTS_DIR
+              value: /data/alerts
           resources:
             requests:
               memory: "256Mi"
@@ -117,9 +140,19 @@ spec:
             failureThreshold: 30
           securityContext:
             allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
       restartPolicy: Always
       terminationGracePeriodSeconds: 30

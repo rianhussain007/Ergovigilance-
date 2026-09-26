@@ -20,8 +20,10 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
-        runAsUser: 999  # postgres user
-        fsGroup: 999
+        # postgres:16-alpine runs as uid=gid 70 (verified: docker run --user
+        # 70:70); 999 is the debian image's uid and made fsGroup wrong here.
+        runAsUser: 70  # postgres user (alpine)
+        fsGroup: 70
       containers:
         - name: postgres
           image: postgres:16-alpine
@@ -69,11 +71,25 @@ spec:
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
+            # readOnlyRootFilesystem: postgres needs /run (unix socket + perms
+            # for the pg listener) and /tmp; both verified writable as tmpfs
+            # with gid 70 / mode 1777 against this exact image.
+            - name: run
+              mountPath: /run
+            - name: tmp
+              mountPath: /tmp
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
       volumes:
         - name: postgres-data
           emptyDir: {}
+        - name: run
+          emptyDir:
+            medium: Memory
+        - name: tmp
+          emptyDir:
+            medium: Memory
   volumeClaimTemplates:
     - metadata:
         name: postgres-data

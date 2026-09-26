@@ -20,6 +20,19 @@ COPY --from=build /app/dist /usr/share/nginx/html
 # Copy nginx config
 COPY ui_posture/nginx.conf /etc/nginx/conf.d/default.conf
 
+# Non-root runtime (Trivy DS0002 + k8s runAsUser 101). The base image
+# runs the master as root with pid /run/nginx.pid and root-owned temp
+# trees, neither of which uid 101 can use — and a read-only rootfs
+# would block them even for root. Move the pid to /tmp (writable via
+# tmpfs/emptyDir everywhere we deploy), drop the now-meaningless
+# `user` directive (a non-root master ignores it), and hand the cache
+# dirs to the nginx user. sed uses POSIX classes: this is busybox sed.
+RUN sed -i 's|pid[[:space:]]*/run/nginx.pid;|pid /tmp/nginx.pid;|' /etc/nginx/nginx.conf \
+    && sed -i '/^user[[:space:]]*nginx;/d' /etc/nginx/nginx.conf \
+    && chown -R nginx:nginx /var/cache/nginx
+
+USER nginx
+
 # Expose port
 EXPOSE 80
 

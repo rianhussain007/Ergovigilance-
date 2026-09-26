@@ -56,4 +56,17 @@ spec:
             capabilities:
               drop:
                 - ALL
+          volumeMounts:
+            # readOnlyRootFilesystem is on, so nginx (uid 101) needs writable
+            # tmpfs for pid /tmp/nginx.pid, client body/temp paths and cache —
+            # same recipe as the Dockerfile's non-root fix.
+            - name: tmp
+              mountPath: /tmp
+            - name: cache
+              mountPath: /var/cache/nginx
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: cache
+          emptyDir: {}
       restartPolicy: Always
