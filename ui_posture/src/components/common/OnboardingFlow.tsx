@@ -74,9 +74,12 @@ export default function OnboardingFlow({ onComplete }: { onComplete: () => void 
   const [loading, setLoading] = useState(true);
   const [sessionStarted, setSessionStarted] = useState(false);
 
-  // Poll camera status when on camera step
+  // Poll camera status when on camera step — supervisors and above only.
+  // /api/setup/status is role-gated (supervisor/safety_mgr/admin); calling
+  // it as operator 403s on every poll and spams the console.
+  const canProbeSetup = !!user && user.role !== 'operator';
   useEffect(() => {
-    if (step !== 1) return; // Only poll on camera step
+    if (step !== 1 || !canProbeSetup) return; // Only poll on camera step
     let cancelled = false;
     const poll = async () => {
       try {
@@ -90,10 +93,14 @@ export default function OnboardingFlow({ onComplete }: { onComplete: () => void 
     poll();
     const id = setInterval(poll, 2000);
     return () => { cancelled = true; clearInterval(id); };
-  }, [step]);
+  }, [step, canProbeSetup]);
 
-  // Initial status load
+  // Initial status load (same role gate as the poll above).
   useEffect(() => {
+    if (!canProbeSetup) {
+      setLoading(false);
+      return;
+    }
     const load = async () => {
       try {
         const res = await apiFetch('/api/setup/status');
@@ -105,7 +112,7 @@ export default function OnboardingFlow({ onComplete }: { onComplete: () => void 
       setLoading(false);
     };
     load();
-  }, []);
+  }, [canProbeSetup]);
 
   const checks = cameraStatus?.checks;
   const allChecksPass = checks && Object.values(checks).every(Boolean);

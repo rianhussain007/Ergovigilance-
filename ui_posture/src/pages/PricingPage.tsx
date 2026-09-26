@@ -6,6 +6,7 @@ import {
   FileText, AlertTriangle, Radio, Eye,
 } from 'lucide-react';
 import Logo from '../components/common/Logo';
+import { getStoredToken } from '@/src/auth/AuthContext';
 
 const TIERS = [
   {
@@ -110,6 +111,12 @@ export default function PricingPage() {
   const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   const handleCheckout = async () => {
+    // Anonymous visitors have no account to bill: send them straight to
+    // the pilot request instead of firing an authed call that 401s.
+    if (!getStoredToken()) {
+      window.location.href = '/request-pilot';
+      return;
+    }
     setCheckoutLoading(true);
     try {
       const res = await fetch('/api/billing/checkout', {

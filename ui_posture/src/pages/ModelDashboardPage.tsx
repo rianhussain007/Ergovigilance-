@@ -76,7 +76,6 @@ export default function ModelDashboardPage() {
   }
 
   const riskMetrics = comparison?.yolo_cloud?.risk;
-  const taskMetrics = comparison?.yolo_cloud?.task;
   const mpMetrics = comparison?.mediapipe_on_premise;
   const riskDetail = yoloDetail?.yolo_risk || {};
   const taskDetail = yoloDetail?.yolo_task || {};
@@ -151,23 +150,13 @@ export default function ModelDashboardPage() {
             <InfoRow label="Model" value={comparison?.yolo_cloud?.model || 'YOLOv8-pose'} />
             <InfoRow label="Keypoints" value={`${comparison?.yolo_cloud?.keypoints || 17} (COCO)`} />
             <InfoRow label="Runtime" value={comparison?.yolo_cloud?.runtime || 'Cloud (RTSP)'} />
+            {/* YOLO figures below are research-track provenance (training
+                methodology), never product accuracy — the only customer-safe
+                number is 87.6% LOW/MEDIUM (see Validation page). */}
             <InfoRow
-              label="Risk Accuracy"
-              value={riskMetrics ? `${(riskMetrics.test_accuracy * 100).toFixed(1)}%` : 'N/A'}
+              label="Evaluation"
+              value="Research track — not product accuracy"
               highlight
-            />
-            <InfoRow
-              label="Risk CV F1"
-              value={riskMetrics ? `${riskMetrics.cv_f1_mean.toFixed(4)} ± ${riskMetrics.cv_f1_std.toFixed(4)}` : 'N/A'}
-            />
-            <InfoRow
-              label="Task Accuracy"
-              value={taskMetrics ? `${(taskMetrics.test_accuracy * 100).toFixed(1)}%` : 'N/A'}
-              highlight
-            />
-            <InfoRow
-              label="Task CV F1"
-              value={taskMetrics ? `${taskMetrics.cv_f1_mean.toFixed(4)} ± ${taskMetrics.cv_f1_std.toFixed(4)}` : 'N/A'}
             />
             <InfoRow
               label="Training Samples"

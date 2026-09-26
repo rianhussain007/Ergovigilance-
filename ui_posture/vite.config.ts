@@ -42,6 +42,18 @@ export default defineConfig(() => {
                     target: 'http://127.0.0.1:8000',
                     changeOrigin: true,
                 },
+                // Backend Swagger UI + OpenAPI spec for the ApiDocs page.
+                // Without these, location / serves index.html and both links
+                // break in dev (mirrors the nginx /docs + /openapi.json
+                // locations in prod).
+                '^/docs': {
+                    target: 'http://127.0.0.1:8000',
+                    changeOrigin: true,
+                },
+                '^/openapi\\.json$': {
+                    target: 'http://127.0.0.1:8000',
+                    changeOrigin: true,
+                },
                 '/video/': {
                     target: 'http://127.0.0.1:8000',
                     changeOrigin: true,
