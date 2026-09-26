@@ -27,7 +27,8 @@
     "architecture": "系统架构",
     "onboarding": "引导",
     "consent": "同意管理",
-    "settings": "设置"
+    "settings": "设置",
+    "webcam": "摄像头演示"
   },
   "dashboard": {
     "title": "仪表盘",

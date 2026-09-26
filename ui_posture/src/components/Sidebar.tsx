@@ -9,7 +9,9 @@ import { useI18n } from '@/src/i18n';
 // Navigation grouped into labeled sections. Each item keeps its own role gate
 // so operator/supervisor roles never see admin-only destinations (Manager,
 // Deployment, Audit Trail, Pilot Requests, Users).
-const NAV_SECTIONS: { title: string; tKey: string; items: { to: string; label: string; tKey: string; icon: typeof LayoutDashboard; roles: string[] }[] }[] = [
+// Exported for the route-consistency test (every `to` must be allowed for
+// its roles in auth/routes.ts) — the Layout guard bounces anything else.
+export const NAV_SECTIONS: { title: string; tKey: string; items: { to: string; label: string; tKey: string; icon: typeof LayoutDashboard; roles: string[] }[] }[] = [
   {
     title: 'Monitoring',
     tKey: 'nav.dashboard',

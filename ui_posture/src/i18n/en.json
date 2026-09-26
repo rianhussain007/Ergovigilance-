@@ -27,7 +27,8 @@
     "architecture": "Architecture",
     "onboarding": "Onboarding",
     "consent": "Consent",
-    "settings": "Settings"
+    "settings": "Settings",
+    "webcam": "Webcam Demo"
   },
   "dashboard": {
     "title": "Dashboard",

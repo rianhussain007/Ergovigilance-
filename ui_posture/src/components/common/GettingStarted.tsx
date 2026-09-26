@@ -22,7 +22,7 @@ export function GettingStarted() {
     const completedIds: Set<string> = saved ? new Set(JSON.parse(saved)) : new Set();
     return [
       { id: 'onboarding', label: 'Complete Factory Setup', description: 'Walk through the 10-step onboarding checklist', route: '/onboarding', icon: Rocket, completed: completedIds.has('onboarding') },
-      { id: 'cameras', label: 'Add Your First Camera', description: 'Connect a USB webcam or RTSP camera', route: '/monitoring', icon: Camera, completed: completedIds.has('cameras') },
+      { id: 'cameras', label: 'Add Your First Camera', description: 'Connect a USB webcam or RTSP camera', route: '/onboarding', icon: Camera, completed: completedIds.has('cameras') },
       { id: 'workers', label: 'Register Workers', description: 'Add worker profiles for tracking', route: '/workers', icon: Users, completed: completedIds.has('workers') },
       { id: 'alerts', label: 'Configure Alerts', description: 'Set up email/Slack notifications', route: '/settings', icon: Bell, completed: completedIds.has('alerts') },
       { id: 'reports', label: 'Generate First Report', description: 'Run a session and download the report', route: '/reports', icon: FileText, completed: completedIds.has('reports') },

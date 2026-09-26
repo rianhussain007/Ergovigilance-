@@ -7,10 +7,10 @@ import type { Role } from './AuthContext';
  * hang in a redirect loop).
  */
 export const rolePaths: Record<Role, string[]> = {
-  operator: ['/', '/dashboard', '/monitoring', '/video-review', '/analytics', '/reports', '/sessions', '/workers', '/settings'],
-  supervisor: ['/', '/dashboard', '/monitoring', '/video-review', '/analytics', '/reports', '/sessions', '/cameras', '/workers', '/settings'],
-  safety_mgr: ['/', '/dashboard', '/monitoring', '/video-review', '/analytics', '/reports', '/sessions', '/cameras', '/audit', '/manager', '/workers', '/consent', '/settings'],
-  admin: ['/', '/dashboard', '/monitoring', '/video-review', '/analytics', '/reports', '/sessions', '/cameras', '/cloud-cameras', '/cloud-settings', '/model-dashboard', '/yolo-demo', '/roi-analytics', '/system-health', '/onboarding', '/consent', '/audit', '/deployment', '/manager', '/workers', '/users', '/pilot-requests', '/api-docs', '/model-card', '/pilot-checklist', '/settings'],
+  operator: ['/', '/dashboard', '/monitoring', '/my-posture', '/video-review', '/analytics', '/reports', '/trends', '/sessions', '/workers', '/webcam-demo', '/settings', '/setup'],
+  supervisor: ['/', '/dashboard', '/monitoring', '/video-review', '/analytics', '/reports', '/trends', '/sessions', '/cameras', '/cloud-cameras', '/workers', '/settings', '/setup'],
+  safety_mgr: ['/', '/dashboard', '/monitoring', '/video-review', '/analytics', '/reports', '/trends', '/sessions', '/cameras', '/cloud-cameras', '/audit', '/manager', '/workers', '/consent', '/settings', '/model-card', '/pilot-checklist', '/yolo-demo', '/roi-analytics', '/setup'],
+  admin: ['/', '/dashboard', '/monitoring', '/my-posture', '/video-review', '/analytics', '/reports', '/trends', '/sessions', '/cameras', '/cloud-cameras', '/cloud-settings', '/cloud-onboarding', '/model-dashboard', '/yolo-demo', '/roi-analytics', '/system-health', '/architecture', '/webcam-demo', '/onboarding', '/consent', '/audit', '/deployment', '/manager', '/workers', '/users', '/pilot-requests', '/api-docs', '/model-card', '/pilot-checklist', '/settings', '/setup'],
 };
 
 /** Exact match for static routes; /replay/:sessionId allowed for roles with /sessions access. */
