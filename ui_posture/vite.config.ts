@@ -22,19 +22,23 @@ export default defineConfig(() => {
                 // Use 127.0.0.1 (IPv4) not localhost — Node resolves localhost to ::1
                 // on some Windows setups, and uvicorn binds IPv4 127.0.0.1 only, which
                 // made the proxy throw ECONNREFUSED and the UI show "Failed to fetch".
-                '/api': {
+                // Keys starting with ^ are regexes: '/api' as a plain prefix
+                // would also swallow the /api-docs frontend route (which
+                // then 404'd as backend JSON). Anchored forms below match
+                // only real API paths.
+                '^/api/': {
                     target: 'http://127.0.0.1:8000',
                     changeOrigin: true,
                 },
-                '/health': {
+                '^/health': {
                     target: 'http://127.0.0.1:8000',
                     changeOrigin: true,
                 },
-                '/healthz': {
+                '^/healthz': {
                     target: 'http://127.0.0.1:8000',
                     changeOrigin: true,
                 },
-                '/readyz': {
+                '^/readyz': {
                     target: 'http://127.0.0.1:8000',
                     changeOrigin: true,
                 },

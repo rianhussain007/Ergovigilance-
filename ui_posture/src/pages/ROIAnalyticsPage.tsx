@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { TrendingUp, DollarSign, Shield, Clock, Users, AlertTriangle, CheckCircle2, ArrowUpRight } from 'lucide-react';
+import { apiFetch } from '@/src/services/apiClient';
 
 interface ROIMetrics {
   total_sessions: number;
@@ -33,11 +34,12 @@ export default function ROIAnalyticsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate ROI metrics from real data
+    // Authenticated fetches (apiFetch attaches the bearer token — raw
+    // fetch here 401'd silently and the page computed ROI from zeros).
     Promise.all([
-      fetch('/api/dashboard').then(r => r.json()).catch(() => ({})),
-      fetch('/api/sessions?limit=1000').then(r => r.json()).catch(() => ({ sessions: [] })),
-      fetch('/api/alerts?limit=1000').then(r => r.json()).catch(() => ({ alerts: [] })),
+      apiFetch('/api/dashboard').then(r => r.json()).catch(() => ({})),
+      apiFetch('/api/sessions?limit=1000').then(r => r.json()).catch(() => ({ sessions: [] })),
+      apiFetch('/api/alerts?limit=1000').then(r => r.json()).catch(() => ({ alerts: [] })),
     ]).then(([dashboard, sessionsData, alertsData]) => {
       const sessions = sessionsData.sessions || [];
       const alerts = alertsData.alerts || [];

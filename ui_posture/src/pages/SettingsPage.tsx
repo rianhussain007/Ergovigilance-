@@ -8,6 +8,7 @@ import {
 import { useTheme } from '@/src/hooks/useTheme';
 import { useToast } from '@/src/hooks/useToast';
 import { useAuth } from '@/src/auth/AuthContext';
+import { apiFetch } from '@/src/services/apiClient';
 import { useSettings } from '@/src/hooks/useSettings';
 import { useI18n } from '@/src/i18n';
 import { getCameras, getRetentionStats, updateRetentionConfig } from '@/src/services/dashboardService';
@@ -466,7 +467,8 @@ function NotificationConfigCard() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/settings/notifications')
+    // Authenticated (apiFetch) — raw fetch 401'd and left defaults forever.
+    apiFetch('/api/settings/notifications')
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!cancelled && data) setConfig(data);
@@ -482,7 +484,7 @@ function NotificationConfigCard() {
     setTestStatus('sending');
     setTestMessage('');
     try {
-      const res = await fetch('/api/settings/notifications/test', { method: 'POST' });
+      const res = await apiFetch('/api/settings/notifications/test', { method: 'POST' });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setTestStatus('sent');
