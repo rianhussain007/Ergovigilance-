@@ -73,3 +73,28 @@ def test_missing_file_raises_at_construction(tmp_path):
     good = _write_clip(tmp_path / "ok.mp4", (64, 48))
     with pytest.raises(RuntimeError, match="cannot open video"):
         soak.VideoFeeder([str(good), str(tmp_path / "missing.mp4")])
+
+
+def test_bind_spec_parsing():
+    pending = soak.parse_bind_specs(["soak-3:1=W-001", "soak-1:4=W-002"])
+    assert pending == {("soak-3", 1): "W-001", ("soak-1", 4): "W-002"}
+    assert soak.parse_bind_specs(None) == {}
+    assert soak.parse_bind_specs([]) == {}
+
+
+def test_bind_spec_wildcard_track():
+    pending = soak.parse_bind_specs(["soak-3:*=W-001", "soak-4:2=W-002"])
+    assert pending[("soak-3", "*")] == "W-001"
+    assert pending[("soak-4", 2)] == "W-002"
+    assert isinstance(next(k for k in pending if k[1] != "*")[1], int)
+
+
+def test_bind_spec_bad_shape_exits():
+    with pytest.raises(SystemExit, match="CAM:TRACK=WORKER"):
+        soak.parse_bind_specs(["not-a-bind"])
+
+
+def test_bind_and_persons_flags_parse():
+    args = soak.parse_args(["--bind", "soak-3:1=W-001", "--persons-every", "10"])
+    assert args.bind == ["soak-3:1=W-001"]
+    assert args.persons_every == 10.0

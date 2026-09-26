@@ -63,7 +63,33 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                    help="label recorded in the summary (e.g. calibration, 4h)")
     p.add_argument("--target-fps", type=float, default=10.0,
                    help="per-feed FPS the run is being compared against")
+    p.add_argument("--bind", nargs="*", default=None, metavar="CAM:TRACK=WORKER",
+                   help="badge-bind WORKER to TRACK when it first appears on CAM "
+                        "(e.g. soak-3:1=W-001); TRACK='*' re-arms: keeps the "
+                        "current highest-risk track on CAM bound so its alerts "
+                        "carry worker_id (binds go through the registry — same "
+                        "call the REST endpoint makes)")
+    p.add_argument("--persons-every", type=float, default=30.0,
+                   help="seconds between full persons[] snapshots in the jsonl")
     return p.parse_args(argv)
+
+
+def parse_bind_specs(specs: list[str] | None) -> dict[tuple[str, int | str], str]:
+    """Parse ``--bind`` entries (``CAM:TRACK=WORKER``) into a pending dict.
+
+    ``TRACK`` may be ``*`` (wildcard — re-arming bind, see ``--bind`` help);
+    anything else must be an integer track id.
+    """
+    pending: dict[tuple[str, int | str], str] = {}
+    for spec in specs or []:
+        try:
+            cam_track, worker = spec.split("=", 1)
+            cam_id, track_id = cam_track.rsplit(":", 1)
+            track: int | str = "*" if track_id.strip() == "*" else int(track_id)
+            pending[(cam_id.strip(), track)] = worker.strip()
+        except ValueError:
+            raise SystemExit(f"bad --bind spec {spec!r}; want CAM:TRACK=WORKER")
+    return pending
 
 
 class VideoFeeder:
@@ -108,6 +134,24 @@ def main() -> int:
         sources = [args.video] * args.streams
     stream_count = len(sources)
 
+    # Parse --bind CAM:TRACK=WORKER into pending specs. Numeric tracks are
+    # one-shot; '*' wildcards re-arm on the camera's highest-risk track.
+    all_specs = parse_bind_specs(args.bind)
+    pending_binds = {k: v for k, v in all_specs.items() if k[1] != "*"}
+    wildcard_binds: dict[tuple[str, str], dict] = {
+        (cam, "*"): {"worker": worker, "last": None, "streak": 0}
+        for (cam, track), worker in all_specs.items() if track == "*"
+    }
+    bound_binds: list[dict] = []
+
+    def record_bind(log, elapsed, cid, tid, worker, rec):
+        entry = {"t": elapsed, "type": "bind", "camera_id": cid,
+                 "track_id": tid, "worker_id": worker, "result": rec}
+        log.write(json.dumps(entry) + "\n")
+        bound_binds.append(entry)
+        print(f"  [bind] t={elapsed}s {cid} track {tid} -> {worker} "
+              f"bound={rec.get('bound')}")
+
     engine = get_pose_engine()
     engine.initialize()
     service = get_cloud_service()
@@ -135,6 +179,7 @@ def main() -> int:
 
     seen_ids: dict[str, set[int]] = {}
     prev: dict[str, tuple[int, float]] = {}
+    reg = get_identity_registry()
     cpu_samples: list[float] = []
     rss_samples: list[float] = []
     fps_samples: list[float] = []
@@ -147,16 +192,48 @@ def main() -> int:
             elapsed = round(now - started, 1)
             cameras = service.get_all_cameras()
             per_cam, new_events = [], 0
+            persons_due = (elapsed % args.persons_every) < args.interval
             for cam in cameras:
                 cid = cam.get("camera_id")
                 fc = cam.get("frame_count", 0)
                 p = prev.get(cid)
                 fps = (fc - p[0]) / (now - p[1]) if p and now > p[1] else 0.0
                 prev[cid] = (fc, now)
-                ids = {int(x["track_id"]) for x in cam.get("persons", [])}
+                persons = cam.get("persons", [])
+                ids = {int(x["track_id"]) for x in persons}
                 old = seen_ids.get(cid, set())
                 new_events += len(ids - old) if old else 0
                 seen_ids.setdefault(cid, set()).update(ids)
+                # Deferred badge binds: numeric = fire once when visible;
+                # wildcard = follow the dominant (highest-risk) track, since
+                # alerts fire on the dominant track — with hysteresis (3
+                # samples) to avoid thrash when dominance flickers.
+                for (b_cam, b_track), worker in list(pending_binds.items()):
+                    if b_cam == cid and b_track in ids:
+                        record_bind(log, elapsed, cid, b_track, worker,
+                                    reg.bind_badge(cid, b_track, worker,
+                                                   actor="soak-harness"))
+                        del pending_binds[(b_cam, b_track)]
+                for (b_cam, _star), wb in wildcard_binds.items():
+                    if b_cam != cid or not persons:
+                        continue
+                    top = max(persons, key=lambda x: float(x.get("risk_score") or 0))
+                    top_id = int(top["track_id"])
+                    last = wb["last"]
+                    if last == top_id:
+                        wb["streak"] = 0
+                        continue
+                    if last is not None and last in ids:
+                        # both alive: only follow dominance after it holds for
+                        # 3 consecutive samples (avoids flicker-driven rebinds)
+                        wb["streak"] += 1
+                        if wb["streak"] < 3:
+                            continue
+                    # first bind, bound track died, or dominance held: rebind
+                    record_bind(log, elapsed, cid, top_id, wb["worker"],
+                                reg.bind_badge(cid, top_id, wb["worker"],
+                                               actor="soak-harness"))
+                    wb["last"], wb["streak"] = top_id, 0
                 per_cam.append({
                     "camera_id": cid,
                     "fps": round(fps, 2),
@@ -165,6 +242,18 @@ def main() -> int:
                     "distinct_tracks": len(seen_ids[cid]),
                 })
                 fps_samples.append(fps)
+                if persons_due and persons:
+                    snap = {
+                        "t": elapsed, "type": "persons", "camera_id": cid,
+                        "persons": [
+                            {k: (round(v, 3) if isinstance(v, float) else v)
+                             for k, v in per.items() if k in
+                             ("track_id", "worker_id", "risk_level", "risk_score",
+                              "task", "bbox", "quality", "station_id")}
+                            for per in persons
+                        ],
+                    }
+                    log.write(json.dumps(snap) + "\n")
             cpu = proc.cpu_percent(None)
             rss = proc.memory_info().rss / 1e6
             cpu_samples.append(cpu)
@@ -179,6 +268,15 @@ def main() -> int:
 
     reg = get_identity_registry()
     alerts = service.get_alerts(limit=1000)
+    # Persist full alert records (worker_id, task, score, clip path) into the
+    # run jsonl — the in-memory session alerts die with this process, and the
+    # spot-check/evidence pack needs them after the run.
+    try:
+        with open(jsonl_path, "a", encoding="utf-8") as fh:
+            for a in alerts:
+                fh.write(json.dumps({"type": "alert", **a}) + "\n")
+    except OSError:
+        pass
     elapsed_s = time.time() - started
     # Processing metrics straight from the live processors: latency percentiles,
     # frame-drop counters and source lag. Read-only snapshot.
@@ -289,6 +387,15 @@ def main() -> int:
         "reentry_rebinds": reg.reentry_count,
         "reentry_ambiguous": reg.reentry_ambiguous_count,
         "alerts_total": len(alerts),
+        "alerts_with_worker_id": sum(1 for a in alerts if a.get("worker_id")),
+        # Sample of alerts that fired after a badge bind — proves the identity
+        # chain reached the alert payload (worker_id propagated end-to-end).
+        "alert_worker_samples": [
+            {k: a.get(k) for k in
+             ("timestamp", "camera_id", "track_id", "worker_id",
+              "severity", "risk_score", "task")}
+            for a in alerts if a.get("worker_id")
+        ][:5],
         "alerts_per_worker_hour": round(
             len(alerts) / max(1e-9, (stream_count * (time.time() - started) / 3600.0)), 2
         ),
@@ -302,6 +409,19 @@ def main() -> int:
             ),
         },
         "identity_audit_counts": audit_counts,
+        "identity_binds_this_run": [
+            {"t": b["t"], "camera_id": b["camera_id"], "track_id": b["track_id"],
+             "worker_id": b["worker_id"], "bound": b["result"].get("bound")}
+            for b in bound_binds
+        ],
+        "identity_binds_pending": [
+            {"camera_id": c, "track_id": t, "worker_id": w}
+            for (c, t), w in pending_binds.items()
+        ] + [
+            {"camera_id": c, "track_id": "*", "worker_id": wb["worker"],
+             "last_bound_track": wb["last"]}
+            for (c, _s), wb in wildcard_binds.items()
+        ],
         "supervisor_overrides": overrides,
         "override_rate": round(overrides / binds, 3) if binds else None,
         "tile_quality_flags_snapshot": quality_counts,
