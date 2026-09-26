@@ -78,3 +78,43 @@ def test_upgrade_from_previous_version(conn):
     applied = run_migrations(conn)
     assert applied == [v for v, _ in MIGRATIONS[1:]]
     assert current_version(conn) == MIGRATIONS[-1][0]
+
+
+def test_concurrent_fresh_boot_applies_once(tmp_path):
+    """Concurrent first-boots (multi-worker fresh deploys) must not raise.
+
+    Regression test for the k8s crash-loop note: two workers racing
+    init-style startup on a fresh DB used to collide in DDL ("already
+    exists"). BEGIN IMMEDIATE serializes them; the loser re-checks the
+    version inside the transaction and skips.
+    """
+    import threading
+
+    db = str(tmp_path / "race.db")
+    barrier = threading.Barrier(4)
+    errors: list = []
+
+    def boot():
+        try:
+            barrier.wait(timeout=30)
+            worker = sqlite3.connect(db, timeout=30)
+            try:
+                run_migrations(worker)
+            finally:
+                worker.close()
+        except Exception as exc:  # noqa: BLE001 - collected, asserted below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=boot) for _ in range(4)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=120)
+
+    assert errors == []
+    check = sqlite3.connect(db)
+    try:
+        assert current_version(check) == MIGRATIONS[-1][0]
+        assert EXPECTED_TABLES <= _table_names(check)
+    finally:
+        check.close()

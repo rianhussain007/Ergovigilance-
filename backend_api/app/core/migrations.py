@@ -59,18 +59,25 @@ def current_version(conn: sqlite3.Connection) -> int:
 def run_migrations(conn: sqlite3.Connection) -> list[int]:
     """Apply pending migrations, returning the versions applied in this call.
 
-    Each migration runs inside an explicit transaction (``BEGIN``…
-    ``COMMIT``/``ROLLBACK``) so a partial failure leaves the database on its
-    previous version. An explicit ``BEGIN`` is required because Python's
-    sqlite3 autocommits DDL statements when no transaction is open.
+    Each migration runs inside an explicit transaction (``BEGIN
+    IMMEDIATE``…``COMMIT``/``ROLLBACK``) so a partial failure leaves the
+    database on its previous version. An explicit ``BEGIN`` is required
+    because Python's sqlite3 autocommits DDL statements when no transaction
+    is open.
+
+    Concurrency: ``BEGIN IMMEDIATE`` serializes concurrent first-boots
+    (multi-worker fresh deploys). The loser blocks on the reserved lock
+    (connection busy timeout), then RE-CHECKS the version inside the
+    transaction — the winner may have advanced past it — and skips what
+    is already applied instead of re-running DDL into "already exists".
     """
     applied: list[int] = []
-    version = current_version(conn)
     for migration_version, statements in MIGRATIONS:
-        if migration_version <= version:
-            continue
-        conn.execute("BEGIN")
+        conn.execute("BEGIN IMMEDIATE")
         try:
+            if migration_version <= current_version(conn):
+                conn.execute("ROLLBACK")
+                continue
             for statement in statements:
                 conn.execute(statement)
             # user_version cannot be bound as a parameter; migration_version is
