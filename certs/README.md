@@ -28,6 +28,23 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
 
 ## Let's Encrypt / corporate CA
 
+### Automated issuance + renewal (recommended)
+
+`issue_letsencrypt.sh` issues via certbot HTTP-01 standalone, installs the
+pair into this directory (so the TLS overlay's bind mounts find them), and
+stops/restarts the frontend around the challenge. Needs a public DNS name
+pointing at this host, ports 80/443 reachable, certbot on the host, root:
+
+```bash
+sudo ./certs/issue_letsencrypt.sh issue ergovigilance.example.com ops@example.com
+# renewal (cron: 0 3 * * * /path/to/ergovigilance/certs/issue_letsencrypt.sh renew)
+sudo ./certs/issue_letsencrypt.sh renew
+```
+
+The last-issued domain is remembered in `certs/.domain` (gitignored).
+
+### Manual copy
+
 Copy the issued chain and key into this directory with the same names:
 
 ```bash
