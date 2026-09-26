@@ -46,6 +46,14 @@ pass?). `scripts/soak_cloud.py` now prints `scale:` and `run_class` for this.
 | `wording-check` (15 s) | 1 | capacity-probe | 493.5 ms | *within* | 2.06 | `soak_20260925T100822Z_summary.json` |
 | `commit-check-wording` (15 s) | 2 | capacity-probe | 320.3 ms | *within* | 4.25 | `soak_20260925T083340Z_summary.json` |
 | `rtsp-decoder-dropcheck` | 1 | capacity-probe | 309.9 ms | *within* | 3.65 | `soak_20260925T081558Z_summary.json` |
+| `trl6-rtsp-main` (1800 s) | 4 | spec-load | **4407.8 ms** | BREACH | 0.37 | `soak_20260926T021815Z_summary.json` |
+| `trl6-rtsp-identity` (900 s) | 4 | spec-load | **4034.7 ms** | BREACH | 0.39 | `soak_20260926T025639Z_summary.json` |
+
+The two RTSP rows are real ffmpeg-over-TCP decode from four distinct
+sources with the publishers (4× ffmpeg + MediaMTX) on this same 8-CPU box —
+a **worst case for same-host rigs**; a field box only runs the reader.
+Full demo context: `docs/TRL6_EVIDENCE.md`, section *Relevant-environment
+demo*.
 
 ### Is "1–2 streams within budget, 4 breach" supported?
 
@@ -208,14 +216,33 @@ The drill also caught and now guards a real bug: FFmpeg 9 rejects a pre-input
 die instantly for file/`tcp://` URLs. Fixed in
 `yolo_cloud/rtsp_manager.py::_input_url_options` (scheme-conditional options).
 
+## UDP RTSP transport probe (measured 2026-09-26)
+
+One 120 s run with the non-default `RTSP_TRANSPORT=udp` against the 4-cam
+rig (label `trl6-rtsp-udp`, `outputs/soak/soak_20260926T034839Z_summary.json`):
+
+| Item | Value | Source |
+|---|---|---|
+| Transport actually used | **UDP** — the 4 production ingest ffmpegs ran `-rtsp_transport udp -f rawvideo` (rig publish side stays TCP) | `outputs/tri6_demo/ffmpeg_cmdlines.txt` |
+| Frames | 4340 decoded across 4 streams; per-stream fps > 0 in 54/60 samples (run mean 0.74, max 1.5) | `frame_drops`, jsonl samples |
+| Alerts / clips | 132 alerts; 71 clips saved, **0 truncated** | `alerts_total`, `clips` |
+| p95 worst stream | **1966.0 ms — BREACH** (354/354 over the 500 ms budget) | `latency.p95_worst_stream_ms` |
+| Drop rate | 91.8% of decoded frames (single-slot buffer, 4-stream same-box load) | `frame_drops.overall_drop_rate` |
+| CPU / RSS | mean 540.0% / max 703.2%; RSS mean 873, max 1126.7 MB | `cpu_pct`, `rss_mb` |
+
+UDP **works** (frames, alerts and clips all flow through the production
+reader) but was not benchmarked against TCP under matched load — no
+transport performance claim either way; `RTSP_TRANSPORT=tcp` remains the
+default.
+
 ## NOT MEASURED (do not quote)
 
 | Item | Why |
 |---|---|
 | GPU memory per stream | no GPU on this host |
-| 4 h × 4 RTSP soak | only short compute-mode soaks run; the 4 h run is a site task |
-| RTSP DESCRIBE/SETUP/PLAY + transport negotiation | ffmpeg 9 on Windows cannot bind an RTSP listen server; the drill uses a TCP MPEG-TS source (same reader path, no RTSP control channel) |
-| UDP RTSP transport | untested; `RTSP_TRANSPORT=tcp` is the configured default |
+| 4 h × 4 RTSP soak | longest run is 30 min (RTSP demo, 2026-09-26); the 4 h run is a site task |
+| RTSP server built on ffmpeg alone | ffmpeg 9 on Windows cannot bind an RTSP listen server — the rig publishes through **MediaMTX** instead; client-side DESCRIBE/SETUP/PLAY over TCP **is** measured (30-min 4-cam demo run) |
+| UDP vs TCP latency (load-matched A/B) | one 120 s UDP probe exists (measured above: works, p95 1966.0 ms BREACH) but runs were not load/duration-matched, so no comparative transport number |
 | Accuracy / detection quality | out of scope by task constraint |
 
 ## Sizing recommendation (bounded by measurements above)
@@ -235,5 +262,6 @@ die instantly for file/`tcp://` URLs. Fixed in
 - GPU box (target config): **NOT MEASURED** — provision for ≥ 8 GB VRAM as a
   placeholder and re-run `scripts/soak_cloud.py` + the drill on the actual
   hardware before any capacity statement.
-- All rows above are short runs (15–120 s). The 4 h × 4-stream run is a site
-  task and remains **NOT MEASURED**.
+- All compute-mode rows above are short runs (15–120 s); the RTSP demo runs
+  are 30 min and 15 min. The 4 h × 4-stream run is a site task and remains
+  **NOT MEASURED**.

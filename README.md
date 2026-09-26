@@ -203,7 +203,7 @@ posture_analysis/
 │   │   ├── repositories/       #   Data access (Live, Base)
 │   │   ├── schemas/            #   Pydantic models (API contracts)
 │   │   └── services/           #   Session cache, live monitor, reports
-│   └── tests/                  #   59 test files (93+ tests)
+│   └── tests/                  #   55 test files (425 tests)
 ├── yolo_cloud/                 # YOLO Cloud Core (SaaS)
 │   ├── api.py                  #   25 REST + WebSocket endpoints
 │   ├── pose_engine.py          #   YOLOv8-pose + ByteTrack + ML inference
@@ -218,7 +218,7 @@ posture_analysis/
 │   │   ├── fine_tune_yolo.py
 │   │   └── prepare_yolo_dataset.py
 │   ├── Dockerfile              #   GPU + CPU support
-│   └── tests/                  #   24 tests (all passing)
+│   └── tests/                  #   134 tests (all passing)
 ├── ui_posture/                 # React 19 SPA (31 pages)
 │   ├── src/
 │   │   ├── pages/              #   31 route pages (lazy-loaded)
@@ -232,7 +232,7 @@ posture_analysis/
 │   │   ├── hooks/              #   Data-fetching hooks
 │   │   ├── services/           #   API client
 │   │   └── auth/               #   Auth context + providers
-│   └── vitest.config.ts        #   7 smoke tests
+│   └── vitest.config.ts        #   9 tests (7 smoke + 2 interaction)
 ├── models/                     # ML model files
 │   ├── yolo_risk_model.pkl     #   Risk classifier (94.1% accuracy)
 │   ├── yolo_task_model.pkl     #   Task classifier (97.6% accuracy)
@@ -266,10 +266,10 @@ See `backend_api/.env.production.example` for the full reference.
 ## Testing
 
 ```bash
-# Backend (233 tests)
+# Backend (425 tests)
 cd backend_api && pytest -q
 
-# Frontend (7 smoke tests)
+# Frontend (9 vitest tests)
 cd ui_posture && npm test
 
 # Typecheck

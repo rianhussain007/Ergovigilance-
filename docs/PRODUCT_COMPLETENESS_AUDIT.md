@@ -28,7 +28,7 @@ The product has a **solid foundation** — the core pipeline (camera → pose es
 | Demo Mode | — | ✅ Complete | One-click demo with synthetic data |
 | Backend API | 41+ routes | ✅ Complete | Full CRUD, WebSocket, auth, audit |
 | ML Models | 10 .pkl files | ✅ Complete | Task classifier, risk forecaster, calibration |
-| Test Suite | 53 files | ✅ Complete | Backend pytest + frontend smoke tests |
+| Test Suite | 57 files | ✅ Complete | Backend pytest + frontend smoke tests |
 
 ---
 

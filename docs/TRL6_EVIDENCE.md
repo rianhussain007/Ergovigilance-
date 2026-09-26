@@ -7,9 +7,10 @@ than it does.
 **Machine:** 8 logical CPU cores, 12.7 GB RAM, **no GPU** (`nvidia-smi` absent,
 `torch.cuda.is_available() == False`). Windows (Git Bash toolchain).
 
-**Scope of the performance section:** CPU-only, short runs (15–120 s), compute
-mode unless stated. No GPU number, no 4-hour number, no throughput claim for the
-spec's 8 workers/feed or 10 FPS/feed.
+**Scope of the performance section:** CPU-only, short runs (15–120 s) in
+compute mode, plus the 30-min / 15-min RTSP demo runs below. No GPU number,
+no 4-hour number, no throughput claim for the spec's 8 workers/feed or
+10 FPS/feed.
 
 ---
 
@@ -118,7 +119,8 @@ never ran. The fix has four parts (`yolo_cloud/ingestion.py`,
 during the run parse (`moov` present in every one, ffprobe reads format and
 duration). The 3 historical files remain broken — they are pre-fix artifacts.
 Guarded by 4 tests in `TestClipIntegrity`
-(`yolo_cloud/tests/test_trl6_blockers.py`); suite: **121 passed**.
+(`yolo_cloud/tests/test_trl6_blockers.py`); suite: **134 passed** (gate,
+2026-09-26).
 
 **Not claimed:** clip encode/write cost is not broken out — it sits inside the
 frame latency number and is not separately attributed.
@@ -148,7 +150,7 @@ Observed delivery in the chain run: `HIGH alert ALT-000001 delivered via 'alert'
 
 | Suite | Result |
 |---|---|
-| `yolo_cloud/tests` | **121 passed** (0 failed) |
+| `yolo_cloud/tests` | **134 passed** (0 failed) |
 | `backend_api/tests` (55 test files) | **425 passed, 0 failed, 0 errors, 1 skipped, 1 deselected** |
 
 The `backend_api` gate used to read *397 passed / 17 failed / 13 errors*. Every
@@ -187,6 +189,13 @@ point) so one shortfall factor never has to carry both meanings.
 | 2 (15 s) | capacity-probe | 320.3 ms | *within* | 4.25 |
 | 4 (60 s) | spec-load | 1772.6 ms | **BREACH** | 1.03 |
 | 4 (120 s) | spec-load | 831.2 ms | **BREACH** | 1.34 |
+| 4 × RTSP (1800 s) | spec-load | 4407.8 ms | **BREACH** | 0.37 |
+| 4 × RTSP (900 s) | spec-load | 4034.7 ms | **BREACH** | 0.39 |
+
+The two RTSP rows are the relevant-environment demo runs (next section):
+real ffmpeg decode over TCP/8554 from four distinct sources, publishers on
+the **same** 8-CPU box as the scorer — a worst case, read with the
+same-box caveat below.
 
 **What this supports:**
 
@@ -217,6 +226,102 @@ That sentence is contradicted by the measurements and must not be written.
   634.7% CPU mean, 961 MB RSS, 20 distinct tracks, **0 ID switches**. The
   tracker's 120 s × 4-cam audit (20 new / 8 expired / 0 reacquisitions) is
   **inflated by the feeder looping the clip** and is *not* a cross-over rate.
+
+---
+
+## Relevant-environment demo — 4-camera RTSP trial (2026-09-26)
+
+The relevant environment for this stage is a 4-camera RTSP trial fed by real
+internet CCTV footage, run through the production ingestion path
+(`scripts/soak_cloud.py --urls rtsp://...` — the same reader the cloud
+service uses; **no HTTP fallback was involved**).
+
+**Rig** (`scripts/rtsp_trial_pubs.py`, MediaMTX v1.21.1, local TCP/8554):
+
+| Cam | Source | Provenance |
+|---|---|---|
+| soak-1 / cam1 | PETS2009 S1L2 (split-screen, cropped) | UCSD SVCL — research + attribution |
+| soak-2 / cam2 | UCSD Anomaly S1 Peds1 `007.mp4` | UCSD Anomaly — research + citation |
+| soak-3 / cam3 | warehouse lifting video | local YouTube footage — internal test only |
+| soak-4 / cam4 | assembly-lines video | local YouTube footage — internal test only |
+
+Full licence rows: `docs/FOOTAGE_PROVENANCE.csv` (10 clips fetched by
+`scripts/fetch_cctv_footage.py`; footage and the MediaMTX binary are
+gitignored — only the scripts and manifest are committed).
+
+**Run A — duration/capacity (`trl6-rtsp-main`, 1800 s, jsonl+summary in
+`outputs/soak/soak_20260926T021815Z*`):**
+
+| Metric | Value |
+|---|---|
+| streams | 4 × RTSP (TCP), four distinct real sources |
+| distinct tracks | 112 (soak-1 39, soak-2 10, soak-3 32, soak-4 31) |
+| ID switches | **0** |
+| alerts | 1000 (hit the query cap) |
+| clips saved / truncated | **628 / 0** |
+| p95 worst stream | 4407.8 ms — **BREACH** (budget 500 ms) |
+| FPS/stream (mean) | 0.37; drop 95.1% of 54 192 decoded frames |
+| CPU / RSS | mean 544%, max 694%; RSS max 1251 MB |
+| badge binds (numeric specs) | 3/3 fired, via the registry (`bind_badge`) |
+| persons ≥2 (all cams) | **28 / 30** one-minute snapshots |
+| persons ≥2 (same camera) | **19 / 30**; peak 5 persons (soak-3: 2, soak-4: 3) |
+| supervisor overrides | 0 |
+
+**Run B — identity attribution (`trl6-rtsp-identity`, 900 s,
+`outputs/soak/soak_20260926T025639Z*`):**
+
+| Metric | Value |
+|---|---|
+| alerts with `worker_id` | **529 / 581 (91%)** |
+| badge binds (wildcard specs) | 224, through the registry — same call the REST `bind` endpoint makes, executed in-process by the harness (disclosed, not a hidden shortcut) |
+| identity audit rows | append-only `outputs/audit/identity_audit.jsonl` (`bind` + `reentry` events with actor `soak-harness`) |
+| distinct tracks / ID switches | 65 / **0**; 1 reentry rebind |
+| clips saved / truncated | **270 / 0** |
+| p95 worst stream | 4034.7 ms — **BREACH** |
+| supervisor overrides | 0 |
+
+Why the remaining ~52 alerts have no `worker_id`: they fired before the
+first bind landed (t ≈ 20 s) or on tracks the binder had not yet seen.
+Attribution starts at bind time, per track; there is deliberately no
+back-fill of pre-bind alerts.
+
+**Spot-check sheet — DRAFT, pending human approval:**
+`outputs/tri6_demo/spotcheck/alerts_spotcheck.csv` + `*.jpg` (12 rows, 3 per
+camera, one pre-alert frame each; produced by `scripts/spotcheck_draft.py`
+from Run B's alert rows). `model_prediction` is the system output under
+test; `agent_label` is `PENDING-USER-APPROVAL`. **No label from this sheet
+may be quoted or cited until a human fills `human_label` and sets
+`approved`.**
+
+**UDP transport probe (`trl6-rtsp-udp`, 120 s × 4 cams,
+`outputs/soak/soak_20260926T034839Z_summary.json`):**
+
+| Metric | Value |
+|---|---|
+| transport negotiated | **UDP** — proven on the ingest side: the 4 production reader ffmpegs ran `-rtsp_transport udp -f rawvideo` (captured cmdlines, `outputs/tri6_demo/ffmpeg_cmdlines.txt`; the rig's publish side stays TCP) |
+| decoded frames | **4340** on all 4 streams (1128 / 1133 / 1015 / 1064) |
+| FPS/stream | per-stream fps > 0 in 54/60 steady samples (mean of positives 0.77–0.85; run mean 0.74, max 1.5) |
+| alerts / clips | 132 alerts; clips **71 saved / 0 truncated** |
+| tracks / ID switches | 20 / **0** |
+| p95 worst stream | **1966.0 ms — BREACH** (354/354 frames over the 500 ms budget) |
+| drop rate | **91.8%** of decoded frames (single-slot buffer under 4-stream same-box load) |
+| CPU / RSS | mean 540.0%, max 703.2%; RSS mean 873 MB, max 1126.7 MB |
+
+**Transport verdict:** RTSP over TCP end-to-end through the production
+reader (Runs A/B above), **and UDP is now measured**: with
+`RTSP_TRANSPORT=udp` the production reader negotiates UDP and streams
+frames, alerts and clips — verified from the ingest ffmpeg command lines,
+not assumed from config. But the UDP probe still breaches the latency
+budget (p95 1966.0 ms) and drops 91.8% of decoded frames in the 4-stream
+same-box worst case, and no load-matched TCP-vs-UDP A/B was run, so **no
+transport performance claim** is made in either direction.
+`RTSP_TRANSPORT=tcp` remains the configured default.
+
+**Same-box caveat — read with every p95/FPS row above:** four ffmpeg
+publishers, MediaMTX and 4-stream pose inference share these 8 CPUs
+(CPU mean 531–544%, max 703%). These numbers are a **worst case for
+same-host rigs**, not a field deployment where feeds arrive over the
+network from separate hosts.
 
 ---
 
@@ -303,13 +408,14 @@ YOLO_MODEL=yolov8n-pose.pt YOLO_IMGSZ=320 \
 | GPU memory / utilisation | no GPU on this host |
 | 10 FPS per feed | frames are processed at whatever rate the pipeline sustains; measured rate reported instead |
 | 8 workers per feed | available footage is single-worker clips, so 8 real tracks per feed cannot be produced |
-| 4-hour continuous run | all runs here are 15–120 s; the harness supports `--seconds 14400` but the full run was not executed |
+| 4-hour continuous run | longest run here is 30 min (RTSP demo); the harness supports `--seconds 14400` but the full run was not executed |
 | ByteTrack-specific counters | ByteTrack cannot be imported in this ultralytics build |
+| Real badge/QR hardware | demo binds go through the same registry call the REST endpoint uses, executed in-process by the harness — no physical scanner was exercised |
 | Backend-engine accuracy | out of scope for this pack; the pre-existing Safe Claims 87.6% is the only human-ground-truth number for that engine. Cloud-engine accuracy IS measured above. |
 | Frame-drop rate in compute mode | no FFmpeg decoder runs, so decoded stays 0; use `--urls <rtsp...>` |
 | Clip encode cost as a share of latency | clips *are* written under load (measured above) but encode/write is inside frame latency |
 | Camera-socket-drop detection latency | ffmpeg drains its buffer for minutes; the drill uses a deterministic client-kill instead |
-| UDP RTSP transport | untested; `RTSP_TRANSPORT=tcp` is the configured default |
+| UDP vs TCP latency (load-matched A/B) | one 120 s UDP probe exists (functional, p95 1966.0 ms BREACH — measured above) but it was not load/duration-matched against a TCP run, so no comparative transport number |
 
 ---
 
@@ -322,11 +428,22 @@ YOLO_MODEL=yolov8n-pose.pt YOLO_IMGSZ=320 \
 | Chain 7/7 + `chain_complete` | `outputs/slouch_smoke/result.json`, `outputs/slouch_smoke/run.log` |
 | Clip under load (224 clips) | `recordings/clips/soak-*/` |
 | Soak summaries | `outputs/soak/*_summary.json` |
+| RTSP demo rig (4 cams) | `scripts/rtsp_trial_pubs.py` (MediaMTX + publishers) |
+| RTSP demo runs A/B | `outputs/soak/soak_20260926T021815Z_summary.json`, `soak_20260926T025639Z_summary.json` |
+| UDP transport probe | `outputs/soak/soak_20260926T034839Z_summary.json` (label `trl6-rtsp-udp`) + ingest cmdlines `outputs/tri6_demo/ffmpeg_cmdlines.txt` |
+| Badge binds in demo (jsonl `type=bind`) | same two jsonl files; audit trail `outputs/audit/identity_audit.jsonl` |
+| persons ≥2 snapshots (`type=persons`) | `outputs/soak/soak_20260926T021815Z.jsonl` (28/30 times) |
+| Alerts carrying `worker_id` | `soak_20260926T025639Z_summary.json` → `alerts_with_worker_id = 529/581` |
+| Spot-check sheet (DRAFT, unapproved) | `outputs/tri6_demo/spotcheck/alerts_spotcheck.csv` + `*.jpg` |
+| Footage licences | `docs/FOOTAGE_PROVENANCE.csv`, `scripts/fetch_cctv_footage.py` |
 | Capacity split + sizing | `docs/SIZING_SOAK_CLOUD.md` |
 | Cloud accuracy (both profiles) | `scripts/eval_cloud_accuracy.py` → JSON report (N=119) |
-| Cloud tests | `yolo_cloud/tests/` (121) |
+| Cloud tests | `yolo_cloud/tests/` (134) |
 | Backend tests | `backend_api/tests/` (425 passed / 0 failed / 0 errors) |
 
 **Commits:** `525090a` (TRL-6 blockers), `82a3231` (P0 security batch),
 `217edf8` (test config drift + pixel-guard crash fix), `0de8d40` (fail-closed,
-model/manifest contract, single-yield lifespan → backend gate green).
+model/manifest contract, single-yield lifespan → backend gate green),
+`5557fa0` (footage fetcher + provenance), `21a390d` (multi-source feeder),
+`1d42742` (RTSP rig), `82884e4` (bind + persons instrumentation),
+`83822ea` (spot-check draft extractor), `18a47ca` (wildcard dominant-track binds).
