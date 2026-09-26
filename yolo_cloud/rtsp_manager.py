@@ -161,9 +161,19 @@ class RTSPStream:
         source ("Option rtsp_transport not found" -> instant exit before
         opening the file), so the flag is only passed for rtsp:// URLs.
         File and tcp:// sources are unaffected and need no options.
+
+        Bounded connects: without -timeout/-stimeout an unreachable host
+        hangs ffmpeg in TCP connect for 120 s+ (measured on 10.255.255.1),
+        stalling every reconnect cycle and starving the box when cameras
+        die. 10 s in microseconds, matching the ffprobe timeout. Both
+        flags are valid for ffmpeg and ffprobe RTSP demuxing.
         """
         if url.lower().startswith(("rtsp://", "rtsps://")):
-            return ["-rtsp_transport", settings.RTSP_TRANSPORT]
+            return [
+                "-rtsp_transport", settings.RTSP_TRANSPORT,
+                "-timeout", "10000000",
+                "-stimeout", "10000000",
+            ]
         return []
 
     def _start_ffmpeg(self) -> None:
