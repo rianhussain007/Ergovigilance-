@@ -93,6 +93,20 @@ def get_org_by_api_key(api_key: str) -> dict | None:
         return None
 
 
+def update_org_plan(org_id: int, plan: str, max_cameras: int | None) -> bool:
+    """Set an org's plan + camera cap (billing webhooks, admin provisioning).
+
+    Returns True when a row was actually updated.
+    """
+    with get_connection() as conn:
+        cur = conn.execute(
+            "UPDATE organizations SET plan = ?, max_cameras = ?, updated_at = ? WHERE id = ?",
+            (plan, max_cameras, datetime.now(timezone.utc).isoformat(), org_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+
 def init_local_database() -> None:
     """Apply schema migrations and seed the database.
 

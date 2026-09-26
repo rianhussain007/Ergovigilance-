@@ -42,6 +42,19 @@ def _get_org_by_api_key(api_key: str) -> Optional[dict]:
     return None
 
 
+def lookup_org_by_api_key(api_key: str | None) -> Optional[dict]:
+    """Public org lookup for entitlement checks (wraps the resolver).
+
+    Returns None for missing/unknown keys — callers treat that as "no org
+    identity" (dev mode, self-hosted, legacy tenant keys) and skip gating
+    rather than fail closed, because the cloud core must keep serving
+    deployments whose keys predate org billing.
+    """
+    if not api_key:
+        return None
+    return _get_org_by_api_key(api_key)
+
+
 def require_org_api_key(api_key: str = Security(api_key_header)) -> dict:
     """Dependency that validates the API key and returns org context.
 

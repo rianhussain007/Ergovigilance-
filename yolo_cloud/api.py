@@ -16,11 +16,13 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, FastAPI, File, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 
 from yolo_cloud.auth import require_api_key, optional_api_key, get_tenant_id
+from yolo_cloud.org_auth import lookup_org_by_api_key
+from yolo_cloud.entitlements import check_camera_allowance
 from yolo_cloud import storage
 
 from yolo_cloud.config import settings
@@ -100,7 +102,11 @@ async def list_cameras(tenant: dict = Depends(optional_api_key)):
 
 
 @router.post("/cameras")
-async def add_camera(body: dict, tenant: dict = Depends(require_api_key)):
+async def add_camera(
+    body: dict,
+    tenant: dict = Depends(require_api_key),
+    x_api_key: Optional[str] = Header(default=None),
+):
     """Add a new RTSP camera and start monitoring.
 
     Body: {"id": "cam-1", "name": "Assembly Line", "url": "rtsp://..."}
@@ -110,6 +116,13 @@ async def add_camera(body: dict, tenant: dict = Depends(require_api_key)):
     name = body.get("name", "IP Camera").strip()
     url = body.get("url", "").strip()
     tenant_id = tenant.get("tenant_id", "default")
+
+    # Entitlement gate (sell-readiness F-01): org-keyed callers are capped
+    # at their plan's max_cameras. No org identity (dev mode, self-hosted,
+    # legacy tenant keys) = honor system, never gated.
+    org = lookup_org_by_api_key(x_api_key)
+    if org is not None:
+        check_camera_allowance(org, len(storage.get_cameras(tenant_id)))
 
     if not cam_id or not url:
         raise HTTPException(400, "Both 'id' and 'url' are required")

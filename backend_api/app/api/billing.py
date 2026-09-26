@@ -32,16 +32,20 @@ STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 STRIPE_PRICE_ID = os.getenv("STRIPE_PRICE_ID", "")
 
-# Pricing tiers
+# Pricing tiers. Keys are the marketing/checkout ids (PricingPage.tsx);
+# "plan" is the organizations-table vocabulary (migration
+# 005_multi_tenant.sql: pilot/starter/professional/enterprise).
 PRICING_TIERS = {
     "starter": {
         "name": "On-Premise Starter",
+        "plan": "starter",
         "price": 0,
         "cameras": 4,
         "description": "Free, self-hosted, up to 4 cameras",
     },
     "cloud": {
         "name": "Cloud Professional",
+        "plan": "professional",
         "price": 299,
         "cameras": 20,
         "description": "$299/mo for up to 20 cameras",
@@ -49,11 +53,70 @@ PRICING_TIERS = {
     },
     "enterprise": {
         "name": "Enterprise",
+        "plan": "enterprise",
         "price": None,  # Custom pricing
         "cameras": None,
         "description": "Custom pricing for 50+ cameras",
     },
 }
+
+
+def plan_limits_for_tier(tier: str) -> tuple[str, int | None]:
+    """Map a checkout tier to (plan, max_cameras).
+
+    Single source of truth for what a paying tier grants: the caps in
+    PRICING_TIERS. Webhooks and tests both read this — never hard-code
+    tier limits anywhere else.
+    """
+    info = PRICING_TIERS.get(tier)
+    if info is None:
+        raise ValueError(f"Unknown tier: {tier}")
+    return info["plan"], info["cameras"]
+
+
+def _apply_subscription_event(kind: str, obj: dict) -> None:
+    """Map a Stripe event onto the org plan. Never raises.
+
+    Webhook endpoints must return 2xx (Stripe retries error deliveries for
+    days); a mapping that cannot be resolved is logged loudly instead of
+    failing the delivery.
+    """
+    try:
+        from app.core.database import (
+            get_org_id_for_user,
+            get_user_by_email,
+            update_org_plan,
+        )
+
+        meta = obj.get("metadata", {}) or {}
+        user_id = meta.get("user_id")
+        org_id = None
+        if user_id is not None:
+            try:
+                org_id = get_org_id_for_user(int(user_id))
+            except (TypeError, ValueError):
+                org_id = None
+        if org_id is None and meta.get("user_email"):
+            user = get_user_by_email(meta["user_email"])
+            if user is not None:
+                org_id = get_org_id_for_user(user["id"])
+        if org_id is None:
+            logger.warning("Billing event %s ignored: no org for metadata %s", kind, meta)
+            return
+
+        if kind == "checkout.session.completed":
+            plan, cameras = plan_limits_for_tier(meta.get("tier", "cloud"))
+            if update_org_plan(org_id, plan, cameras):
+                logger.info("Org %s upgraded to plan %s (%s cameras)", org_id, plan, cameras)
+        elif kind == "customer.subscription.deleted":
+            if update_org_plan(org_id, "starter", PRICING_TIERS["starter"]["cameras"]):
+                logger.info("Org %s downgraded to starter (subscription deleted)", org_id)
+        elif kind == "customer.subscription.updated":
+            if obj.get("status") in ("active", "trialing"):
+                plan, cameras = plan_limits_for_tier(meta.get("tier", "cloud"))
+                update_org_plan(org_id, plan, cameras)
+    except Exception as exc:
+        logger.warning("Billing event %s not applied: %s", kind, exc)
 
 
 @router.get("/config")
@@ -237,18 +300,14 @@ async def stripe_webhook(request: Request):
     except stripe.error.SignatureVerificationError:
         return JSONResponse(content={"error": "Invalid signature"}, status_code=400)
 
-    # Handle events
+    # Handle events (plan mapping never raises — see _apply_subscription_event)
     if event["type"] == "checkout.session.completed":
-        session = event["data"]["object"]
-        user_id = session.get("metadata", {}).get("user_id")
-        logger.info("Stripe checkout completed for user %s", user_id)
+        _apply_subscription_event("checkout.session.completed", event["data"]["object"])
 
     elif event["type"] == "customer.subscription.updated":
-        subscription = event["data"]["object"]
-        logger.info("Stripe subscription updated: %s", subscription["id"])
+        _apply_subscription_event("customer.subscription.updated", event["data"]["object"])
 
     elif event["type"] == "customer.subscription.deleted":
-        subscription = event["data"]["object"]
-        logger.info("Stripe subscription deleted: %s", subscription["id"])
+        _apply_subscription_event("customer.subscription.deleted", event["data"]["object"])
 
     return JSONResponse(content={"received": True})

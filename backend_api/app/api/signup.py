@@ -114,7 +114,7 @@ async def signup(body: SignupRequest):
                 "pilot",
                 body.industry,
                 body.country,
-                3,       # pilot plan: 3 cameras
+                4,       # pilot plan: 4 cameras (Starter parity — Q2)
                 50,      # pilot plan: 50 workers
                 f"ergo_signup_{uuid.uuid4().hex[:16]}",
                 now,
@@ -184,7 +184,7 @@ async def signup(body: SignupRequest):
                 "plan": "pilot",
                 "industry": body.industry,
                 "country": body.country,
-                "max_cameras": 3,
+                "max_cameras": 4,
                 "max_workers": 50,
             },
             user={

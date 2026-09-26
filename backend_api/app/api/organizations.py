@@ -32,6 +32,13 @@ class OrganizationListResponse(BaseModel):
     current_org_id: Optional[int] = None
 
 
+class PlanUpdate(BaseModel):
+    """Admin plan provisioning (enterprise deals, support overrides)."""
+
+    plan: str
+    max_cameras: Optional[int] = None
+
+
 @router.get("/orgs", response_model=OrganizationListResponse)
 async def list_organizations(
     user: AuthenticatedUser = Depends(get_current_user),
@@ -98,5 +105,36 @@ async def get_organization(
 
     if row is None:
         raise HTTPException(status_code=404, detail="Organization not found")
+
+    return OrganizationResponse(**dict(row))
+
+
+@router.patch("/orgs/{org_id}/plan", response_model=OrganizationResponse)
+async def update_organization_plan(
+    org_id: int,
+    body: PlanUpdate,
+    user: AuthenticatedUser = Depends(require_roles("admin")),
+):
+    """Set an org's plan + camera cap. Admin only.
+
+    This is how enterprise (custom) plans are provisioned and how support
+    overrides a cap; self-serve upgrades flow through billing webhooks.
+    """
+    if body.plan not in ("starter", "pilot", "professional", "enterprise"):
+        raise HTTPException(status_code=400, detail=f"Unknown plan: {body.plan}")
+    if body.max_cameras is not None and body.max_cameras < 0:
+        raise HTTPException(status_code=400, detail="max_cameras must be >= 0")
+
+    from app.core.database import update_org_plan
+
+    if not update_org_plan(org_id, body.plan, body.max_cameras):
+        raise HTTPException(status_code=404, detail="Organization not found")
+
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT id, name, slug, plan, industry, country, max_cameras, max_workers, created_at "
+            "FROM organizations WHERE id = ?",
+            (org_id,)
+        ).fetchone()
 
     return OrganizationResponse(**dict(row))

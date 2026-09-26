@@ -32,8 +32,14 @@ def _user_from_payload(payload: dict) -> AuthenticatedUser:
     role = row["role"]
     if role != payload.get("role"):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token role is stale")
-    # Resolve org_id from user record
-    org_id = row.get("org_id") if hasattr(row, 'get') else None
+    # Resolve org_id from user record. Both sqlite3.Row and PgRow expose
+    # .keys() but neither has dict-style .get() — the old hasattr check
+    # silently yielded None for every user, disabling all tenant scoping.
+    try:
+        columns = row.keys()
+    except AttributeError:
+        columns = ()
+    org_id = row["org_id"] if "org_id" in columns else None
     org_slug = None
     if org_id:
         try:
