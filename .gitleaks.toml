@@ -1,0 +1,37 @@
+# Gitleaks configuration (P1: secret-scan gate, DEEP_AUDIT_REPORT §12 P1)
+#
+# Extends the default rule set and allowlists ONLY the verified false
+# positives found on first run (9 findings across 5 locations, all of which
+# are placeholders, test fixtures, or third-party page snapshots — no
+# project credential is present). Keep this list surgical: anything added
+# here is invisible to the scanner, so every entry needs a reason.
+
+title = "ErgoVigilance gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Verified false positives (placeholders / fixtures / third-party snapshots)"
+
+# Matches the secret VALUE, not the line, so these can never mask a real
+# key (a real credential would not contain these literal strings).
+regexes = [
+    # backend_api/.env.production.example — the documented placeholder a
+    # deployer is told to replace.
+    '''replace-with-a-64-char-hex-secret''',
+    # backend_api/tests/test_audit_hmac_key.py — deterministic fixture value.
+    '''env-supplied-key-0123456789abcdef''',
+    # DEPLOYMENT.md curl example — the obvious "put your key here" string.
+    '''your-api-key''',
+    # ui_posture/src/pages/ApiDocsPage.tsx — deliberately truncated JWT
+    # ("...") shown in the API docs UI, not a usable token.
+    '''eyJhbGciOiJIUzI1NiIs\.\.\.''',
+]
+
+# Saved third-party web page (Getty Images snapshot): carries the VENDOR's
+# session token in window.notificationsContext. Not ours, not usable, and
+# rewriting the snapshot would falsify the captured artifact.
+paths = [
+    '''ui_posture/public/images/.*\.htm$''',
+]
