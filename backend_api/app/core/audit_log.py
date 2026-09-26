@@ -108,6 +108,30 @@ def _hmac_key() -> str:
     return _HMAC_KEY_CACHE
 
 
+def destroy_hmac_key() -> bool:
+    """Destroy the provisioned key file (erasure procedure step 3).
+
+    Removes the key file so existing chains become unverifiable, then
+    clears the in-process cache: the next audited event re-resolves (env
+    key if set, else a freshly provisioned key = rotation). An
+    env-supplied key has no file to destroy — returns False and leaves
+    the running process untouched. Never raises for a missing file.
+    """
+    global _HMAC_KEY_CACHE
+    if os.getenv("AUDIT_HMAC_KEY", "").strip():
+        return False
+    key_file = Path(os.getenv("AUDIT_HMAC_KEY_FILE") or _default_key_file())
+    try:
+        key_file.unlink()
+    except FileNotFoundError:
+        return False
+    except OSError as exc:
+        logger.warning("Could not destroy audit HMAC key file %s: %s", key_file, exc)
+        return False
+    _HMAC_KEY_CACHE = None
+    return True
+
+
 def ensure_hmac_key() -> str:
     """Fail-fast entry point for app startup (raises RuntimeError when unusable)."""
     return _hmac_key()

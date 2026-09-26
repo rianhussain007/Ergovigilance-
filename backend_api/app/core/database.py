@@ -107,6 +107,20 @@ def update_org_plan(org_id: int, plan: str, max_cameras: int | None) -> bool:
         return cur.rowcount > 0
 
 
+def vacuum_database() -> dict:
+    """Reclaim freed pages after bulk deletes (erasure procedure step 4).
+
+    VACUUM cannot run inside a transaction, so any pending work is
+    committed first. Returns post-VACUUM page counters for the record.
+    """
+    with get_connection() as conn:
+        conn.commit()
+        conn.execute("VACUUM")
+        page_count = conn.execute("PRAGMA page_count").fetchone()[0]
+        freelist_count = conn.execute("PRAGMA freelist_count").fetchone()[0]
+    return {"page_count": int(page_count), "freelist_count": int(freelist_count)}
+
+
 def init_local_database() -> None:
     """Apply schema migrations and seed the database.
 
