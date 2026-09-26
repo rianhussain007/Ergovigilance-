@@ -169,7 +169,7 @@ export default function OnboardingChecklistPage() {
       </header>
 
       <main className="flex-1 flex items-center justify-center p-6">
-        <div className="w-full max-w-xl">
+        <div className="w-full max-w-[36rem]">
           {/* Progress dots */}
           <div className="flex items-center justify-center gap-2 mb-8">
             {STEPS.map((st, i) => {

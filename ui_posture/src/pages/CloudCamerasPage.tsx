@@ -263,12 +263,12 @@ export default function CloudCamerasPage() {
       {/* No cameras */}
       {!loading && cameras.length === 0 && !coreDown && (
         <div className="flex flex-col items-center justify-center py-20 px-8">
-          <div className="rounded-2xl bg-white/5 border border-white/10 p-8 flex flex-col items-center text-center w-full max-w-lg">
+          <div className="rounded-2xl bg-white/5 border border-white/10 p-8 flex flex-col items-center text-center w-full max-w-[32rem]">
             <div className="w-20 h-20 rounded-full bg-cyan-500/10 border border-cyan-500/20 flex items-center justify-center mb-6">
               <Camera className="w-10 h-10 text-cyan-400/60" />
             </div>
             <h3 className="text-xl text-white font-semibold mb-3">No Cameras Configured</h3>
-            <p className="text-slate-400 text-sm leading-relaxed mb-8 max-w-md">
+            <p className="text-slate-400 text-sm leading-relaxed mb-8 max-w-[28rem]">
               Add your factory CCTV cameras using RTSP stream URLs. The cloud service will process worker posture in real-time using YOLOv8-pose.
             </p>
             <button
@@ -447,7 +447,7 @@ export default function CloudCamerasPage() {
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="w-full max-w-md p-6 rounded-2xl bg-[#1a1a2e] border border-white/10 shadow-2xl"
+            className="w-full max-w-[28rem] p-6 rounded-2xl bg-[#1a1a2e] border border-white/10 shadow-2xl"
           >
             <h3 className="text-lg font-semibold text-white mb-4">Add Cloud Camera</h3>
             <div className="space-y-4">

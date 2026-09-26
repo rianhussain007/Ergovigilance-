@@ -31,7 +31,7 @@ export class RouteErrorBoundary extends Component<Props, State> {
     if (this.state.error) {
       return (
         <div className="flex min-h-screen items-center justify-center bg-[#0b0f14] p-lg">
-          <div className="max-w-md rounded-xl border border-red-500/30 bg-red-500/10 p-lg text-center">
+          <div className="max-w-[28rem] rounded-xl border border-red-500/30 bg-red-500/10 p-lg text-center">
             <p className="text-body-md font-medium text-red-400">Something went wrong loading this page</p>
             <p className="mt-xs text-body-sm text-on-surface-variant">
               {this.state.error.message || 'An unexpected error occurred.'}

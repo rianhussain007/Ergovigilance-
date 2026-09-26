@@ -257,7 +257,7 @@ export default function MultiCameraView() {
           <div className="w-full max-w-[560px] flex flex-col items-center gap-sm rounded-xl border border-dashed border-outline-variant bg-surface-container-low p-lg text-center">
             <Camera className="w-8 h-8 text-on-surface-variant/50" strokeWidth={1.5} />
             <p className="text-body-sm font-medium text-on-surface">Add more cameras</p>
-            <p className="text-[11px] text-on-surface-variant max-w-sm">
+            <p className="text-[11px] text-on-surface-variant max-w-[24rem]">
               Connect additional cameras to monitor more stations at once.
             </p>
           </div>

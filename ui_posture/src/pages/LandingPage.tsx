@@ -260,7 +260,7 @@ function InteractiveDemoSection() {
                 <div className="flex items-end justify-between">
                   <div>
                     <h3 className="text-xl font-bold text-white mb-1">{view.title}</h3>
-                    <p className="text-sm text-slate-300 max-w-lg">{view.description}</p>
+                    <p className="text-sm text-slate-300 max-w-[32rem]">{view.description}</p>
                   </div>
                   <div className="hidden sm:flex items-center gap-2">
                     {view.stats.map((stat) => (
