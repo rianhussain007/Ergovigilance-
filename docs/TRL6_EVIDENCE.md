@@ -1,5 +1,11 @@
 # TRL-6 Entry Evidence
 
+**TRL-6: CLOSED 2026-09-26.** The last human gate — the alert spot-check
+sheet — was reviewed and approved by the user on this date (2 HIGH
+confirmed / 3 over-warn rejected / 7 unrateable, detail below). This pack
+is the completed TRL-6 evidence; TRL-7 execution follows
+`docs/TRL7_QUALIFICATION_PLAN.md`. Screening aid, not medical device.
+
 Everything below is measured on this host and sourced to a file on disk. Each
 section states what is **NOT MEASURED** so no row can be read as covering more
 than it does.
@@ -42,8 +48,10 @@ device.**
   RSS leak, 0 ID switches)**, plus the UDP transport probe (negotiates
   and streams; p95 still breaches — no transport performance claim).
 - Badge binds executed in-process through the same registry call the
-  REST endpoint uses (disclosed); spot-check sheet is **DRAFT, pending
-  human approval** — no label from it may be quoted yet.
+  REST endpoint uses (disclosed); spot-check sheet **human-reviewed
+  2026-09-26** — outcome: 2 HIGH confirmed, 3 rejected (HIGH over-warn),
+  7 unrateable/blurred; process evidence, n too small for any accuracy
+  figure (detail in the Relevant-environment demo section).
 
 **Accuracy (Safe Claims, unchanged):** the only customer-safe number is
 **87.6% LOW/MEDIUM** for the on-premise backend engine
@@ -57,7 +65,9 @@ claim**. No other accuracy figure may be quoted as product accuracy.
 - Ergonomist-verified HIGH labels (ground truth contains 0 HIGH rows).
 - Real site deployment; 8 workers per feed; 10 FPS per feed.
 - Cloud-engine accuracy (0.84% both profiles → **NO accuracy claim**).
-- Spot-check labels (`PENDING-USER-APPROVAL`).
+- Spot-check labels — human-reviewed 2026-09-26 (see Relevant-environment
+demo section); REMAINS: ergonomist-verified labels at pilot scale (Phase 4
+of `docs/TRL7_QUALIFICATION_PLAN.md`).
 - Load-matched UDP-vs-TCP A/B; a 4 h run off-host or on GPU.
 
 ---
@@ -368,13 +378,32 @@ can never carry a `worker_id` in this run) plus the usual pre-bind gap
 `builtin-iou` (ByteTrack unimportable in this build, see Scope notes) and
 Postgres unavailable → file mode.
 
-**Spot-check sheet — DRAFT, pending human approval:**
+**Spot-check sheet — human-reviewed 2026-09-26 (closes TRL-6):**
 `outputs/tri6_demo/spotcheck/alerts_spotcheck.csv` + `*.jpg` (12 rows, 3 per
 camera, one pre-alert frame each; produced by `scripts/spotcheck_draft.py`
-from Run B's alert rows). `model_prediction` is the system output under
-test; `agent_label` is `PENDING-USER-APPROVAL`. **No label from this sheet
-may be quoted or cited until a human fills `human_label` and sets
-`approved`.**
+from Run B's alert rows). The user filled `human_label`/`approved` on all
+12 rows on 2026-09-26. Outcome, quoted exactly as recorded:
+
+| Human verdict | Rows | Detail |
+|---|---|---|
+| HIGH confirmed | **2** | both soak-3 (warehouse footage): ALT-000227, ALT-000061 — `Approve` |
+| Rejected — model over-warned | **3** | model said HIGH (score 83.7–85.0), human said **LOW ×2** (ALT-000219, ALT-000056) and **MEDIUM ×1** (ALT-000116) — all soak-4 |
+| Unrateable | **7** | `Unidentified/blurred` — subjects too small/blurry to label (all soak-1/soak-2 research clips + 1 soak-3 seated-work frame); not approved as evidence either way |
+
+Reading of the result, with its limits stated plainly:
+
+- **n = 5 rateable rows is far too small for any accuracy figure.** These
+tallies are process evidence of the review path, not a measured accuracy
+number, and none may be quoted as one.
+- Direction of the disagreement (HIGH over-warn on 3/5 rateable rows) is
+**consistent with** the Safe Claims sheet's "tends to over-warn MEDIUM"
+tendency — it neither strengthens nor weakens the 87.6% LOW/MEDIUM number,
+which belongs to the backend engine and a different dataset.
+- **Camera framing/resolution gates labelability**: 7/12 rows were not
+labelable at the source footage's subject size. The TRL-7 pilot site gate
+now requires a labelability check of trial camera frames (subject large
+enough to assess posture) before a site qualifies — a rejected trial
+camera is a rejected site, not a labeling burden.
 
 **UDP transport probe (`trl6-rtsp-udp`, 120 s × 4 cams,
 `outputs/soak/soak_20260926T034839Z_summary.json`):**
@@ -517,7 +546,7 @@ YOLO_MODEL=yolov8n-pose.pt YOLO_IMGSZ=320 \
 | Badge binds in demo (jsonl `type=bind`) | same two jsonl files; audit trail `outputs/audit/identity_audit.jsonl` |
 | persons ≥2 snapshots (`type=persons`) | `outputs/soak/soak_20260926T021815Z.jsonl` (28/30 times) |
 | Alerts carrying `worker_id` | `soak_20260926T025639Z_summary.json` → `alerts_with_worker_id = 529/581` |
-| Spot-check sheet (DRAFT, unapproved) | `outputs/tri6_demo/spotcheck/alerts_spotcheck.csv` + `*.jpg` |
+| Spot-check sheet (human-reviewed 2026-09-26) | `outputs/tri6_demo/spotcheck/alerts_spotcheck.csv` + `*.jpg` — 2 HIGH confirmed / 3 over-warn rejected / 7 unrateable; process evidence, not accuracy |
 | Footage licences | `docs/FOOTAGE_PROVENANCE.csv`, `scripts/fetch_cctv_footage.py` |
 | Capacity split + sizing | `docs/SIZING_SOAK_CLOUD.md` |
 | Cloud accuracy (both profiles) | `scripts/eval_cloud_accuracy.py` → JSON report (N=119) |

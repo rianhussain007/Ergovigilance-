@@ -16,11 +16,14 @@ each with a named proof:
 | C3 | Output is trusted enough to act on | Ergonomist-reviewed labels on a sample of alerts; inter-rater agreement recorded; **no HIGH claim unless a human certifies HIGH** | Site + ergonomist |
 | C4 | The product-side is hardened for operations | All TRL-6/7 P0s closed or waived with evidence (`docs/P0_REVERIFICATION.md`) | In-repo |
 
-**TRL-6 status:** evidence pack complete (`docs/TRL6_EVIDENCE.md`,
-relevant-environment 4-camera RTSP demo, identity attribution 529/581
-alerts, spot-check draft awaiting human approval). TRL-6 closes when the
-spot-check sheet is approved — that approval is a *human* step, listed in
-§5.
+**TRL-6 status: CLOSED 2026-09-26.** Evidence pack complete
+(`docs/TRL6_EVIDENCE.md`, relevant-environment 4-camera RTSP demo with
+Runs A/B/C, identity attribution, UDP probe) and the spot-check sheet was
+human-reviewed on 2026-09-26: 2 HIGH confirmed, 3 rejected (model HIGH
+over-warn — human said LOW ×2 / MEDIUM ×1), 7 unrateable (blurred/small
+subjects). n=5 rateable is process evidence only, never an accuracy
+figure. That review's camera-labelability lesson is now a site-gate
+requirement (§4.1).
 
 **The fast path:** C4 is pure in-repo work (§3, starts immediately) and C1
 can only be earned by wall-clock time at the site — so the pilot protocol
@@ -81,6 +84,17 @@ mounting points ≥ 2.2 m, wired power, management willing to record
 workers **with posted consent**, and a named internal champion. Reject
 sites that cannot commit the 2-week window.
 
+**Labelability gate (added 2026-09-26, from the TRL-6 spot-check
+outcome):** before a site qualifies, grab trial frames from the actual
+cameras at the actual mounting points and confirm a human can assess
+posture from them (subject large enough, no motion blur at capture). The
+TRL-6 spot-check had **7/12 frames unrateable** because the source
+footage's subjects were too small/blurry — a camera that cannot be
+labelled produces alerts no ergonomist can verify, so it fails the site
+gate even if the pipeline runs perfectly. Use
+`scripts/verify_one_camera.py` / `scripts/verify_station_rois.py` to
+capture and check trial frames.
+
 ### 4.2 Setup day (Day 0)
 
 - [ ] Deploy: `docker compose -f docker-compose.yml -f docker-compose.tls.yml up -d` (TLS overlay per `docker-compose.yml:76-77`, certs via `certs/README.md`); verify `/readyz`.
@@ -116,8 +130,8 @@ Per shift, each operator, unassisted after onboarding:
 
 ### 4.5 Label handoff (C3 evidence) — weeks 2–3
 
-1. Random sample: ≥ 50 alerts stratified by camera/severity (include the
-   spot-check sheet's 12 once approved).
+1. Random sample: ≥ 50 alerts stratified by camera/severity (the 5
+   rateable spot-check rows from 2026-09-26 are included as seed rows).
 2. Ergonomist reviews **frames + context** (clip is pre-alert context,
    `recordings/clips/`), labels task + risk level independently of the
    model; disagreements adjudicated in a 1-hour session.
@@ -144,7 +158,7 @@ evidence pack (same style as TRL-6). Verdict wording candidates:
 |---|---|---|
 | Now | TRL-6 consolidation (4 h soak, UDP probe, doc reconcile) | Agent 2 |
 | Now | C4 workstream §3 prep + this plan | Agent 1 (this session) |
-| Now | Approve spot-check sheet → closes TRL-6 | **User** |
+| Done 2026-09-26 | Spot-check sheet human-reviewed → TRL-6 closed (2 HIGH / 3 over-warn / 7 unrateable) | **User** ✓ |
 | This week | Site selected against §4.1; Day 0 executed | **User + site** |
 | Weeks 1–2 | §4.3–4.4 daily loop | Site operators |
 | Week 3 | §4.5 label handoff | Ergonomist |
