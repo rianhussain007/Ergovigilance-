@@ -122,7 +122,7 @@ export default function ValidationPage() {
               {
                 title: '1 · The engine runs real shifts',
                 status: 'done',
-                body: 'Every alert traces to a measured joint angle and a documented threshold. The full pipeline — camera → pose → features → risk → alert → report — is exercised against real recorded sessions and a 230+ test suite.',
+                body: 'Every alert traces to a measured joint angle and a documented threshold. The full pipeline — camera → pose → features → risk → alert → report — is exercised against real recorded sessions and a 600+ test suite.',
               },
               {
                 title: '2 · Held-out model accuracy',

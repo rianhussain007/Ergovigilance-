@@ -59,3 +59,19 @@ http://localhost:3000; System Health should show all four green.
 - Auth DB is per-shell CWD: run backend from `backend_api/` so it uses
   `backend_api/local_auth.db` (gitignored), same as tests expect.
 - Boot artifacts (`backend_api/data/audit_hmac.key`) are gitignored.
+
+## Demo mode (topbar Demo button)
+
+The button replays a video file through the live pipeline — it needs
+`DEMO_VIDEO_PATH` on the backend shell, else it fails honestly:
+
+```powershell
+$env:DEMO_VIDEO_PATH = "C:\GGS_intership\posture_analysis\demo-assets\demo.mp4"
+```
+
+`demo-assets/` is gitignored (footage is never committed). To cut your
+own 30 s 720p sample from a local recording:
+
+```powershell
+ffmpeg -y -ss 30 -i <recording>.mp4 -t 30 -vf scale=1280:-2 -c:v libx264 -preset veryfast -crf 24 demo-assets/demo.mp4
+```

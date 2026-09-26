@@ -134,3 +134,7 @@ tools/mediamtx/
 
 # Auto-provisioned audit HMAC key — key material, never commit
 backend_api/data/
+
+# Demo video asset (local sample footage for DEMO_VIDEO_PATH) — footage is
+# never committed; each dev cuts their own from local recordings
+demo-assets/
