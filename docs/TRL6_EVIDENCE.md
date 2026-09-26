@@ -8,9 +8,57 @@ than it does.
 `torch.cuda.is_available() == False`). Windows (Git Bash toolchain).
 
 **Scope of the performance section:** CPU-only, short runs (15–120 s) in
-compute mode, plus the 30-min / 15-min RTSP demo runs below. No GPU number,
-no 4-hour number, no throughput claim for the spec's 8 workers/feed or
-10 FPS/feed.
+compute mode, plus the 30-min / 15-min RTSP demo runs and the 4-hour
+Run C below. No GPU number, no throughput claim for the spec's
+8 workers/feed or 10 FPS/feed.
+
+---
+
+## Status (2026-09-26) — consolidated TRL-6 verdict
+
+Two parallel sessions' work merged here. **Screening aid, not medical
+device.**
+
+**Done — code-side evidence, all gates green (exact numbers):**
+
+- Blockers 1–3 closed: aspect-correct angles (Blocker 1), clip moov
+  guard (Blocker 2 — re-verified live by Run C: 5021 clips / 0
+  truncated over 4 h), WebSocket event contract (Blocker 3).
+- Honest-red CI gate fixed by fixing the product, not the claims
+  (`0de8d40`): backend **425 passed, 1 skipped, 1 deselected**;
+  cloud **134 passed**; frontend `npx tsc --noEmit` exit 0.
+- MFA is a real second factor (`bc093f6`, fail-closed challenge flow;
+  re-verified `docs/P0_REVERIFICATION.md`).
+- Perf knobs measured, not assumed: `YOLO_SCORE_EVERY` frame-skip
+  measured and **rejected** (`53e8b05`); capacity profile evaluated —
+  accuracy identical to default, so `yolov8s-pose @ 640` stays.
+- Cloud-engine accuracy measured for the first time → **NO accuracy
+  claim** (0.84%, both profiles, N=119 human-labelled frames).
+
+**Done — relevant-environment demo (4-camera RTSP, 2026-09-26):**
+
+- Run A (30 min, capacity/identity baseline), Run B (15 min, identity
+  attribution 91%), **Run C (4 h: full duration, 0 truncated clips, no
+  RSS leak, 0 ID switches)**, plus the UDP transport probe (negotiates
+  and streams; p95 still breaches — no transport performance claim).
+- Badge binds executed in-process through the same registry call the
+  REST endpoint uses (disclosed); spot-check sheet is **DRAFT, pending
+  human approval** — no label from it may be quoted yet.
+
+**Accuracy (Safe Claims, unchanged):** the only customer-safe number is
+**87.6% LOW/MEDIUM** for the on-premise backend engine
+(`results/ground_truth_evaluation.json`). Cloud engine = **NO accuracy
+claim**. No other accuracy figure may be quoted as product accuracy.
+
+**REMAINS NOT MEASURED — do not quote as done:**
+
+- Real badge/QR hardware (in-process registry only, no scanner).
+- GPU memory/throughput; any multi-host or scaled topology.
+- Ergonomist-verified HIGH labels (ground truth contains 0 HIGH rows).
+- Real site deployment; 8 workers per feed; 10 FPS per feed.
+- Cloud-engine accuracy (0.84% both profiles → **NO accuracy claim**).
+- Spot-check labels (`PENDING-USER-APPROVAL`).
+- Load-matched UDP-vs-TCP A/B; a 4 h run off-host or on GPU.
 
 ---
 
@@ -481,4 +529,6 @@ YOLO_MODEL=yolov8n-pose.pt YOLO_IMGSZ=320 \
 model/manifest contract, single-yield lifespan → backend gate green),
 `5557fa0` (footage fetcher + provenance), `21a390d` (multi-source feeder),
 `1d42742` (RTSP rig), `82884e4` (bind + persons instrumentation),
-`83822ea` (spot-check draft extractor), `18a47ca` (wildcard dominant-track binds).
+`83822ea` (spot-check draft extractor), `18a47ca` (wildcard dominant-track binds),
+`f69cc04` (UDP probe measured + stale test-count reconciliation), `46a05a6`
+(4-hour Run C evidence).
