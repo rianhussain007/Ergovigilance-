@@ -119,6 +119,12 @@ async def lifespan(app: FastAPI):
         )
     init_local_database()
 
+    # Fail fast if the audit chain key cannot be resolved (P0-8): a boot-time
+    # refusal beats a 500 on the first audited event. With DEBUG=false this
+    # raises unless AUDIT_HMAC_KEY is set or the key file is writable.
+    from app.core.audit_log import ensure_hmac_key
+    ensure_hmac_key()
+
     # Tier 1: when DATABASE_URL is configured, create the Postgres telemetry
     # tables (non-blocking, never raises — file mode continues if it fails).
     try:

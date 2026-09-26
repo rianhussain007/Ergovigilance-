@@ -49,6 +49,9 @@ services:
       # Session JSON files live on the /data volume so file-mode sessions
       # survive container recreation (down/up) — not just the container layer.
       - SESSIONS_DIR=/data/sessions
+      # Audit trail lives on the persistent /data volume (auto-provisioned
+      # HMAC key at /data/audit_hmac.key — survives container recreation).
+      - AUDIT_LOG_DIR=/data/audit_logs
       - PG_TIMESCALEDB=${PG_TIMESCALEDB:-false}
     volumes:
       - ergovigilance-db:/data
@@ -101,7 +104,9 @@ services:
       - RTSP_RECONNECT_DELAY=${RTSP_RECONNECT_DELAY:-2.0}
       - SESSION_IDLE_TIMEOUT=${SESSION_IDLE_TIMEOUT:-60}
       - SESSIONS_DIR=/data/sessions
-      - AUTH_JWT_SECRET=${AUTH_JWT_SECRET:-}
+      # Required: the service validates JWTs; an empty secret would accept
+      # nothing meaningful or worse, silently accept dev tokens.
+      - AUTH_JWT_SECRET=${AUTH_JWT_SECRET:?AUTH_JWT_SECRET is required (>=32 chars) - see backend_api/.env.production.example}
       - CORS_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost
     volumes:
       - ergovigilance-db:/data

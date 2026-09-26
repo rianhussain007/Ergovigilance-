@@ -129,3 +129,6 @@ node_modules/
 
 # Local RTSP test rig (binaries + auto-generated TLS keys)
 tools/mediamtx/
+
+# Auto-provisioned audit HMAC key — key material, never commit
+backend_api/data/

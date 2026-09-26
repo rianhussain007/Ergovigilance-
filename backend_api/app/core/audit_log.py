@@ -10,6 +10,14 @@ Configurable via environment:
 - AUDIT_LOG_DIR: directory for audit logs (default ./audit_logs)
 - AUDIT_LOG_MAX_SIZE_MB: max size per log file (default 50)
 - AUDIT_LOG_RETENTION_DAYS: days to keep logs (default 365)
+- AUDIT_HMAC_KEY: explicit chain key (optional — see below)
+- AUDIT_HMAC_KEY_FILE: where an unset key is auto-provisioned
+  (default: next to AUTH_DB_PATH, else backend_api/data/audit_hmac.key)
+
+Chain key resolution (P0-8): explicit AUDIT_HMAC_KEY wins; otherwise the key
+is loaded from / generated into the key file so verification survives
+restarts. With DEBUG=false an unwritable key file refuses service instead of
+silently degrading to an ephemeral key.
 
 Usage:
     from app.core.audit_log import audit_logger
@@ -34,14 +42,81 @@ AUDIT_LOG_DIR = Path(os.getenv("AUDIT_LOG_DIR", "./audit_logs"))
 AUDIT_LOG_MAX_SIZE_MB = int(os.getenv("AUDIT_LOG_MAX_SIZE_MB", "50"))
 AUDIT_LOG_RETENTION_DAYS = int(os.getenv("AUDIT_LOG_RETENTION_DAYS", "365"))
 
-# HMAC key for chain integrity (auto-generated if not set)
-AUDIT_HMAC_KEY = os.getenv("AUDIT_HMAC_KEY", secrets.token_hex(32))
+
+def _default_key_file() -> Path:
+    """Key file location: beside the auth DB (persistent volume in containers)."""
+    from app.core.config import settings
+
+    if settings.AUTH_DB_PATH:
+        return Path(settings.AUTH_DB_PATH).with_name("audit_hmac.key")
+    return Path(__file__).resolve().parents[2] / "data" / "audit_hmac.key"
+
+
+def _resolve_hmac_key() -> str:
+    """Resolve the chain key: env > key file > auto-provision (dev) / fail closed.
+
+    Stateless — every call re-reads env/file so tests and ops can rotate the
+    key source; ``_hmac_key`` caches the result for the hot path.
+    """
+    env_key = os.getenv("AUDIT_HMAC_KEY", "").strip()
+    if env_key:
+        return env_key
+    key_file = Path(os.getenv("AUDIT_HMAC_KEY_FILE") or _default_key_file())
+    try:
+        if key_file.exists():
+            stored = key_file.read_text(encoding="utf-8").strip()
+            if stored:
+                return stored
+        key = secrets.token_hex(32)
+        key_file.parent.mkdir(parents=True, exist_ok=True)
+        key_file.write_text(key, encoding="utf-8")
+        try:
+            os.chmod(key_file, 0o600)
+        except OSError:
+            pass
+        logger.warning(
+            "Audit HMAC key generated and persisted to %s — back it up: "
+            "without it, existing audit chains cannot be verified.",
+            key_file,
+        )
+        return key
+    except OSError as exc:
+        if os.getenv("DEBUG", "false").lower() == "true":
+            logger.warning(
+                "Audit HMAC key file %s unusable (%s) — falling back to an "
+                "ephemeral per-process key (chain breaks across restarts). "
+                "Set AUDIT_HMAC_KEY to make it stable.",
+                key_file,
+                exc,
+            )
+            return secrets.token_hex(32)
+        raise RuntimeError(
+            f"AUDIT_HMAC_KEY is not set and the key file {key_file} could not "
+            f"be read or written ({exc}). Set AUDIT_HMAC_KEY (>=32 chars) or "
+            "fix the permissions — refusing to run with an unverifiable audit chain."
+        ) from exc
+
+
+_HMAC_KEY_CACHE: Optional[str] = None
+
+
+def _hmac_key() -> str:
+    """Cached chain key (resolved once per process)."""
+    global _HMAC_KEY_CACHE
+    if _HMAC_KEY_CACHE is None:
+        _HMAC_KEY_CACHE = _resolve_hmac_key()
+    return _HMAC_KEY_CACHE
+
+
+def ensure_hmac_key() -> str:
+    """Fail-fast entry point for app startup (raises RuntimeError when unusable)."""
+    return _hmac_key()
 
 
 def _hmac_chain(previous_hash: str, entry_data: str) -> str:
     """Generate HMAC-SHA256 hash linking this entry to the previous one."""
     message = f"{previous_hash}:{entry_data}".encode("utf-8")
-    return hmac.new(AUDIT_HMAC_KEY.encode("utf-8"), message, hashlib.sha256).hexdigest()
+    return hmac.new(_hmac_key().encode("utf-8"), message, hashlib.sha256).hexdigest()
 
 
 class AuditLogger:
