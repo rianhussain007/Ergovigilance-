@@ -1,8 +1,11 @@
 """YOLO Cloud Core — configuration."""
 
 import json
+import logging
 import os
 from dataclasses import dataclass, field
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -138,3 +141,15 @@ class CloudSettings:
 
 
 settings = CloudSettings()
+
+# Dashboard-persisted overrides (POST /settings): file values apply only
+# where the environment is silent — env always wins. Never break boot on
+# a bad override file.
+try:
+    from yolo_cloud.cloud_settings import apply_overrides
+
+    _applied = apply_overrides(settings)
+    if _applied:
+        logger.info("Applied dashboard settings overrides: %s", ",".join(_applied))
+except Exception as exc:  # pragma: no cover - defensive, boot must continue
+    logger.warning("Ignoring cloud_settings.json: %s", exc)

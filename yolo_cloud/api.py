@@ -77,6 +77,42 @@ async def health():
     }
 
 
+# -- Runtime Settings ----------------------------------------------------
+# The Cloud Settings UI persists here. Every tunable needs a service
+# restart (model/device/FPS are load-time) — the responses say so; the UI
+# must not imply live-apply.
+
+
+@router.get("/settings")
+async def get_settings(tenant: dict = Depends(require_api_key)):
+    """Current effective inference settings + restart notice."""
+    from yolo_cloud.cloud_settings import current_values
+
+    return {
+        "settings": current_values(settings),
+        "restart_required": True,
+        "message": "Changes apply after the cloud-core service restarts.",
+    }
+
+
+@router.post("/settings")
+async def update_settings(body: dict, tenant: dict = Depends(require_api_key)):
+    """Persist inference settings to the override file (applies on restart)."""
+    from yolo_cloud.cloud_settings import current_values, save_overrides
+
+    try:
+        saved = save_overrides(body or {})
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {
+        "saved": True,
+        "settings": saved,
+        "effective": current_values(settings),
+        "restart_required": True,
+        "message": "Saved. Restart cloud-core to apply.",
+    }
+
+
 # -- Camera Management -------------------------------------------------------
 
 @router.get("/cameras")
@@ -152,6 +188,21 @@ async def remove_camera(camera_id: str, tenant: dict = Depends(require_api_key))
     if not removed:
         raise HTTPException(404, f"Camera {camera_id} not found")
     return {"removed": camera_id}
+
+
+@router.post("/cameras/probe")
+async def probe_camera(body: dict, tenant: dict = Depends(require_api_key)):
+    """Test an RTSP URL WITHOUT persisting anything (settings tester).
+
+    Returns 200 with {reachable, detail, latency_ms?} — unreachability is
+    a test result, not an error. Only a missing URL is a 400.
+    """
+    from yolo_cloud.stream_probe import probe_stream
+
+    url = (body or {}).get("url", "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="'url' is required")
+    return probe_stream(url)
 
 
 @router.get("/cameras/{camera_id}")
