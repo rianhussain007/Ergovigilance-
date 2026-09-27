@@ -86,7 +86,7 @@ const TIERS = [
 const FAQ = [
   {
     q: 'How does the free on-premise version work?',
-    a: 'Install Docker, plug in a webcam, and run `docker compose up`. The full platform — dashboard, alerts, reports, AI assistant — runs on your local machine with zero internet required. Open source under MIT license.',
+    a: 'Install Docker, plug in a webcam, and run `docker compose up`. The full platform — dashboard, alerts, reports, AI assistant — runs on your local machine with zero internet required. Free for on-premise use, licensed by Rian Hussain.',
   },
   {
     q: 'What cameras does the cloud version support?',
