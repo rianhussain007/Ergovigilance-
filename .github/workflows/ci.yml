@@ -186,7 +186,7 @@ jobs:
       - name: Trivy config (Dockerfile / compose / k8s)
         run: |
           docker run --rm -v "$PWD:/repo" ghcr.io/aquasecurity/trivy:0.58.1 config \
-            --severity HIGH,CRITICAL --exit-code 1 --skip-dirs .git --no-progress /repo
+            --severity HIGH,CRITICAL --exit-code 1 --skip-dirs .git /repo
 
       # Hard gate: secrets in tracked files (complements gitleaks with a
       # second engine; pinned image = stable rules, no external drift).
