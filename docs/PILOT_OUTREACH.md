@@ -4,7 +4,7 @@
 
 ## LinkedIn connection note (≤300 chars)
 
-Hi [Name] — we help factories turn manual RULA/REBA spot checks into continuous posture screening from an ordinary camera. Offering one [Company] station a free 2-week pilot (laptop + 1 camera, offline). Worth a 15-min call? — [Your Name], ErgoVigilance (CMRU/HAI7)
+Hi [Name] — we help factories turn manual RULA/REBA spot checks into continuous posture screening from an ordinary camera. Offering one [Company] station a free 2-week pilot (laptop + 1 camera, offline). Worth a 15-min call? — Rian Hussain, ErgoVigilance
 
 ## LinkedIn / email follow-up (short version)
 
@@ -24,7 +24,7 @@ If [Company] still runs manual spot audits or works with an ergonomics consultan
 
 Open to a 15-min call this week? Happy to come to the plant.
 
-[Your Name] · [phone] · [contact email] · ErgoVigilance (CMRU / HAI7)
+[Your Name] · [phone] · [contact email] · Rian Hussain, ErgoVigilance
 
 P.S. One-pager attached on reply — every number in it traces to our repo evaluation file.
 

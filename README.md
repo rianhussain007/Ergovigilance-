@@ -329,4 +329,4 @@ docker compose up -d --build
 
 ## License
 
-Internal use — GGS Internship Project.
+© Rian Hussain. ErgoVigilance is a product by Rian Hussain.

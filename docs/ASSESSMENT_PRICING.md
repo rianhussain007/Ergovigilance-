@@ -34,4 +34,4 @@ Assessment → (optional) free 2-week on-prem pilot on same station → Cloud Pr
 
 ---
 
-Contact: [Your Name] · [contact email] · [phone] — ErgoVigilance (CMRU / HAI7). Reference: Elion office-ergonomics range ₹50k–₹3L / typical ₹1–2.5L for context; factory-floor camera screening is a different service at introductory pricing above.
+Contact: Rian Hussain · [contact email] · [phone] — ErgoVigilance. Reference: Elion office-ergonomics range ₹50k–₹3L / typical ₹1–2.5L for context; factory-floor camera screening is a different service at introductory pricing above.

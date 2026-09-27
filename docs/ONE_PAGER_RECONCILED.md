@@ -47,4 +47,4 @@ First-10 Indian SMB lane (decision pending): quote INR equivalent explicitly if 
 
 ---
 
-Contact: [Your Name] · **[contact email — FILL BEFORE SENDING]** · [phone / university / HAI7] — ErgoVigilance · Industrial ergonomics, automated.
+Contact: Rian Hussain · **[contact email — FILL BEFORE SENDING]** · [phone] — ErgoVigilance · Industrial ergonomics, automated.

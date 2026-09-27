@@ -33,4 +33,4 @@ Operators see their own posture and tips, nothing else. Supervisors see live ris
 Two weeks, one to two cameras, one station, on-premise, free. We handle the consent materials, run a live smoke test on day one, and hand over a risk-trend report and full evidence export at the end. No commitment beyond that.
 
 ---
-[hai7.ai](https://hai7.ai) · [ADD CONTACT EMAIL] · Built by HAI7 Private Ltd
+Built by Rian Hussain · [ADD CONTACT EMAIL]

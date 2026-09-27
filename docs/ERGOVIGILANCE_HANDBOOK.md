@@ -2,7 +2,7 @@
 
 > **How to use this book:** Give it to an owner, EHS manager, supervisor, or operator. Each chapter is one idea. Read in order or jump to what you need.
 > **Status:** DRAFT 2026-09-24. Fill every `[FILL]` before printing/sharing. Every number traces to `docs/DEEP_AUDIT_REPORT.md` Safe Claims Sheet.
-> Contact: [FILL: Your Name] · [FILL: contact email] · [FILL: phone] · ErgoVigilance (CMRU / HAI7)
+> Contact: Rian Hussain · [FILL: contact email] · [FILL: phone] · ErgoVigilance
 
 ---
 
@@ -353,7 +353,7 @@ Even without injury math: one station comparison ("Station 3 trunk 2× Station 1
 
 `[QR: /request-pilot link — FILL]`
 
-ErgoVigilance · Industrial ergonomics, automated · `[FILL: university / HAI7 / DPIIT line]` · Version 2026-09-24-DRAFT.
+ErgoVigilance · Industrial ergonomics, automated · A product by Rian Hussain · Version 2026-09-24-DRAFT.
 
 ## Appendix. Kannada / Hindi insert (1 page each, print double-sided)
 
