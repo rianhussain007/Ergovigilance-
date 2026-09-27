@@ -87,9 +87,12 @@ spec:
                   optional: true
             # Write-path analysis (P1 readOnlyRootFilesystem): every directory
             # the app creates files in lives on the /data emptyDir below.
-            # WEB_CONCURRENCY=1 is load-bearing — multiple uvicorn workers race
-            # run_migrations() on a fresh DB (duplicate column / no such table)
-            # and the pod crash-loops without it.
+            # WEB_CONCURRENCY=1 is defense-in-depth, not the only guard:
+            # multiple uvicorn workers used to race run_migrations() on a fresh
+            # DB (duplicate column / no such table) and crash-loop the pod.
+            # Migrations now serialize first-boots with BEGIN IMMEDIATE plus an
+            # in-transaction version re-check (a79fbb9), so a second worker no
+            # longer reproduces that crash; 1 remains the deliberate setting.
             - name: WEB_CONCURRENCY
               value: "1"
             - name: HOME
