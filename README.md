@@ -3,20 +3,30 @@
 > Real-time posture risk detection, live monitoring, alerts, and reporting for factory floors — powered by computer vision and biomechanical analysis.
 
 <p align="center">
-  <img src="ui_posture/public/images/dashboard-operator.png" alt="ErgoVigilance Dashboard" width="700" />
+  <img src="ui_posture/public/images/hero-factory-worker.png" alt="ErgoVigilance monitoring a factory worker with live pose overlay" width="850" />
   <br/>
-  <em>Live monitoring dashboard with real-time risk scoring, ergonomic feature analysis, and AI-powered recommendations</em>
+  <em>Screening aid, not a medical device — 87.6% agreement with human assessors (LOW/MEDIUM, 500 frames)</em>
 </p>
 
-## Screenshots
+<p align="center">
+  <a href="https://github.com/rianhussain007/Ergovigilance-/actions/workflows/ci.yml"><img src="https://github.com/rianhussain007/Ergovigilance-/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <img src="https://img.shields.io/badge/TRL-6%20closed-blue" alt="TRL-6 closed" />
+  <img src="https://img.shields.io/badge/tests-754%20passing-brightgreen" alt="754 tests passing" />
+  <img src="https://img.shields.io/badge/Python-3.13-3776AB" alt="Python 3.13" />
+  <img src="https://img.shields.io/badge/React-19-61DAFB" alt="React 19" />
+</p>
 
-| Dashboard | Live Monitoring | Reports |
-|---|---|---|
-| ![Dashboard](ui_posture/public/images/dashboard-operator.png) | ![Live Camera](ui_posture/public/images/live_camera.png) | ![History](ui_posture/public/images/history.png) |
+## See it
 
-| Multi-Camera | Landing Page | AI Assistant |
-|---|---|---|
-| ![Command Center](ui_posture/public/images/command-center-monitors.png) | ![Hero](ui_posture/public/images/hero-factory-worker.png) | ![Tablet](ui_posture/public/images/tablet-skeleton-assessment.png) |
+| Dashboard — live risk, alerts, team | Model Dashboard — honest model comparison |
+|---|---|
+| ![Dashboard](ui_posture/public/images/readme-dashboard.png) | ![Model Dashboard](ui_posture/public/images/readme-model-dashboard.png) |
+
+| Validation — evidence, not adjectives | Cloud monitoring — honest empty states |
+|---|---|
+| ![Validation](ui_posture/public/images/readme-validation.png) | ![Cloud Cameras](ui_posture/public/images/readme-cloud-cameras.png) |
+
+*Screenshots captured from the running app (2026-09-27). No mockups — every pixel above is real product, including the honest "no cameras" and "research track" states.*
 
 ## What It Does
 
@@ -27,55 +37,63 @@ ErgoVigilance watches a worker through an ordinary webcam, detects body pose in 
 - **Safety Managers** — alert management, audit trail, PDF safety reports
 - **Admins** — system health, user management, camera configuration, deployment monitoring
 
+## What It Does NOT Claim
+
+- Not a medical device. Thresholds are heuristic, RULA/REBA-informed — not clinically validated.
+- Only customer-safe accuracy: **87.6% on 500 human frames, LOW/MEDIUM only** (no HIGH validated).
+- Never quoted: 94.1% / 97.6% / 88.6% / 86.4% / 76.9% (research vintages, retired from headlines).
+- Full methodology on the Validation page (`/validation`) and in `results/ground_truth_evaluation.json`.
+
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS, Recharts |
-| **Backend API** | FastAPI (Python 3.11+), Pydantic, SQLite/PostgreSQL |
+| **Frontend** | React 19, TypeScript, Vite, Tailwind CSS, Recharts (40 routes) |
+| **Backend API** | FastAPI (Python 3.13), Pydantic, SQLite/PostgreSQL (110+ endpoints) |
 | **AI Core (On-Premise)** | MediaPipe Pose (33 keypoints), YOLOv8 (person detection), YuNet (face), SFace (identity) |
-| **AI Core (Cloud)** | YOLOv8-pose (17 keypoints COCO), ByteTrack (worker tracking), RTSP stream ingestion |
+| **AI Core (Cloud)** | YOLOv8-pose (17 keypoints COCO), ByteTrack (worker tracking), RTSP stream ingestion (~40 endpoints) |
 | **ML Models** | HistGradientBoosting (task + risk classification, 7 task classes — see Model Accuracy below) |
-| **Deployment** | Docker Compose (4 services), Windows Service scripts, `.env`-driven config |
+| **Deployment** | Docker Compose (4 services), `.env`-driven config |
 
 ## Quick Start
 
 ### Option A: Docker (recommended for demos)
 
 ```bash
-# Clone and start
 git clone https://github.com/rianhussain007/Ergovigilance-.git
 cd Ergovigilance-
+# AUTH_JWT_SECRET is REQUIRED — the stack refuses to boot without it (fail-closed)
+$env:AUTH_JWT_SECRET = python -c "import secrets; print(secrets.token_urlsafe(48))"
 docker compose up -d --build
 
-# Open
 # Frontend: http://localhost:8080
-# API docs: http://localhost:8000/docs
-# Login: admin@example.local / AdminPass123!
+# API docs:  http://localhost:8000/docs
+# Login:     admin@example.local / AdminPass123!
 ```
 
-### Option B: Local Development
+### Option B: Local Development (3 processes — see `docs/DEV_START.md`)
 
-```bash
-# Backend
-cd backend_api
-python -m venv venv
-venv\Scripts\activate          # Windows
-pip install -r requirements.txt
-uvicorn app.main:app --reload  # API on :8000
+```powershell
+# Terminal 1 — backend :8000
+$env:AUTH_JWT_SECRET = python -c "import secrets; print(secrets.token_urlsafe(48))"
+$env:DEBUG = "true"
+cd backend_api; uvicorn app.main:app
 
-# Frontend
-cd ui_posture
-npm install
-npm run dev                    # Vite on :5173
+# Terminal 2 — cloud core :8100
+$env:DEBUG = "true"
+python -m uvicorn yolo_cloud.api:create_app --factory --host 127.0.0.1 --port 8100
+
+# Terminal 3 — frontend :3000
+cd ui_posture; npm install; npm run dev
 ```
 
 ### Option C: Demo Mode (no camera needed)
 
-```bash
-# Starts with synthetic data pre-loaded — perfect for customer presentations
-DEMO_MODE=true docker compose up -d
-# Or locally: set DEMO_MODE=true in your .env
+```powershell
+# Topbar Demo replays a video file through the live pipeline.
+# Cut a local sample (footage is never committed):
+ffmpeg -y -ss 30 -i <recording>.mp4 -t 30 -vf scale=1280:-2 demo-assets/demo.mp4
+$env:DEMO_VIDEO_PATH = "$PWD\demo-assets\demo.mp4"
 ```
 
 ## Key Features
@@ -92,6 +110,7 @@ DEMO_MODE=true docker compose up -d
 - Badge/QR code identity assignment
 - Face recognition for automatic worker identification
 - Consent-first architecture — no face matching without explicit consent
+- Tenant-scoped consent records (cross-org access returns 404)
 - Worker onboarding flow with intake tracker
 
 ### Alerts & Recommendations
@@ -103,7 +122,7 @@ DEMO_MODE=true docker compose up -d
 ### Reporting & Analytics
 - Session history with calendar view
 - Risk trend charts (per-worker, per-department)
-- Safety report PDF export (Playwright-rendered)
+- Safety report PDF export (Playwright-rendered, in-container verified)
 - Session replay with recorded video
 - Benchmark percentiles (de-identified)
 
@@ -114,20 +133,20 @@ DEMO_MODE=true docker compose up -d
 - Risk timeline with region-level breakdown
 
 ### Multi-Camera Support
-- USB webcam auto-detection (DSHOW backend)
-- IP/RTSP camera configuration
-- Multi-Camera dashboard view
+- USB webcam auto-detection
+- IP/RTSP camera configuration with honest connectivity probing
+- Multi-Camera dashboard view with stream-scoped auth tokens
 - Camera setup wizard (framing, lighting, face checks)
 
 ### YOLO Cloud Core (SaaS)
-- RTSP CCTV stream ingestion via FFmpeg
+- RTSP CCTV stream ingestion via FFmpeg (bounded connects, orphan-safe)
 - YOLOv8-pose inference (17 COCO keypoints)
 - ByteTrack worker tracking across frames
-- ML-trained risk classifier (research track — see Model Accuracy)
-- ML-trained task classifier, 7 classes (research track — see Model Accuracy)
+- ML-trained risk/task classifiers (research track — see Model Accuracy)
 - Real-time WebSocket camera data streaming
 - PDF/CSV report generation (daily/weekly)
 - Model versioning with export/import/rollback
+- Persisted inference settings (restart-applied) + disk-space guard
 - Docker GPU support (NVIDIA CUDA)
 
 ### Dual-Core Architecture
@@ -136,53 +155,57 @@ DEMO_MODE=true docker compose up -d
 - Same dashboard, same reports, same alerts
 - Choose based on factory needs: privacy-first vs. easy installation
 
-### New Pages (31 total)
+### Pages (40 routes)
 - YOLO Demo — Upload image → see pose + risk overlay
 - Model Dashboard — YOLO vs MediaPipe comparison + versioning
 - ROI Analytics — Cost savings, compliance scores, business case
 - System Health — Service status, storage, live metrics
-- Onboarding — 10-step factory setup checklist
+- Onboarding — Factory setup checklist (honest, no fabricated results)
 - Cloud Cameras — Camera management with health monitoring
-- Cloud Settings — YOLO model config + RTSP connection tester
+- Cloud Settings — YOLO model config + RTSP connection tester (persisted)
 - Pricing — 3-tier pricing (Starter/Cloud/Enterprise)
 
 ### Deployment & Operations
 - Docker Compose with `.env`-driven ports (4 services)
-- Windows Service scripts (`deploy/`)
 - Health probes (`/healthz`, `/readyz`); stats endpoints (`/metrics`, `/sla`, ...) gated by `METRICS_TOKEN`
-- Data retention policy (session age, recording age, disk cap, audit logs, alert rows)
+- Unified retention policy (sessions, recordings GB cap, audit logs, alert rows, Postgres telemetry)
+- AES-256 backup encryption + hermetic restore drill (RTO measured)
 - Crash-safe session recovery from checkpoints
-- CSP security headers, rate limiting, non-root Docker
+- CSP security headers, rate limiting, non-root Docker, read-only root filesystems (k8s)
 
 ## API Surface
 
-112+ REST endpoints across 40+ modules:
+150+ REST endpoints across 40+ modules + WebSocket streams:
 
-### Backend API (87 endpoints)
+### Backend API (110+ endpoints)
 | Module | Endpoints | Description |
 |---|---|---|
-| Auth | login, register, refresh, me | JWT authentication |
+| Auth | login, register, refresh, me, MFA | JWT authentication, TOTP second factor |
 | Dashboard | /dashboard, /supervisor-summary, /admin-summary | Role-gated dashboards |
-| Sessions | list, detail, stop, delete | Session lifecycle |
+| Sessions | list, detail, stop, delete, start | Session lifecycle |
 | Alerts | list, resolve, acknowledge | Alert management |
 | Reports | safety-report, risk-trend, session-report, PDF export | Report generation |
-| Video | analyze, status, download, recording-analysis | Video analysis pipeline |
+| Video | analyze, status, download, stream-token, recording-analysis | Video pipeline + scoped stream auth |
 | Workers | CRUD, face samples, identity | Worker management |
 | Users | CRUD, invite, roles | User management |
 | Cameras | detect, configure | Camera management |
+| Consent | list, grant, deny, withdraw (org-scoped) | GDPR/CCPA consent |
+| Organizations | list, current, plan provisioning | Multi-tenant orgs + entitlements |
+| Billing | checkout, subscription, portal, webhook | Stripe (14-day trial, coupons) |
 | Settings | GET/PUT | System configuration |
 | Deployment | status, metrics | Infrastructure health |
 | Assistant | chat, corpus | AI assistant (Ollama) |
 
-### YOLO Cloud Core (25 endpoints)
+### YOLO Cloud Core (~40 endpoints)
 | Module | Endpoints | Description |
 |---|---|---|
-| Camera | CRUD, start, stop | RTSP camera management |
+| Camera | CRUD, start, stop, **probe** | RTSP management + honest connectivity test |
+| Settings | GET, POST | Persisted inference knobs (restart-applied) |
 | Dashboard | /dashboard, /alerts | Cloud monitoring dashboard |
 | Sessions | list, detail | Cloud session management |
 | Alerts | list, acknowledge | Cloud alert management |
 | Reports | daily, weekly, PDF, CSV | Report generation |
-| Models | metrics, compare, versions | Model management |
+| Models | metrics, compare, versions, save, rollback, export, import | Model management |
 | Inference | /detect | Real-time pose detection |
 | WebSocket | /ws | Live camera data streaming |
 
@@ -194,89 +217,77 @@ Full API docs at `/docs` (Swagger UI) or `/openapi.json`.
 posture_analysis/
 ├── backend/                    # AI core engines (on-premise)
 │   ├── context/                #   Context Intelligence Engine
-│   ├── services/               #   Pose, features, risk, alerts, tasks
+│   ├── services/               #   Pose, features, risk, alerts, tasks, assessment pack
 │   └── core/                   #   Constants, types
 ├── backend_api/                # FastAPI application (on-premise)
 │   ├── app/
-│   │   ├── api/                #   41 endpoint modules
+│   │   ├── api/                #   40+ endpoint modules
 │   │   ├── core/               #   Auth, config, database, health
 │   │   ├── repositories/       #   Data access (Live, Base)
 │   │   ├── schemas/            #   Pydantic models (API contracts)
 │   │   └── services/           #   Session cache, live monitor, reports
-│   └── tests/                  #   55 test files (425 tests)
+│   └── tests/                  #   65 test files (478 tests)
 ├── yolo_cloud/                 # YOLO Cloud Core (SaaS)
-│   ├── api.py                  #   25 REST + WebSocket endpoints
+│   ├── api.py                  #   ~40 REST + WebSocket endpoints
 │   ├── pose_engine.py          #   YOLOv8-pose + ByteTrack + ML inference
 │   ├── ingestion.py            #   Multi-camera orchestrator
-│   ├── rtsp_manager.py         #   RTSP stream manager (FFmpeg)
+│   ├── rtsp_manager.py         #   RTSP stream manager (FFmpeg, bounded)
 │   ├── model_registry.py       #   Model versioning, export/import
 │   ├── reports.py              #   PDF/CSV report generation
+│   ├── disk_guard.py           #   Free-space low-watermark guard
 │   ├── training/               #   10 training scripts
-│   │   ├── build_yolo_features.py
-│   │   ├── train_yolo_risk_model.py
-│   │   ├── train_yolo_task_model.py
-│   │   ├── fine_tune_yolo.py
-│   │   └── prepare_yolo_dataset.py
 │   ├── Dockerfile              #   GPU + CPU support
-│   └── tests/                  #   134 tests (all passing)
-├── ui_posture/                 # React 19 SPA (31 pages)
+│   └── tests/                  #   170 tests (all passing)
+├── ui_posture/                 # React 19 SPA (40 routes)
 │   ├── src/
-│   │   ├── pages/              #   31 route pages (lazy-loaded)
-│   │   │   ├── YoloDemoPage    #     Upload image → pose + risk overlay
-│   │   │   ├── ModelDashboard  #     YOLO vs MediaPipe comparison
-│   │   │   ├── ROIAnalytics    #     Cost savings, compliance scores
-│   │   │   ├── SystemHealth    #     Service status, metrics
-│   │   │   ├── Onboarding      #     10-step factory setup checklist
-│   │   │   └── ...             #     26 more pages
+│   │   ├── pages/              #   Route pages (lazy-loaded)
 │   │   ├── components/         #   Shared UI components
-│   │   ├── hooks/              #   Data-fetching hooks
+│   │   ├── hooks/              #   Data-fetching hooks (incl. stream tokens)
 │   │   ├── services/           #   API client
-│   │   └── auth/               #   Auth context + providers
-│   └── vitest.config.ts        #   9 tests (7 smoke + 2 interaction)
+│   │   └── auth/               #   Auth context + providers + route guards
+│   └── src/test/               #   106 vitest tests
 ├── models/                     # ML model files
 │   ├── yolo_risk_model.pkl     #   Risk classifier (YOLO holdout, REBA-derived — not product accuracy)
 │   ├── yolo_task_model.pkl     #   Task classifier (YOLO holdout — not product accuracy)
 │   ├── best_model.pkl          #   MediaPipe risk model
 │   └── task_model_v3.pkl       #   MediaPipe task model
-├── scripts/                    # Training, labeling, evaluation
-├── docs/                       # DEPLOYMENT.md, consent form, API docs
-├── deploy/                     # Windows service scripts
-├── tests/                      # Load test script
-├── outputs/                    # Sessions, recordings, reports
+├── scripts/                    # Training, labeling, evaluation + pilot metrics collector
+├── docs/                       # Deployment, pilot guides, audit evidence, runbooks
+├── deploy/                     # Compose overlays, k8s manifests, backup/restore/drill scripts
+├── outputs/                    # Sessions, recordings, reports (gitignored runtime data)
 └── docker-compose.yml          # 4 services (db, backend, frontend, cloud-core)
 ```
 
 ## Configuration
 
-All configuration via environment variables (`.env` file or Docker env):
+All configuration via environment variables (compose env or shell — no `.env` auto-loading):
 
 | Variable | Default | Description |
 |---|---|---|
-| `DEMO_MODE` | `false` | Seed synthetic data for presentations |
+| `AUTH_JWT_SECRET` | *(required)* | JWT signing secret, ≥32 chars — **boot refuses without it when `DEBUG=false`** |
+| `DEBUG` | `false` | `true` = dev mode (ephemeral JWT, open metrics) |
+| `METRICS_TOKEN` | `""` | Bearer for `/metrics`, `/sla`, … (else DEBUG-only) |
+| `DEMO_VIDEO_PATH` | `""` | Sample clip for topbar Demo mode |
 | `SESSIONS_DIR` | `outputs/sessions` | Where session JSON files are stored |
-| `POSE_MODEL_PATH` | `models/pose_landmarker_lite.task` | MediaPipe pose model |
-| `AUTH_JWT_SECRET` | (dev default) | JWT signing secret — **change in production** |
-| `CAMERA_SOURCES` | `[]` | JSON array of IP/RTSP cameras |
-| `DATABASE_URL` | `""` | PostgreSQL URL (optional, falls back to SQLite) |
+| `DATABASE_URL` | `""` | PostgreSQL URL (optional — boot-safe fallback to SQLite) |
 | `RECORDINGS_MAX_GB` | `20` | Disk cap for video recordings |
+| `CAMERA_SOURCES` | `[]` | JSON array of IP/RTSP cameras |
 | `OLLAMA_HOST` | `http://localhost:11434` | Ollama server for AI assistant |
+| `STRIPE_SECRET_KEY` | `""` | Billing disabled without it (graceful `/request-pilot` fallback) |
 
 See `backend_api/.env.production.example` for the full reference.
 
 ## Testing
 
 ```bash
-# Backend (425 tests)
+# Backend (478 tests)
 cd backend_api && pytest -q
 
-# Frontend (9 vitest tests)
-cd ui_posture && npm test
+# Cloud core (170 tests)
+python -m pytest yolo_cloud/tests -q
 
-# Typecheck
-cd ui_posture && npx tsc --noEmit
-
-# Production build
-cd ui_posture && npm run build
+# Frontend (106 vitest) + typecheck + build
+cd ui_posture && npx vitest run && npx tsc --noEmit && npm run build
 ```
 
 ## Model Accuracy
@@ -298,17 +309,10 @@ The old 97.97% figure (circular, from auto-generated labels) has been removed fr
 docker compose up -d --build
 ```
 
-### Windows Service
-```powershell
-deploy\install_service.ps1    # Install as Windows service
-deploy\start.bat              # Or start manually
-```
-
 ### Environment Setup
-1. Copy `backend_api/.env.production.example` to `.env`
-2. Set `AUTH_JWT_SECRET` to a strong random string
-3. Set `CAMERA_SOURCES` if using IP cameras
-4. Set `DEMO_MODE=true` for presentations without a camera
+1. Set `AUTH_JWT_SECRET` to a strong random string (required — see Quick Start)
+2. Set `CAMERA_SOURCES` if using IP cameras
+3. Point a browser at the frontend; sign up for a pilot org (4 cameras)
 
 ## Documentation
 
@@ -320,6 +324,8 @@ deploy\start.bat              # Or start manually
 | [Pilot Guide](docs/PILOT_GUIDE.md) | On-site deployment instructions |
 | [Ops Runbook](docs/OPS_RUNBOOK.md) | Operations and troubleshooting |
 | [Current State](docs/CURRENT_STATE.md) | Feature inventory and model details |
+| [TRL-8/9 Qualification Plan](docs/TRL8_9_QUALIFICATION_PLAN.md) | Path to production readiness |
+| [Sell-Readiness Audit](docs/SELL_READINESS_AUDIT.md) | Pricing↔code truth, claims sweep |
 
 ## License
 
