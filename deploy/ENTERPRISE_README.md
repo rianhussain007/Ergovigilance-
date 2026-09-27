@@ -197,19 +197,25 @@ BACKUP_PASSPHRASE=... ./deploy/restore.sh backups/ergovigilance_backup_*.tar.gz.
 
 ### Horizontal Pod Autoscaler
 
-The HPA is configured to:
-- Scale backend: 2-10 pods (CPU 70%, Memory 80%)
+Frontend scales horizontally (stateless SPA):
+
 - Scale frontend: 2-5 pods (CPU 70%)
 - Scale up: 2 pods per minute
 - Scale down: 1 pod per 2 minutes
 
+Backend is pinned to **1 replica** with a PVC-backed `/data`
+(`deploy/k8s/backend-deployment.yaml`, `backend-pvc.yaml`): each pod
+carries its own SQLite store, so scaling out would split auth/sessions
+across divergent databases. Do NOT re-add a backend HPA (or raise the
+replica count) until the store is shared — see the HPA decision in the
+TRL-8 notes. The manual backend-scale example below is removed for the
+same reason.
+
 ### Manual Scaling
 
 ```bash
-# Scale backend
-kubectl scale deployment ergovigilance-backend --replicas=5 -n ergovigilance
-
-# Scale frontend
+# Scale frontend only — never scale the backend past 1 replica
+# (per-pod SQLite; see above)
 kubectl scale deployment ergovigilance-frontend --replicas=3 -n ergovigilance
 ```
 

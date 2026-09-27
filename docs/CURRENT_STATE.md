@@ -186,11 +186,11 @@ The following features shipped between 2026-07-07 and 2026-08-20 (80+ commits):
 
 | Suite | Count | What it covers |
 |-------|-------|----------------|
-| `pytest backend_api/tests` | 55 test files, 425 passed (1 skipped, 1 deselected) | Auth, alerts, settings, privacy, pilot requests, users, retention, migrations, live monitor, API smoke, integration |
-| `pytest yolo_cloud/tests` | 6 test files, 134 passed | RTSP ingest, clip moov guard, WebSocket events, identity/badge binds, soak harness, TRL-6 blockers |
+| `pytest backend_api/tests` | 478 passed (1 skipped, 1 deselected) | Auth, alerts, settings, privacy, pilot requests, users, retention, migrations, live monitor, API smoke, integration, entitlements, consent scoping, PG fallback, erasure |
+| `pytest yolo_cloud/tests` | 170 passed | RTSP ingest, clip moov guard, WebSocket events, identity/badge binds, soak harness, TRL-6 blockers, entitlements, settings, probe, connect timeouts |
 | Legacy `scripts/test_*.py` | 22 scripts | Context engine, alerts, history, recommendations, trend/safety reports, persistence, sprint integrations |
-| `vitest` (ui_posture) | 9 tests (7 smoke + 2 interaction) | Login → dashboard → sessions → alerts → Settings page → Reports page → backend-down error + empty-form validation + RBAC route guard |
-| **Total** | **568 automated tests + 22 scripts** (425 backend + 134 cloud + 9 vitest) | |
+| `vitest` (ui_posture) | 106 tests (smoke + interaction + route/guard consistency + stream-token hook + apiClient/guards/onboarding/consent suites) | Login → dashboard → sessions → alerts → Settings page → Reports page → backend-down error + empty-form validation + RBAC route guard |
+| **Total** | **754 automated tests + 22 scripts** (478 backend + 170 cloud + 106 vitest) | |
 
 CI runs on every push/PR via GitHub Actions (`.github/workflows/ci.yml`):
 - **Frontend**: `npm ci` → `npm run lint` (tsc) → `npm run build` → `npm audit`

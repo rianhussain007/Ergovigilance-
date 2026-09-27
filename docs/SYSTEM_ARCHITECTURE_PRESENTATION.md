@@ -301,7 +301,7 @@ Thresholds (calibration profiles), retention policy, model diagnostics (`ModelDi
 
 Verified by the QA pass (2026-08-13/15) — all real, none aspirational:
 
-- ✅ **425 backend tests pass** (1 skipped) · frontend `tsc --noEmit` clean · production `vite build` succeeds
+- ✅ **478 backend tests pass** (1 skipped, 1 deselected) · frontend `tsc --noEmit` clean · production `vite build` succeeds
 - ✅ **Live overlay** — real MediaPipe skeleton on the MJPEG feed, per-region risk coloring, framing-quality badge
 - ✅ **Video Review** — real pipeline output, smooth interpolated skeleton, interactive risk chart, burned-overlay MP4 download (verified 200 OK end-to-end)
 - ✅ **PDF exports** — safety report (61 KB), session report (132 KB locally / 99 KB in Docker), all valid `%PDF-`
@@ -379,7 +379,7 @@ posture_analysis/
 │   │   ├── schemas/             pydantic request/response models
 │   │   └── services/            live_monitor, pose_overlay, retention,
 │   │                            session_cache, manager_metrics, worker_trends
-│   └── tests/                   425 tests
+│   └── tests/                   478 tests
 ├── ui_posture/                  React SPA (port 3000 / 8080)
 │   ├── src/
 │   │   ├── pages/               18 pages
