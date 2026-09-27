@@ -6,22 +6,34 @@ import {
   TrendingUp, TrendingDown, Minus, Shield, Clock, Zap
 } from 'lucide-react';
 
+// Field names mirror the cloud core's /cloud/cameras payload exactly. They
+// used to be stale (frames_processed / persons_tracked / fps_actual / error),
+// so a streaming camera rendered "0 frames" with no workers and a failing one
+// showed no reason at all — nothing mapped between the two shapes.
 interface CloudCamera {
   camera_id: string;
   camera_name: string;
-  url: string;
+  camera_state?: string;
+  url?: string;
   is_active: boolean;
   session_id: string | null;
-  frames_processed: number;
-  persons_tracked: number;
-  last_frame_time: string | null;
-  error: string | null;
+  frame_count?: number;
+  person_count?: number;
+  latest_poses?: Array<{
+    track_id: number;
+    risk_level: string;
+    risk_score: number;
+    task: string;
+    confidence: number;
+  }>;
+  last_frame_time?: string | null;
+  last_error?: string | null;
   avg_confidence?: number;
   avg_risk_score?: number;
   highest_risk?: string;
   reconnect_attempts?: number;
   uptime_seconds?: number;
-  fps_actual?: number;
+  fps?: number;
 }
 
 interface CameraHealth {
@@ -306,10 +318,17 @@ export default function CloudCamerasPage() {
                     <p className="text-xs text-slate-500 font-mono">{cam.camera_id}</p>
                   </div>
                   <div className="flex items-center gap-1">
-                    <Wifi className="w-4 h-4 text-green-400" />
-                    <span className="text-xs text-green-400">LIVE</span>
+                    <Wifi className={`w-4 h-4 ${cam.camera_state === 'streaming' ? 'text-green-400' : 'text-amber-400'}`} />
+                    <span className={`text-xs ${cam.camera_state === 'streaming' ? 'text-green-400' : 'text-amber-400'}`}>
+                      {(cam.camera_state || 'active').toUpperCase()}
+                    </span>
                   </div>
                 </div>
+                {cam.last_error && (
+                  <p className="text-xs text-amber-400 bg-amber-500/10 rounded px-2 py-1 mb-2">
+                    {cam.last_error}
+                  </p>
+                )}
                 {/* Live thumbnail preview */}
                 {thumbnails[cam.camera_id] ? (
                   <div className="relative mb-3 rounded-lg overflow-hidden border border-white/10">
@@ -323,9 +342,9 @@ export default function CloudCamerasPage() {
                       <span className="text-red-300 font-bold">REC</span>
                     </div>
                     <div className="absolute bottom-1 left-1 flex items-center gap-2 bg-black/60 backdrop-blur-sm px-1.5 py-0.5 rounded text-[9px]">
-                      <span className="text-white">{(cam.frames_processed ?? 0).toLocaleString()} frames</span>
+                      <span className="text-white">{(cam.frame_count ?? 0).toLocaleString()} frames</span>
                       <span className="text-slate-400">|</span>
-                      <span className="text-white">{cam.persons_tracked} workers</span>
+                      <span className="text-white">{cam.person_count ?? 0} workers</span>
                     </div>
                   </div>
                 ) : (
@@ -339,11 +358,11 @@ export default function CloudCamerasPage() {
                 <div className="grid grid-cols-4 gap-2 text-xs mb-3">
                   <div className="text-center p-2 rounded-lg bg-white/5">
                     <p className="text-slate-500">Frames</p>
-                    <p className="text-white font-medium">{(cam.frames_processed ?? 0).toLocaleString()}</p>
+                    <p className="text-white font-medium">{(cam.frame_count ?? 0).toLocaleString()}</p>
                   </div>
                   <div className="text-center p-2 rounded-lg bg-white/5">
                     <p className="text-slate-500">Workers</p>
-                    <p className="text-white font-medium">{cam.persons_tracked}</p>
+                    <p className="text-white font-medium">{cam.person_count ?? 0}</p>
                   </div>
                   <div className="text-center p-2 rounded-lg bg-white/5">
                     <p className="text-slate-500">Confidence</p>
@@ -360,7 +379,7 @@ export default function CloudCamerasPage() {
                 </div>
                 <div className="flex items-center justify-between text-xs text-slate-500 mb-3">
                   <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {formatUptime(cam.uptime_seconds)}</span>
-                  <span>{cam.fps_actual ? `${cam.fps_actual.toFixed(1)} fps` : ''}</span>
+                  <span>{cam.fps ? `${cam.fps.toFixed(1)} fps` : ''}</span>
                   <span>{cam.session_id?.slice(-8) || '-'}</span>
                 </div>
                 <p className="text-xs text-slate-500 truncate mb-3 font-mono">{cam.url}</p>
@@ -406,9 +425,9 @@ export default function CloudCamerasPage() {
                   </div>
                   <WifiOff className="w-4 h-4 text-slate-500" />
                 </div>
-                {cam.error && (
+                {cam.last_error && (
                   <p className="text-xs text-amber-400 bg-amber-500/10 rounded px-2 py-1 mb-2">
-                    {cam.error}
+                    {cam.last_error}
                   </p>
                 )}
                 {cam.reconnect_attempts ? (

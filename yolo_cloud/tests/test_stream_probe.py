@@ -5,7 +5,6 @@ The subprocess runner is always faked — no network, no ffprobe needed.
 
 from __future__ import annotations
 
-import asyncio
 import subprocess
 
 import pytest
@@ -78,7 +77,7 @@ def test_endpoint_wiring(monkeypatch):
     monkeypatch.setattr(
         probe_mod, "probe_stream", lambda url, **kwargs: {"reachable": True, "detail": "ok"}
     )
-    out = asyncio.run(api.probe_camera({"url": "rtsp://x"}, tenant={"tenant_id": "t"}))
+    out = api.probe_camera({"url": "rtsp://x"}, tenant={"tenant_id": "t"})
     assert out["reachable"] is True
 
 
@@ -86,5 +85,5 @@ def test_endpoint_missing_url():
     import yolo_cloud.api as api
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(api.probe_camera({}, tenant={"tenant_id": "t"}))
+        api.probe_camera({}, tenant={"tenant_id": "t"})
     assert exc.value.status_code == 400

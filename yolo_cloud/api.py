@@ -114,9 +114,17 @@ async def update_settings(body: dict, tenant: dict = Depends(require_api_key)):
 
 
 # -- Camera Management -------------------------------------------------------
+#
+# Every endpoint below is a plain ``def`` on purpose. FastAPI runs sync
+# endpoints in a worker thread, async ones on the event loop, and the
+# camera path blocks: ffmpeg spawn/terminate/reap (bounded but seconds),
+# ffprobe shells, and the manager locks around them. As ``async def``
+# these froze the entire server — 2026-09-27 a stop request deadlocked in
+# RTSPStream._kill_process and even /api/cloud/health timed out until the
+# process was restarted. Keep new camera endpoints sync.
 
 @router.get("/cameras")
-async def list_cameras(tenant: dict = Depends(optional_api_key)):
+def list_cameras(tenant: dict = Depends(optional_api_key)):
     """List all configured cloud cameras and their status."""
     service = get_cloud_service()
     cameras = service.get_all_cameras()
@@ -138,7 +146,7 @@ async def list_cameras(tenant: dict = Depends(optional_api_key)):
 
 
 @router.post("/cameras")
-async def add_camera(
+def add_camera(
     body: dict,
     tenant: dict = Depends(require_api_key),
     x_api_key: Optional[str] = Header(default=None),
@@ -179,7 +187,7 @@ async def add_camera(
 
 
 @router.delete("/cameras/{camera_id}")
-async def remove_camera(camera_id: str, tenant: dict = Depends(require_api_key)):
+def remove_camera(camera_id: str, tenant: dict = Depends(require_api_key)):
     """Remove a camera and stop all processing."""
     if storage.pg_enabled():
         storage.set_camera_active(camera_id, False)
@@ -191,7 +199,7 @@ async def remove_camera(camera_id: str, tenant: dict = Depends(require_api_key))
 
 
 @router.post("/cameras/probe")
-async def probe_camera(body: dict, tenant: dict = Depends(require_api_key)):
+def probe_camera(body: dict, tenant: dict = Depends(require_api_key)):
     """Test an RTSP URL WITHOUT persisting anything (settings tester).
 
     Returns 200 with {reachable, detail, latency_ms?} — unreachability is
@@ -206,7 +214,7 @@ async def probe_camera(body: dict, tenant: dict = Depends(require_api_key)):
 
 
 @router.get("/cameras/{camera_id}")
-async def get_camera(camera_id: str):
+def get_camera(camera_id: str):
     """Get detailed state of a specific camera."""
     service = get_cloud_service()
     state = service.get_camera_state(camera_id)
@@ -216,7 +224,7 @@ async def get_camera(camera_id: str):
 
 
 @router.get("/cameras/{camera_id}/snapshot")
-async def camera_snapshot(camera_id: str):
+def camera_snapshot(camera_id: str):
     """Get the latest frame from a camera as a JPEG image.
 
     Returns the raw JPEG bytes with Content-Type: image/jpeg.
@@ -238,7 +246,7 @@ async def camera_snapshot(camera_id: str):
 
 
 @router.post("/cameras/{camera_id}/start")
-async def start_camera(camera_id: str, tenant: dict = Depends(require_api_key)):
+def start_camera(camera_id: str, tenant: dict = Depends(require_api_key)):
     """Start monitoring a camera."""
     service = get_cloud_service()
     cameras = service.get_all_cameras()
@@ -255,7 +263,7 @@ async def start_camera(camera_id: str, tenant: dict = Depends(require_api_key)):
 
 
 @router.post("/cameras/{camera_id}/stop")
-async def stop_camera(camera_id: str):
+def stop_camera(camera_id: str):
     """Stop monitoring a camera."""
     service = get_cloud_service()
     result = service.stop_camera(camera_id)

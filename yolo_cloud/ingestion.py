@@ -1017,11 +1017,15 @@ class CloudIngestionService:
                 return None
             camera = self._rtsp.get_camera(camera_id)
             processor.refresh_person_bindings()
+            poses = processor.latest_poses
+            confidences = [float(p.confidence) for p in poses if p.confidence is not None]
+            risk_order = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
+            session = processor.session
             return {
                 "camera_id": camera_id,
                 "camera_name": camera.name if camera else "",
                 "camera_state": camera.state.value if camera else "disconnected",
-                "session_id": processor.session.session_id if processor.session else None,
+                "session_id": session.session_id if session else None,
                 "is_active": processor._running,
                 "frame_count": processor._frame_counter,
                 "latest_poses": [
@@ -1032,16 +1036,31 @@ class CloudIngestionService:
                         "task": p.task,
                         "confidence": p.confidence,
                     }
-                    for p in processor.latest_poses
+                    for p in poses
                 ],
                 # Per-track snapshots for the multi-worker tile grid: one entry
                 # per active track_id, bbox in PIXELS [x, y, w, h].
                 "persons": processor.latest_persons,
-                "person_count": len(processor.latest_poses),
+                "person_count": len(poses),
                 "frame_width": processor.frame_width,
                 "frame_height": processor.frame_height,
                 "id_switch_count": processor._identity.switch_count(camera_id),
                 "fps": camera.fps if camera else 0,
+                # Fields the Cloud Cameras page renders directly. The card used
+                # to read stale names (frames_processed / persons_tracked /
+                # fps_actual / error) that this payload never carried, so a
+                # streaming camera showed "0 frames" and a failing one showed
+                # no reason at all (fixed 2026-09-27).
+                "url": camera.url if camera else "",
+                "last_error": camera.last_error if camera else "",
+                "reconnect_attempts": getattr(camera, "reconnect_attempts", 0) if camera else 0,
+                "uptime_seconds": int(time.time() - session.start_time) if session else 0,
+                "avg_confidence": round(sum(confidences) / len(confidences), 3) if confidences else 0.0,
+                "highest_risk": max(
+                    (p.risk_level for p in poses if p.risk_level in risk_order),
+                    key=lambda level: risk_order[level],
+                    default="",
+                ),
             }
 
     def get_clip(self, camera_id: str, alert_id: str) -> Optional[dict]:
@@ -1164,6 +1183,15 @@ class CloudIngestionService:
                     "camera_name": cam.name,
                     "camera_state": cam.state.value,
                     "is_active": False,
+                    "url": cam.url,
+                    "last_error": cam.last_error,
+                    "reconnect_attempts": getattr(cam, "reconnect_attempts", 0),
+                    "frame_count": 0,
+                    "person_count": 0,
+                    "fps": cam.fps,
+                    "uptime_seconds": 0,
+                    "avg_confidence": 0.0,
+                    "highest_risk": "",
                 })
         return result
 

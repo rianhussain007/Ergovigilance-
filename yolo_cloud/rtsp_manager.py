@@ -10,8 +10,6 @@ to raw BGR frames piped to stdout. The manager handles:
 
 import io
 import logging
-import os
-import signal
 import subprocess
 import struct
 import threading
@@ -49,6 +47,10 @@ class CameraInfo:
     error_count: int = 0
     last_error: str = ""
     pid: Optional[int] = None
+    # Mirrors RTSPStream._reconnect_count so API/UI consumers (camera cards,
+    # the "Reconnecting (n)" hint) can report how hard the stream is trying
+    # without reaching into the stream object.
+    reconnect_attempts: int = 0
 
 
 class RTSPStream:
@@ -92,11 +94,23 @@ class RTSPStream:
         logger.info("RTSP stream started for camera %s", self.camera.id)
 
     def stop(self) -> None:
-        """Stop the RTSP stream reader and kill FFmpeg."""
+        """Stop the RTSP stream reader and kill FFmpeg.
+
+        Always bounded: signal the child first (see ``_kill_process``),
+        then collect the reader with a timeout. The pipes are never
+        closed from this thread — that was the deadlock (see
+        ``_kill_process``); the reader hits EOF on its own once the
+        child's write end is gone.
+        """
         self._running = False
         self._kill_process()
         if self._reader_thread and self._reader_thread.is_alive():
             self._reader_thread.join(timeout=5)
+            if self._reader_thread.is_alive():
+                logger.warning(
+                    "Camera %s: reader thread did not exit within 5 s of kill",
+                    self.camera.id,
+                )
         self.camera.state = CameraState.DISCONNECTED
         logger.info("RTSP stream stopped for camera %s", self.camera.id)
 
@@ -144,6 +158,7 @@ class RTSPStream:
 
             if self._running:
                 self._reconnect_count += 1
+                self.camera.reconnect_attempts = self._reconnect_count
                 delay = min(
                     settings.RTSP_RECONNECT_DELAY * (2 ** min(self._reconnect_count - 1, 5)),
                     30.0,
@@ -162,17 +177,23 @@ class RTSPStream:
         opening the file), so the flag is only passed for rtsp:// URLs.
         File and tcp:// sources are unaffected and need no options.
 
-        Bounded connects: without -timeout/-stimeout an unreachable host
-        hangs ffmpeg in TCP connect for 120 s+ (measured on 10.255.255.1),
+        Bounded connects: without ``-timeout`` an unreachable host hangs
+        ffmpeg in TCP connect for 120 s+ (measured on 10.255.255.1),
         stalling every reconnect cycle and starving the box when cameras
-        die. 10 s in microseconds, matching the ffprobe timeout. Both
-        flags are valid for ffmpeg and ffprobe RTSP demuxing.
+        die. 10 s in microseconds, matching the ffprobe timeout.
+
+        ``-stimeout`` is deliberately absent: ffmpeg 8+ removed it from
+        the RTSP demuxer, and this host's 9.0 build aborted with
+        "Failed to set value '10000000' for option 'stimeout': Option not
+        found" before opening the stream, so every RTSP camera failed to
+        start (2026-09-27). ``-timeout`` is the supported spelling —
+        socket I/O timeout in microseconds — and still bounds the initial
+        connect.
         """
         if url.lower().startswith(("rtsp://", "rtsps://")):
             return [
                 "-rtsp_transport", settings.RTSP_TRANSPORT,
                 "-timeout", "10000000",
-                "-stimeout", "10000000",
             ]
         return []
 
@@ -211,8 +232,15 @@ class RTSPStream:
         if proc is None or proc.stdout is None:
             return
 
-        # First, extract resolution from the stream using FFprobe
-        self._probe_resolution()
+        # First, extract resolution from the stream using FFprobe. A failed
+        # probe keeps the 640x480 fallback for the byte math, but it is NOT
+        # proof of a live stream — see the first-frame transition below.
+        probed = self._probe_resolution()
+        if not probed:
+            self.camera.last_error = (
+                "Resolution probe failed — ffprobe could not read the stream; "
+                "assuming 640x480"
+            )
 
         if self._frame_width <= 0 or self._frame_height <= 0:
             raise RuntimeError(
@@ -221,21 +249,17 @@ class RTSPStream:
 
         self._bytes_per_frame = self._frame_width * self._frame_height * 3
         self.camera.resolution = (self._frame_width, self._frame_height)
-        self.camera.state = CameraState.STREAMING
-        self.camera.last_error = ""
-        self._reconnect_count = 0
-
-        logger.info(
-            "Camera %s: streaming at %dx%d",
-            self.camera.id,
-            self._frame_width,
-            self._frame_height,
-        )
 
         # Read exactly bytes_per_frame bytes at a time
         raw_bytes = b""
         fps_counter_start = time.perf_counter()
         fps_frame_count = 0
+        # STREAMING is claimed only once a real frame has been decoded. It used
+        # to be set straight after the (fallback-tolerant) probe, so four dead
+        # public cameras showed as "streaming" in the UI with fps=0 and no
+        # frames (found 2026-09-27). Until then the state stays CONNECTING and
+        # the reason ends up in last_error.
+        first_frame = True
 
         while self._running:
             chunk = proc.stdout.read(min(65536, self._bytes_per_frame))
@@ -254,6 +278,18 @@ class RTSPStream:
                     )
                     with self._lock:
                         self._latest_frame = frame
+                    if first_frame:
+                        first_frame = False
+                        self.camera.state = CameraState.STREAMING
+                        self.camera.last_error = ""
+                        self._reconnect_count = 0
+                        self.camera.reconnect_attempts = 0
+                        logger.info(
+                            "Camera %s: streaming at %dx%d",
+                            self.camera.id,
+                            self._frame_width,
+                            self._frame_height,
+                        )
                     self.camera.frame_count += 1
                     self.camera.last_frame_time = time.time()
 
@@ -276,8 +312,13 @@ class RTSPStream:
                 stderr = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
                 raise RuntimeError(f"FFmpeg exited with code {ret}: {stderr[:200]}")
 
-    def _probe_resolution(self) -> None:
-        """Probe the RTSP stream for resolution using ffprobe."""
+    def _probe_resolution(self) -> bool:
+        """Probe the RTSP stream for resolution using ffprobe.
+
+        Returns True when ffprobe reported a real resolution, False when the
+        640x480 fallback was used. Callers must not treat a fallback as
+        evidence of a live stream.
+        """
         try:
             cmd = [
                 "ffprobe",
@@ -295,40 +336,70 @@ class RTSPStream:
                 stream = data.get("streams", [{}])[0]
                 self._frame_width = int(stream.get("width", 0))
                 self._frame_height = int(stream.get("height", 0))
+                if self._frame_width > 0 and self._frame_height > 0:
+                    return True
+                logger.warning(
+                    "Camera %s: ffprobe reported no video size, assuming 640x480",
+                    self.camera.id,
+                )
             else:
                 # Fallback: assume 640x480
                 logger.warning(
                     "Camera %s: ffprobe failed, assuming 640x480", self.camera.id
                 )
-                self._frame_width = 640
-                self._frame_height = 480
         except Exception as exc:
             logger.warning(
                 "Camera %s: resolution probe failed (%s), assuming 640x480",
                 self.camera.id,
                 exc,
             )
-            self._frame_width = 640
-            self._frame_height = 480
+        self._frame_width = 640
+        self._frame_height = 480
+        return False
 
     def _kill_process(self) -> None:
-        """Kill the FFmpeg subprocess."""
-        if self._process is not None:
+        """Kill the FFmpeg subprocess without blocking on its pipes.
+
+        Regression (2026-09-27, wedged cloud core): this used to close
+        stdout/stderr *before* killing. With the reader thread parked in
+        ``proc.stdout.read()`` — camera silent, ffmpeg still alive — the
+        buffered reader held its internal lock, so the cross-thread
+        ``close()`` waited on that lock forever: ffmpeg was never
+        killed, the ``async def`` stop endpoint blocked the event loop,
+        and every route (even /api/cloud/health) timed out until the
+        process was restarted by hand.
+
+        Order is therefore: terminate, then reap with a bounded wait.
+        Pipe teardown is deliberately left to the reader thread, whose
+        pending read returns EOF as soon as the child's write end is
+        gone. ``terminate()`` is SIGTERM on POSIX and a hard kill on
+        Windows, so the child cannot outlive this call.
+        """
+        proc = self._process
+        if proc is None:
+            return
+        self._process = None
+        self.camera.pid = None
+        try:
+            proc.terminate()
+        except Exception:
+            logger.debug("Camera %s: terminate failed", self.camera.id, exc_info=True)
+        for _ in range(2):
             try:
-                self._process.stdout.close() if self._process.stdout else None
-                self._process.stderr.close() if self._process.stderr else None
-                if os.name == "nt":
-                    self._process.kill()
-                else:
-                    self._process.send_signal(signal.SIGTERM)
-                    try:
-                        self._process.wait(timeout=3)
-                    except subprocess.TimeoutExpired:
-                        self._process.kill()
+                proc.wait(timeout=3)
+                return
+            except subprocess.TimeoutExpired:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
             except Exception:
-                pass
-            self._process = None
-            self.camera.pid = None
+                return
+        logger.warning(
+            "Camera %s: ffmpeg (PID %s) survived terminate + kill",
+            self.camera.id,
+            proc.pid,
+        )
 
 
 class RTSPManager:

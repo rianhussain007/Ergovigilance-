@@ -6,8 +6,6 @@ Covers the pure gate (under/at/over/unlimited/no-org) plus proof that
 
 from __future__ import annotations
 
-import asyncio
-
 import pytest
 from fastapi import HTTPException
 
@@ -55,12 +53,10 @@ def test_add_camera_consults_gate(monkeypatch):
     monkeypatch.setattr(api, "get_cloud_service", _must_not_start)
 
     with pytest.raises(HTTPException) as exc:
-        asyncio.run(
-            api.add_camera(
-                {"id": "b", "name": "B", "url": "rtsp://x"},
-                tenant={"tenant_id": "t"},
-                x_api_key="k",
-            )
+        api.add_camera(
+            {"id": "b", "name": "B", "url": "rtsp://x"},
+            tenant={"tenant_id": "t"},
+            x_api_key="k",
         )
     assert exc.value.status_code == 403
 
@@ -80,11 +76,9 @@ def test_add_camera_under_limit_starts(monkeypatch):
 
     monkeypatch.setattr(api, "get_cloud_service", lambda: _Service())
 
-    result = asyncio.run(
-        api.add_camera(
-            {"id": "b", "name": "B", "url": "rtsp://x"},
-            tenant={"tenant_id": "t"},
-            x_api_key="k",
-        )
+    result = api.add_camera(
+        {"id": "b", "name": "B", "url": "rtsp://x"},
+        tenant={"tenant_id": "t"},
+        x_api_key="k",
     )
     assert result == {"started": "b"}
