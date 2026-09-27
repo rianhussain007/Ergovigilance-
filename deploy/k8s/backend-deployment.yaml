@@ -7,15 +7,20 @@ metadata:
     app: ergovigilance-backend
     tier: backend
 spec:
-  replicas: 2
+  # Single replica by decision: auth/session/alert state lives on this pod's
+  # /data volume (SQLite auth DB + file sessions), so a second replica
+  # diverges — split-brain logins, writes that vanish on the next request.
+  # The backend HPA was removed for the same reason (see hpa.yaml).
+  replicas: 1
   selector:
     matchLabels:
       app: ergovigilance-backend
+  # Recreate: one replica with a ReadWriteOnce PVC cannot surge — a second
+  # pod on another node would wait forever for the volume while
+  # maxUnavailable: 0 blocked the rollout. Brief restart downtime is the
+  # accepted trade; the data now survives it (PVC-backed /data).
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+    type: Recreate
   template:
     metadata:
       labels:
@@ -86,7 +91,8 @@ spec:
                   key: stripe-secret
                   optional: true
             # Write-path analysis (P1 readOnlyRootFilesystem): every directory
-            # the app creates files in lives on the /data emptyDir below.
+            # the app creates files in lives on the /data volume below (PVC —
+            # emptyDir would lose the SQLite auth DB on every rollout).
             # WEB_CONCURRENCY=1 is defense-in-depth, not the only guard:
             # multiple uvicorn workers used to race run_migrations() on a fresh
             # DB (duplicate column / no such table) and crash-loop the pod.
@@ -154,7 +160,8 @@ spec:
               mountPath: /tmp
       volumes:
         - name: data
-          emptyDir: {}
+          persistentVolumeClaim:
+            claimName: ergovigilance-backend-data
         - name: tmp
           emptyDir: {}
       restartPolicy: Always

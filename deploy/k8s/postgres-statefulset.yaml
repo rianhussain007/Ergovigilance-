@@ -82,8 +82,9 @@ spec:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
       volumes:
-        - name: postgres-data
-          emptyDir: {}
+        # postgres-data comes from the volumeClaimTemplate below (per-pod
+        # PVC); it was also declared here as an emptyDir — a duplicate
+        # volume-name conflict that must not ship.
         - name: run
           emptyDir:
             medium: Memory

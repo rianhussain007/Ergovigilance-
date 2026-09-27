@@ -1,0 +1,18 @@
+# Persistent /data for the backend: the SQLite auth DB (users, workers,
+# alerts, audit, pilot requests), sessions, reports, recordings and alerts
+# all live here. The previous emptyDir deleted all of it on every rollout,
+# eviction or reschedule — a single replica only needs ReadWriteOnce.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ergovigilance-backend-data
+  namespace: ergovigilance
+  labels:
+    app: ergovigilance-backend
+    tier: backend
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi

@@ -1,41 +1,11 @@
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: ergovigilance-backend-hpa
-  namespace: ergovigilance
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: ergovigilance-backend
-  minReplicas: 2
-  maxReplicas: 10
-  metrics:
-    - type: Resource
-      resource:
-        name: cpu
-        target:
-          type: Utilization
-          averageUtilization: 70
-    - type: Resource
-      resource:
-        name: memory
-        target:
-          type: Utilization
-          averageUtilization: 80
-  behavior:
-    scaleUp:
-      stabilizationWindowSeconds: 60
-      policies:
-        - type: Pods
-          value: 2
-          periodSeconds: 60
-    scaleDown:
-      stabilizationWindowSeconds: 300
-      policies:
-        - type: Pods
-          value: 1
-          periodSeconds: 120
+# The backend HPA was removed deliberately (single-replica decision): the
+# backend keeps auth/session/alert state on its own /data volume (SQLite
+# auth DB + file sessions), so replicas 2-10 diverge — split-brain logins
+# and writes that vanish on the next request routed elsewhere. Re-adding it
+# requires a shared store first (Postgres-backed auth is not functional yet,
+# see backend_api/app/core/db_backend.py) plus shared session storage; until
+# then, pin backend replicas: 1 in backend-deployment.yaml instead.
+# Frontend stays autoscaled — stateless nginx, nothing to diverge.
 ---
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
