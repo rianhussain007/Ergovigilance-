@@ -15,11 +15,15 @@ Usage:
 from __future__ import annotations
 
 import contextlib
+import logging
 import os
 import sqlite3
 import threading
+import time
 from contextlib import contextmanager
 from typing import Any, Generator
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Detect PostgreSQL from DATABASE_URL
@@ -49,19 +53,51 @@ def _get_pg_pool() -> Any:
         if _pg_pool is not None:
             return _pg_pool
         try:
-            import psycopg  # psycopg3
+            from psycopg_pool import ConnectionPool
         except ImportError:
             raise RuntimeError(
-                "DATABASE_URL is set but psycopg is not installed.  "
-                "Run: pip install 'psycopg[binary]>=3.1,<4'"
+                "DATABASE_URL is set but psycopg_pool is not installed. "
+                "Run: pip install 'psycopg_pool>=3.1,<4'"
             )
-        _pg_pool = psycopg.ConnectionPool(
+        _pg_pool = ConnectionPool(
             conninfo=_DATABASE_URL,
             min_size=2,
             max_size=10,
-            kwargs={"autocommit": False},
+            kwargs={"autocommit": False, "connect_timeout": 5},
         )
         return _pg_pool
+
+
+# Back off PG reachability probes after a failure so a down database
+# can't add latency to every request (same 30 s idiom as postgres.py).
+_pg_unavailable_until: float = 0.0
+
+
+def _pg_reachable() -> bool:
+    """True when a pooled PG connection answers. Never raises.
+
+    Import problems (no psycopg_pool) and connection failures both mean
+    "not reachable" here — the caller logs once and runs file mode.
+    """
+    global _pg_unavailable_until
+    if time.time() < _pg_unavailable_until:
+        return False
+    try:
+        pool = _get_pg_pool()
+        conn = pool.getconn()
+        try:
+            conn.execute("SELECT 1")
+        finally:
+            pool.putconn(conn)
+        return True
+    except Exception as exc:
+        _pg_unavailable_until = time.time() + 30.0
+        logger.warning(
+            "PostgreSQL unavailable (%s) — continuing in SQLite file mode. "
+            "Fix DATABASE_URL or unset it for a quiet boot.",
+            exc,
+        )
+        return False
 
 
 class PgRow:
@@ -236,8 +272,15 @@ def get_db() -> Generator:
         with get_db() as conn:
             row = conn.execute("SELECT ...").fetchone()
             val = row["column"]  # or row[0]
+
+    When DATABASE_URL is set but PostgreSQL is unreachable, boot and
+    requests continue in SQLite file mode (loud warning, 30 s probe
+    backoff) instead of crashing — the PG store is additive telemetry,
+    never a boot dependency. Only the reachability probe is guarded;
+    errors raised by caller code inside the block propagate normally
+    (no double-execution).
     """
-    if is_postgres():
+    if is_postgres() and _pg_reachable():
         with _pg_connection() as conn:
             yield conn
     else:
