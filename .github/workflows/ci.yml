@@ -33,6 +33,10 @@ jobs:
       # the runtime deps AND the CI tooling (pytest, httpx2, pip-audit). The old
       # `pip install -r requirements.txt` left no pytest, so the job could not
       # actually run the suite.
+      - name: Install OS packages (OpenCV/torch system libs)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 libxcb1 libgomp1
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
@@ -69,6 +73,13 @@ jobs:
             yolo_cloud/requirements.txt
             yolo_cloud/requirements-dev.txt
 
+      # Same OpenCV/torch system libs as the backend job: the cloud suite
+      # imports cv2 + torch, which fail collection on slim images without
+      # libGL/libgomp (proven locally: 19 collection errors -> 0).
+      - name: Install OS packages (OpenCV/torch system libs)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 libxcb1 libgomp1
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
