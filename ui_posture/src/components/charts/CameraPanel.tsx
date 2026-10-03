@@ -12,15 +12,22 @@ interface CameraPanelProps {
    *  Kept separate from ``status`` so the live UI doesn't tear down the
    *  stream — the operator just sees the Reconnecting… badge. */
   reconnecting?: boolean;
+  /** Real analysis FPS from the pipeline. The feed used to show a hardcoded
+   *  29.97 even when no frames were flowing — report the truth instead. */
+  fps?: number;
   /** Register the internal frame-capture handler so sibling controls (e.g. the
    *  Live Monitoring telemetry sidebar) can trigger a screenshot. */
   onCaptureReady?: (fn: () => void) => void;
 }
 
-export function CameraPanel({ status, workerName, task, reconnecting, onCaptureReady }: CameraPanelProps) {
-  const [fps, setFps] = useState(29.97);
+export function CameraPanel({ status, workerName, task, reconnecting, fps: liveFps, onCaptureReady }: CameraPanelProps) {
+  const fps = liveFps ?? 0;
   const [streamLoading, setStreamLoading] = useState(true);
   const [streamError, setStreamError] = useState(false);
+  // Terminal failure: retries exhausted. Distinct from a transient error so
+  // the panel can stop showing a broken <img> (whose alt text leaked into the
+  // frame area) and show an honest "feed unavailable" state instead.
+  const [streamFailed, setStreamFailed] = useState(false);
   const [streamReady, setStreamReady] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   const [showOverlay, setShowOverlay] = useState(true);
@@ -44,6 +51,7 @@ export function CameraPanel({ status, workerName, task, reconnecting, onCaptureR
   useEffect(() => {
     setStreamLoading(true);
     setStreamError(false);
+    setStreamFailed(false);
     setStreamReady(false);
     frameCountRef.current = 0;
     if (isActive) {
@@ -66,6 +74,7 @@ export function CameraPanel({ status, workerName, task, reconnecting, onCaptureR
     if (!streamError || !isActive) return;
     const attempt = retryKey;
     if (attempt > 5) {
+      setStreamFailed(true);
       addToast('error', 'Camera feed lost', 'Could not reconnect after several attempts. Click the retry button or refresh the page.');
       return;
     }
@@ -126,8 +135,10 @@ export function CameraPanel({ status, workerName, task, reconnecting, onCaptureR
   // Keep the <img> mounted for the whole session so the last good frame stays
   // visible; only show the placeholder when the stream has never produced a
   // frame (or no session is active).
-  const showImg = isActive;
-  const showPlaceholder = !isActive || (streamLoading && !streamReady);
+  // Drop the <img> entirely once the stream has terminally failed — otherwise
+  // the browser paints the alt text ("Live camera feed") inside the frame area.
+  const showImg = isActive && !streamFailed;
+  const showPlaceholder = !isActive || streamFailed || (streamLoading && !streamReady);
   // Show the badge when the backend reports it is reopening the camera
   // (RTSP drop) OR the frontend observed the stream break.
   const showReconnecting = (isActive && !!reconnecting)
@@ -135,9 +146,11 @@ export function CameraPanel({ status, workerName, task, reconnecting, onCaptureR
 
   const handleManualRetry = useCallback(() => {
     setStreamError(false);
+    setStreamFailed(false);
     setStreamLoading(true);
     setStreamReady(false);
     frameCountRef.current = 0;
+    setRetryKey(0);
     setStreamKey((k) => k + 1);
   }, []);
   const overlayParam = showOverlay ? 'overlay=true' : 'overlay=false';
@@ -193,7 +206,7 @@ export function CameraPanel({ status, workerName, task, reconnecting, onCaptureR
       <div className="absolute top-md right-md z-20 flex items-center gap-sm">
         <div className="flex items-center gap-xs px-md py-sm rounded border border-cyan-400/15 backdrop-blur-md font-label-mono text-label-mono bg-black/55">
           <Activity className="w-3 h-3 text-on-surface-variant" />
-          <span className="text-on-surface-variant">{fps.toFixed(1)}</span>
+          <span className="text-on-surface-variant">{isActive && fps > 0 ? fps.toFixed(1) : '—'}</span>
           <span className="text-[8px] text-on-surface-variant">FPS</span>
         </div>
         <div className={`flex items-center gap-xs px-md py-sm rounded backdrop-blur-md border font-label-mono text-label-mono ${isActive ? 'bg-green-500/10 border-green-400/35 text-green-300' : 'bg-surface-container-high border-outline-variant text-on-surface-variant'}`}>
@@ -231,7 +244,19 @@ export function CameraPanel({ status, workerName, task, reconnecting, onCaptureR
         <div className="absolute inset-x-0 bottom-0 z-10 h-24 pointer-events-none bg-gradient-to-t from-black/70 via-black/15 to-transparent" />          {showPlaceholder && (
           <div className="relative z-10 flex flex-col items-center gap-md text-on-surface-variant">
             <VideoOff className="w-12 h-12 opacity-40" />
-            {isActive ? (
+            {streamFailed ? (
+              <>
+                <span className="text-body-sm text-amber-300">Camera feed unavailable</span>
+                <span className="text-[11px] text-on-surface-variant/70">The camera stream could not be reached. The session is still running.</span>
+                <button
+                  type="button"
+                  onClick={handleManualRetry}
+                  className="text-[11px] text-cyan-300 underline underline-offset-2 hover:text-cyan-100"
+                >
+                  Retry connection
+                </button>
+              </>
+            ) : isActive ? (
               <>
                 <span className="text-body-sm">Waiting for camera...</span>
                 {retryKey > 0 && retryKey <= 5 && (

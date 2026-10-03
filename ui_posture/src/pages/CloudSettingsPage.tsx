@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useVisibilityAwareInterval } from '@/src/hooks/usePolling';
 import {
   Cloud,
   Wifi,
@@ -87,7 +88,9 @@ export default function CloudSettingsPage() {
 
   const fetchHealth = useCallback(async () => {
     try {
-      const res = await fetch('/cloud-api/cloud/health');
+      // Explicit timeout: without one a hung cloud core left this poll (and the
+      // next one 10s later) stacked forever.
+      const res = await fetch('/cloud-api/cloud/health', { signal: AbortSignal.timeout(8000) });
       if (res.ok) {
         const data = await res.json();
         setHealth(data);
@@ -104,7 +107,7 @@ export default function CloudSettingsPage() {
 
   const fetchCameras = useCallback(async () => {
     try {
-      const res = await fetch('/cloud-api/cloud/cameras');
+      const res = await fetch('/cloud-api/cloud/cameras', { signal: AbortSignal.timeout(8000) });
       if (res.ok) {
         const data = await res.json();
         setCameraCount(data.cameras?.length || 0);
@@ -117,12 +120,13 @@ export default function CloudSettingsPage() {
   useEffect(() => {
     fetchHealth();
     fetchCameras();
-    const interval = setInterval(() => {
-      fetchHealth();
-      fetchCameras();
-    }, 10000);
-    return () => clearInterval(interval);
   }, [fetchHealth, fetchCameras]);
+
+  // 10s refresh, paused while the tab is hidden (audit F-UX-04).
+  useVisibilityAwareInterval(() => {
+    fetchHealth();
+    fetchCameras();
+  }, 10_000);
 
   const handleSave = async () => {
     // Persisted to the cloud core (config/cloud_settings.json); every knob

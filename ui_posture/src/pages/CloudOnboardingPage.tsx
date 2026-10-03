@@ -107,6 +107,10 @@ export default function CloudOnboardingPage() {
   return (
     <div className="min-h-screen bg-[#0b0f14] text-white flex items-center justify-center p-6">
       <div className="w-full max-w-2xl">
+        {/* Page heading: the step title alone did not name the page for screen
+            readers or the document title. */}
+        <h1 className="sr-only">Cloud setup</h1>
+
         {/* Progress bar */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-3">

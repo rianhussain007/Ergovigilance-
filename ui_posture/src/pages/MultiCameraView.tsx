@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Camera, Eye, EyeOff, Monitor, VideoOff, AlertTriangle, ChevronRight, Users, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { SectionHeader, LoadingCard, ErrorCard, EmptyState } from '@/src/components/common';
 import { getCameras } from '@/src/services/dashboardService';
+import { usePolledResource } from '@/src/hooks/usePolling';
 import { apiFetch } from '@/src/services/apiClient';
 import { getStoredToken } from '@/src/auth/AuthContext';
 import { useStreamToken } from '@/src/hooks/useStreamToken';
@@ -132,81 +133,58 @@ function CameraTile({ cam }: { cam: CameraInfo }) {
 
 export default function MultiCameraView() {
   const navigate = useNavigate();
-  const [cameras, setCameras] = useState<CameraInfo[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [gridSize, setGridSize] = useState<'2x2' | '3x3'>('3x3');
-  const [stationRisks, setStationRisks] = useState<StationRisk[]>([]);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
 
-  // Fetch cameras
-  useEffect(() => {
-    let cancelled = false;
-    const fetchCameras = async () => {
-      try {
-        const data = await getCameras();
-        if (!cancelled) { setCameras(data); setError(null); }
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load cameras');
-      } finally {
-        if (!cancelled) setLoading(false);
+  // Three polled resources instead of three hand-rolled setInterval loops
+  // (audit F-UX-04): each one pauses while the tab is hidden, never stacks
+  // requests, and retries with backoff while the backend is unreachable.
+  const cameraState = usePolledResource<CameraInfo[]>(() => getCameras(), {
+    initial: [],
+    intervalMs: 30_000,
+    label: 'Cameras',
+  });
+  const cameras = cameraState.data;
+
+  // Live status per streaming camera (the risk ranking column).
+  const riskState = usePolledResource<StationRisk[]>(
+    async () => {
+      const risks: StationRisk[] = [];
+      for (const cam of cameras) {
+        if (cam.status !== 'streaming') continue;
+        try {
+          const res = await apiFetch(`/api/live/status?camera_id=${cam.id}`);
+          if (res.ok) {
+            const data = await res.json();
+            risks.push({
+              camera_id: cam.id,
+              camera_name: cam.name,
+              risk_level: data.risk_level || 'low',
+              risk_score: data.risk_score || 0,
+              task: data.task || 'Unknown',
+              worker: cam.worker || 'Unassigned',
+              person_detected: data.person_detected || false,
+              fps: data.fps || 0,
+              status: cam.status,
+            });
+          }
+        } catch { /* camera might not have live endpoint */ }
       }
-    };
-    fetchCameras();
-    const interval = setInterval(fetchCameras, 30000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, []);
+      return risks;
+    },
+    { initial: [], intervalMs: 10_000, enabled: cameras.length > 0, label: 'Station risk' },
+  );
+  const stationRisks = cameras.length > 0 ? riskState.data : [];
 
-  // Fetch live status for each camera (risk ranking)
-  useEffect(() => {
-    let cancelled = false;
-    const fetchRisks = async () => {
-      try {
-        const risks: StationRisk[] = [];
-        for (const cam of cameras) {
-          if (cam.status !== 'streaming') continue;
-          try {
-            const res = await apiFetch(`/api/live/status?camera_id=${cam.id}`);
-            if (res.ok) {
-              const data = await res.json();
-              risks.push({
-                camera_id: cam.id,
-                camera_name: cam.name,
-                risk_level: data.risk_level || 'low',
-                risk_score: data.risk_score || 0,
-                task: data.task || 'Unknown',
-                worker: cam.worker || 'Unassigned',
-                person_detected: data.person_detected || false,
-                fps: data.fps || 0,
-                status: cam.status,
-              });
-            }
-          } catch { /* camera might not have live endpoint */ }
-        }
-        if (!cancelled) setStationRisks(risks);
-      } catch { /* ignore */ }
-    };
-    if (cameras.length > 0) fetchRisks();
-    const interval = setInterval(fetchRisks, 10000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [cameras]);
-
-  // Fetch active alerts
-  useEffect(() => {
-    let cancelled = false;
-    const fetchAlerts = async () => {
-      try {
-        const res = await apiFetch('/api/alerts?state=ACTIVE');
-        if (res.ok) {
-          const data = await res.json();
-          if (!cancelled) setAlerts(data.alerts || data || []);
-        }
-      } catch { /* ignore */ }
-    };
-    fetchAlerts();
-    const interval = setInterval(fetchAlerts, 15000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, []);
+  const alertState = usePolledResource<Alert[]>(
+    async () => {
+      const res = await apiFetch('/api/alerts?state=ACTIVE');
+      if (!res.ok) return [];
+      const payload = await res.json();
+      return payload.alerts || payload || [];
+    },
+    { initial: [], intervalMs: 15_000, label: 'Active alerts' },
+  );
+  const alerts = alertState.data;
 
   // Sort cameras by risk level (HIGH first)
   const sortedByRisk = useMemo(() => {
@@ -219,7 +197,13 @@ export default function MultiCameraView() {
   const highRiskCount = stationRisks.filter(r => r.risk_level === 'high').length;
   const moderateRiskCount = stationRisks.filter(r => r.risk_level === 'moderate').length;
 
-  if (error) return <div className="flex items-center justify-center h-full p-lg"><ErrorCard message={error} onRetry={() => { setLoading(true); setError(null); }} /></div>;
+  if (cameraState.error) {
+    return (
+      <div className="flex items-center justify-center h-full p-lg">
+        <ErrorCard message={cameraState.error} onRetry={cameraState.refetch} />
+      </div>
+    );
+  }
 
   const sourceCams = cameras;
   const gridSlots = gridSize === '3x3' ? 9 : 4;
@@ -248,7 +232,7 @@ export default function MultiCameraView() {
         </div>
       </div>
 
-      {loading ? (
+      {cameraState.loading ? (
         <div className="grid grid-cols-2 md:grid-cols-3 gap-md">
           {Array.from({ length: 6 }).map((_, i) => <LoadingCard key={i} height="h-52" />)}
         </div>

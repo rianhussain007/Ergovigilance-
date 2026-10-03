@@ -1,4 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { usePolledResource } from '@/src/hooks/usePolling';
+import { ConfirmDialog } from '@/src/components/common';
 import { motion } from 'framer-motion';
 import {
   Video, Plus, Trash2, Play, Square, Wifi, WifiOff,
@@ -46,88 +48,76 @@ interface CameraHealth {
   total_frames: number;
   avg_latency_ms: number;
   alerts_today: number;
-}
-
-export default function CloudCamerasPage() {
-  const [cameras, setCameras] = useState<CloudCamera[]>([]);
-  const [loading, setLoading] = useState(true);
+}export default function CloudCamerasPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [newCam, setNewCam] = useState({ id: '', name: '', url: '' });
   const [addingError, setAddingError] = useState('');
-  const [healthStatus, setHealthStatus] = useState<any>(null);
-  const [coreDown, setCoreDown] = useState(false);
-  const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
+  const [pendingRemove, setPendingRemove] = useState<string | null>(null);
 
-  const fetchCameras = async () => {
-    try {
-      const res = await fetch('/cloud-api/cloud/cameras');
-      if (res.ok) {
-        const data = await res.json();
-        setCameras(data.cameras || []);
-      }
-    } catch {
-      setCameras([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Cameras, cloud-core health and thumbnails are three polled resources
+  // (audit F-UX-04): each pauses while the tab is hidden, never stacks
+  // requests, retries with backoff, and carries its own timeout. These calls
+  // target the cloud core through the Vite proxy, so they stay raw fetches with
+  // an explicit AbortSignal.timeout — but every response is validated.
+  const cameraState = usePolledResource<CloudCamera[]>(
+    async () => {
+      const res = await fetch('/cloud-api/cloud/cameras', { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) throw new Error(`Cloud cameras unavailable (HTTP ${res.status})`);
+      const data = await res.json();
+      return (data.cameras || []) as CloudCamera[];
+    },
+    { initial: [], intervalMs: 5000, label: 'Cloud cameras' },
+  );
+  const cameras = cameraState.data;
 
-  const fetchHealth = async () => {
-    try {
-      const res = await fetch('/cloud-api/cloud/health');
-      if (res.ok) {
-        setHealthStatus(await res.json());
-        setCoreDown(false);
-      } else {
-        setCoreDown(true);
-      }
-    } catch {
-      setHealthStatus(null);
-      setCoreDown(true);
-    }
-  };
+  const healthState = usePolledResource<any>(
+    async () => {
+      const res = await fetch('/cloud-api/cloud/health', { signal: AbortSignal.timeout(8000) });
+      if (!res.ok) throw new Error(`Cloud core health unavailable (HTTP ${res.status})`);
+      return await res.json();
+    },
+    { initial: null, intervalMs: 5000, requiresAuth: false, label: 'Cloud core' },
+  );
+  const healthStatus = healthState.data;
+  const coreDown = !!healthState.error || healthState.degraded;
+  const loading = cameraState.loading;
 
-  useEffect(() => {
-    fetchCameras();
-    fetchHealth();
-    const interval = setInterval(() => {
-      fetchCameras();
-      fetchHealth();
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
+  const activeIds = useMemo(
+    () => cameras.filter((c) => c.is_active).map((c) => c.camera_id),
+    [cameras],
+  );
 
-  // Fetch live thumbnails for active cameras every 3 seconds
-  useEffect(() => {
-    const activeIds = cameras.filter(c => c.is_active).map(c => c.camera_id);
-    if (activeIds.length === 0) return;
-
-    const fetchThumbnails = async () => {
-      const newThumbs: Record<string, string> = {};
+  const thumbState = usePolledResource<Record<string, string>>(
+    async () => {
+      const next: Record<string, string> = {};
       await Promise.all(
         activeIds.map(async (id) => {
           try {
-            const res = await fetch(`/cloud-api/cloud/cameras/${id}/snapshot`);
-            if (res.ok) {
-              const blob = await res.blob();
-              newThumbs[id] = URL.createObjectURL(blob);
-            }
+            const res = await fetch(`/cloud-api/cloud/cameras/${id}/snapshot`, {
+              signal: AbortSignal.timeout(8000),
+            });
+            if (res.ok) next[id] = URL.createObjectURL(await res.blob());
           } catch {
             // ignore — camera may not be streaming
           }
         })
       );
-      setThumbnails(prev => {
-        // Revoke old URLs to prevent memory leaks
-        Object.values(prev).forEach(url => { if (url.startsWith('blob:')) URL.revokeObjectURL(url); });
-        return newThumbs;
+      return next;
+    },
+    { initial: {}, intervalMs: 3000, enabled: activeIds.length > 0, label: 'Camera thumbnails' },
+  );
+  const thumbnails = thumbState.data;
+
+  // Every poll mints fresh blob URLs; revoke the previous batch so a long shift
+  // on this page cannot accumulate unbounded image memory.
+  useEffect(() => {
+    const batch = thumbState.data;
+    return () => {
+      Object.values(batch).forEach((url) => {
+        if (url.startsWith('blob:')) URL.revokeObjectURL(url);
       });
     };
-
-    fetchThumbnails();
-    const thumbInterval = setInterval(fetchThumbnails, 3000);
-    return () => clearInterval(thumbInterval);
-  }, [cameras]);
+  }, [thumbState.data]);
 
   const addCamera = async () => {
     setAddingError('');
@@ -140,7 +130,7 @@ export default function CloudCamerasPage() {
       if (res.ok) {
         setShowAddModal(false);
         setNewCam({ id: '', name: '', url: '' });
-        fetchCameras();
+        cameraState.refetch();
       } else {
         const err = await res.json();
         setAddingError(err.detail || 'Failed to add camera');
@@ -152,20 +142,25 @@ export default function CloudCamerasPage() {
 
   const stopCamera = async (cameraId: string) => {
     await fetch(`/cloud-api/cloud/cameras/${cameraId}/stop`, { method: 'POST' });
-    fetchCameras();
+    cameraState.refetch();
   };
 
+  // Removal asks in-app instead of window.confirm (guarded by ux_guards): the
+  // native dialog is unstyleable, can be blocked in kiosk shells, and gives no
+  // context about which camera is about to be deleted.
   const removeCamera = async (cameraId: string) => {
-    if (!confirm(`Remove camera ${cameraId}?`)) return;
     await fetch(`/cloud-api/cloud/cameras/${cameraId}`, { method: 'DELETE' });
-    fetchCameras();
+    cameraState.refetch();
   };
 
   const activeCameras = cameras.filter(c => c.is_active);
   const inactiveCameras = cameras.filter(c => !c.is_active);
 
   // Confidence alerts
-  const lowConfidenceCams = cameras.filter(c => c.is_active && c.avg_confidence !== undefined && c.avg_confidence < 0.7);
+  // Only flag low confidence when the camera is actually producing
+  // frames — a dead/reconnecting stream reports 0% (no data), which is
+  // not a lighting problem and must not raise a "check your angle" banner.
+  const lowConfidenceCams = cameras.filter(c => c.is_active && (c.frame_count ?? 0) > 0 && c.avg_confidence !== undefined && c.avg_confidence < 0.7);
   const highRiskCams = cameras.filter(c => c.is_active && c.highest_risk === 'HIGH');
 
   const formatUptime = (seconds?: number) => {
@@ -190,7 +185,8 @@ export default function CloudCamerasPage() {
         </div>
         <div className="flex items-center gap-3">
           <button
-            onClick={() => { fetchCameras(); fetchHealth(); }}
+            onClick={() => { cameraState.refetch(); healthState.refetch(); }}
+            aria-label="Refresh cameras and cloud core status"
             className="p-2 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition"
           >
             <RefreshCw className="w-4 h-4" />
@@ -204,6 +200,19 @@ export default function CloudCamerasPage() {
           </button>
         </div>
       </div>
+
+      {cameraState.error && (
+        <div role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm text-red-300">
+          {cameraState.error} — the camera list below may be incomplete.
+        </div>
+      )}
+
+      {cameraState.degraded && !cameraState.error && (
+        <div role="status" className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm text-amber-300">
+          Live refresh failed — showing the last camera snapshot that loaded. Start, stop and remove
+          actions may not be reflected yet.
+        </div>
+      )}
 
       {/* Confidence & Risk Alerts */}
       {(lowConfidenceCams.length > 0 || highRiskCams.length > 0) && (
@@ -350,8 +359,12 @@ export default function CloudCamerasPage() {
                 ) : (
                   <div className="mb-3 h-32 rounded-lg bg-black/30 border border-white/5 flex items-center justify-center">
                     <div className="text-center">
-                      <Radio className="w-6 h-6 text-slate-600 mx-auto mb-1 animate-pulse" />
-                      <p className="text-[10px] text-slate-500">Loading preview...</p>
+                      <Radio className={`w-6 h-6 text-slate-600 mx-auto mb-1 ${cam.camera_state === 'streaming' || cam.camera_state === 'connecting' ? 'animate-pulse' : ''}`} />
+                      <p className="text-[10px] text-slate-500">
+                        {cam.camera_state === 'streaming' || cam.camera_state === 'connecting'
+                          ? 'Loading preview...'
+                          : 'No signal — stream not receiving data'}
+                      </p>
                     </div>
                   </div>
                 )}
@@ -391,7 +404,8 @@ export default function CloudCamerasPage() {
                     <Square className="w-3 h-3" /> Stop
                   </button>
                   <button
-                    onClick={() => removeCamera(cam.camera_id)}
+                    onClick={() => setPendingRemove(cam.camera_id)}
+                    aria-label={`Remove ${cam.camera_name || cam.camera_id}`}
                     className="px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs hover:bg-red-500/20 transition"
                   >
                     <Trash2 className="w-3 h-3" />
@@ -441,14 +455,15 @@ export default function CloudCamerasPage() {
                   <button
                     onClick={async () => {
                       await fetch(`/cloud-api/cloud/cameras/${cam.camera_id}/start`, { method: 'POST' });
-                      fetchCameras();
+                      cameraState.refetch();
                     }}
                     className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg bg-green-500/10 border border-green-500/20 text-green-400 text-xs hover:bg-green-500/20 transition"
                   >
                     <Play className="w-3 h-3" /> Start
                   </button>
                   <button
-                    onClick={() => removeCamera(cam.camera_id)}
+                    onClick={() => setPendingRemove(cam.camera_id)}
+                    aria-label={`Remove ${cam.camera_name || cam.camera_id}`}
                     className="px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-xs hover:bg-red-500/20 transition"
                   >
                     <Trash2 className="w-3 h-3" />
@@ -461,12 +476,29 @@ export default function CloudCamerasPage() {
       )}
 
       {/* Add Camera Modal */}
+      <ConfirmDialog
+        open={pendingRemove !== null}
+        destructive
+        title="Remove this camera?"
+        message={`${pendingRemove ?? ''} will be deleted from the cloud core. Live monitoring from this camera stops immediately; recorded sessions are unaffected.`}
+        confirmLabel="Remove camera"
+        onCancel={() => setPendingRemove(null)}
+        onConfirm={() => {
+          const id = pendingRemove;
+          setPendingRemove(null);
+          if (id) void removeCamera(id);
+        }}
+      />
+
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Add cloud camera"
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="w-full max-w-[28rem] p-6 rounded-2xl bg-[#1a1a2e] border border-white/10 shadow-2xl"
+            className="w-full max-w-[28rem] p-6 rounded-2xl bg-surface-container border border-outline-variant shadow-2xl"
           >
             <h3 className="text-lg font-semibold text-white mb-4">Add Cloud Camera</h3>
             <div className="space-y-4">
