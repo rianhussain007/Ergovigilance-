@@ -1,5 +1,28 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Activity, Server, Database, Wifi, WifiOff, Clock, Cpu, HardDrive, RefreshCw, CheckCircle2, XCircle, AlertTriangle, Zap, Shield, FileText, Gauge, HeartPulse } from 'lucide-react';
+import { ErrorCard } from '@/src/components/common';
+import { usePolledResource } from '@/src/hooks/usePolling';
+import { apiFetchJson } from '@/src/services/apiClient';
+
+type HealthPayload = Record<string, any>;
+
+/**
+ * One poll of the backend health payload feeds every panel on this page
+ * (audit F-UX-04): the four enterprise monitoring cards below each used to run
+ * their own `fetch('/health')` on a 15s timer, so an idle page cost five
+ * requests per 15s, none with a timeout, visibility or unmount guard.
+ */
+async function fetchBackendHealth(): Promise<HealthPayload> {
+  return apiFetchJson<HealthPayload>('/health', { timeoutMs: 8000 }, 'Backend health');
+}
+
+async function fetchCloudHealth(): Promise<HealthPayload> {
+  return apiFetchJson<HealthPayload>(
+    '/cloud-api/cloud/health',
+    { timeoutMs: 8000 },
+    'Cloud core health',
+  );
+}
 
 interface ServiceHealth {
   name: string;
@@ -34,30 +57,37 @@ interface SystemMetrics {
 }
 
 export default function SystemHealthPage() {
-  const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
-  const [loading, setLoading] = useState(true);
+  const health = usePolledResource<HealthPayload | null>(fetchBackendHealth, {
+    initial: null,
+    intervalMs: 10_000,
+    requiresAuth: false,
+    label: 'Backend health',
+  });
+  const cloud = usePolledResource<HealthPayload | null>(fetchCloudHealth, {
+    initial: null,
+    intervalMs: 30_000,
+    requiresAuth: false,
+    label: 'Cloud core health',
+  });
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
-  const fetchHealth = async () => {
-    try {
-      // Check each service — /health is proxied to backend:8000,
-      // /cloud-api/cloud/health is proxied to cloud-core:8100 (rewritten to /api/cloud/health),
-      // /healthz is the liveness probe.
-      const checks = await Promise.allSettled([
-        fetch('/health').then(r => r.json()).catch(() => ({ status: 'down' })),
-        fetch('/cloud-api/cloud/health').then(r => r.json()).catch(() => ({ status: 'down' })),
-        fetch('/health').then(r => r.json()).catch(() => ({ status: 'down' })),
-      ]);
+  useEffect(() => {
+    if (health.data) setLastRefresh(new Date());
+  }, [health.data]);
 
-      const backend = checks[0].status === 'fulfilled' ? checks[0].value : { status: 'down' };
-      const cloudCore = checks[1].status === 'fulfilled' ? checks[1].value : { status: 'down' };
-      const frontend = checks[2].status === 'fulfilled' ? checks[2].value : { status: 'down' };
+  const refresh = useCallback(() => {
+    health.refetch();
+    cloud.refetch();
+  }, [health.refetch, cloud.refetch]);
+
+  const metrics = useMemo<SystemMetrics | null>(() => {
+    const backend = health.data;
+    const cloudCore = cloud.data ?? {};
+    if (!backend) return null;
 
       // Backend is healthy if it returned a JSON with status healthy/degraded
       const backendUp = backend.status === 'healthy' || backend.status === 'degraded';
       const cloudUp = cloudCore.status === 'healthy' || cloudCore.status === 'degraded';
-      // Frontend is up if THIS page loaded (we're running in it)
-      const frontendUp = true;
 
       const services: ServiceHealth[] = [
         {
@@ -121,36 +151,26 @@ export default function SystemHealthPage() {
         },
       };
 
-      setMetrics(metricsData);
-      setLastRefresh(new Date());
-    } catch {
-      // All services down
-      setMetrics({
-        services: [
-          { name: 'Backend API', status: 'down', port: 8000, uptime: '-', latency_ms: 0, last_check: new Date().toISOString() },
-          { name: 'YOLO Cloud Core', status: 'down', port: 8100, uptime: '-', latency_ms: 0, last_check: new Date().toISOString() },
-          { name: 'Frontend', status: 'healthy', port: 3000, uptime: '-', latency_ms: 0, last_check: new Date().toISOString() },
-          { name: 'Database (SQLite)', status: 'down', port: 0, uptime: '-', latency_ms: 0, last_check: new Date().toISOString() },
-        ],
-        database: { status: 'disconnected', connections: 0, max_connections: 100, size_mb: 0 },
-        storage: { sessions_mb: 0, recordings_mb: 0, models_mb: 0, total_mb: 0 },
-        api: { total_requests: 0, avg_response_ms: 0, error_rate: 0, endpoints_count: 46 },
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+    return metricsData;
+  }, [health.data, cloud.data]);
 
-  useEffect(() => {
-    fetchHealth();
-    const interval = setInterval(fetchHealth, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  if (loading) {
+  if (health.loading && !metrics) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  // Never fabricate an "all services down" dashboard: if the backend never
+  // answered, say so and offer a retry instead of painting a fake green/red grid.
+  if (!metrics) {
+    return (
+      <div className="mx-auto max-w-2xl p-6">
+        <ErrorCard
+          message={health.error ?? 'System health is unavailable right now.'}
+          onRetry={refresh}
+        />
       </div>
     );
   }
@@ -178,13 +198,27 @@ export default function SystemHealthPage() {
             Last check: {lastRefresh.toLocaleTimeString()}
           </span>
           <button
-            onClick={fetchHealth}
+            onClick={refresh}
+            aria-label="Refresh system health now"
             className="p-2 rounded-lg bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10 transition"
           >
             <RefreshCw className="h-4 w-4" />
           </button>
         </div>
       </div>
+
+      {health.degraded && (
+        <div
+          role="status"
+          className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm text-amber-300"
+        >
+          Showing the last values that loaded ({lastRefresh.toLocaleTimeString()}) — the backend has
+          not answered since.
+          <button onClick={refresh} className="ml-2 font-medium underline underline-offset-2">
+            Retry now
+          </button>
+        </div>
+      )}
 
       {/* Overall Status Banner */}
       <div className={`rounded-xl border p-4 ${
@@ -257,10 +291,10 @@ export default function SystemHealthPage() {
 
       {/* Enterprise Monitoring */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <CacheStatsCard />
-        <QueryStatsCard />
-        <RecoveryStatsCard />
-        <LogStatsCard />
+        <CacheStatsCard stats={health.data?.cache} />
+        <QueryStatsCard stats={health.data?.queries} />
+        <RecoveryStatsCard stats={health.data?.recovery} />
+        <LogStatsCard stats={health.data?.logs} />
       </div>
     </div>
   );
@@ -348,13 +382,7 @@ function StorageBar({ label, used, max, color }: {
 
 // ── Enterprise Monitoring Cards ──────────────────────────
 
-function CacheStatsCard() {
-  const [stats, setStats] = useState<any>(null);
-  useEffect(() => {
-    fetch('/health').then(r => r.json()).then(d => setStats(d.cache || null)).catch(() => {});
-    const iv = setInterval(() => fetch('/health').then(r => r.json()).then(d => setStats(d.cache || null)).catch(() => {}), 15000);
-    return () => clearInterval(iv);
-  }, []);
+function CacheStatsCard({ stats }: { stats?: any }) {
 
   return (
     <div className="rounded-xl border border-white/10 bg-white/5 p-5">
@@ -376,13 +404,7 @@ function CacheStatsCard() {
   );
 }
 
-function QueryStatsCard() {
-  const [stats, setStats] = useState<any>(null);
-  useEffect(() => {
-    fetch('/health').then(r => r.json()).then(d => setStats(d.queries || null)).catch(() => {});
-    const iv = setInterval(() => fetch('/health').then(r => r.json()).then(d => setStats(d.queries || null)).catch(() => {}), 15000);
-    return () => clearInterval(iv);
-  }, []);
+function QueryStatsCard({ stats }: { stats?: any }) {
 
   return (
     <div className="rounded-xl border border-white/10 bg-white/5 p-5">
@@ -404,13 +426,7 @@ function QueryStatsCard() {
   );
 }
 
-function RecoveryStatsCard() {
-  const [stats, setStats] = useState<any>(null);
-  useEffect(() => {
-    fetch('/health').then(r => r.json()).then(d => setStats(d.recovery || null)).catch(() => {});
-    const iv = setInterval(() => fetch('/health').then(r => r.json()).then(d => setStats(d.recovery || null)).catch(() => {}), 15000);
-    return () => clearInterval(iv);
-  }, []);
+function RecoveryStatsCard({ stats }: { stats?: any }) {
 
   return (
     <div className="rounded-xl border border-white/10 bg-white/5 p-5">
@@ -436,13 +452,7 @@ function RecoveryStatsCard() {
   );
 }
 
-function LogStatsCard() {
-  const [stats, setStats] = useState<any>(null);
-  useEffect(() => {
-    fetch('/health').then(r => r.json()).then(d => setStats(d.logs || null)).catch(() => {});
-    const iv = setInterval(() => fetch('/health').then(r => r.json()).then(d => setStats(d.logs || null)).catch(() => {}), 15000);
-    return () => clearInterval(iv);
-  }, []);
+function LogStatsCard({ stats }: { stats?: any }) {
 
   return (
     <div className="rounded-xl border border-white/10 bg-white/5 p-5">

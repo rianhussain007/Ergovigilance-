@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Users, AlertTriangle, TrendingUp, Activity, BarChart3 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Cell } from 'recharts';
 import { AnalyticCard } from '@/src/components/cards';
 import { SectionHeader, ErrorCard, LoadingCard, EmptyState } from '@/src/components/common';
+import { usePolledResource } from '@/src/hooks/usePolling';
 import { getManagerSummary } from '@/src/services/dashboardService';
 import { apiFetch } from '@/src/services/apiClient';
 import { chartTooltipStyle, chartTick } from '@/src/components/charts/chartTheme';
@@ -34,53 +35,45 @@ const gridPositions = [
 ];
 
 export default function ManagerDashboard() {
-  const [manager, setManager] = useState<ManagerSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<WorkerSummary | null>(null);
-  const [trendData, setTrendData] = useState<TrendPoint[]>([]);
 
-  // Fetch weekly trend data
-  useEffect(() => {
-    let cancelled = false;
-    const fetchTrend = async () => {
-      try {
-        const res = await apiFetch('/api/analytics');
-        if (res.ok) {
-          const data = await res.json();
-          const trend = (data.weekly_risk_trend || []).map((w: any) => ({
-            week: w.week || '',
-            avgRisk: w.averageRisk || 0,
-            sessions: w.sessions || 0,
-            highCount: w.highCount || 0,
-          }));
-          if (!cancelled) setTrendData(trend);
-        }
-      } catch { /* ignore */ }
-    };
-    fetchTrend();
-    return () => { cancelled = true; };
-  }, []);
+  // 30s poll: paused while the tab is hidden, no stacked requests, last good
+  // snapshot kept and flagged stale on later failures (audit F-UX-04).
+  // Retry now actually refetches — the previous handler only flipped `loading`
+  // back on, which left the page spinning forever because the fetch effect
+  // never re-ran.
+  const summary = usePolledResource<ManagerSummary | null>(() => getManagerSummary(), {
+    initial: null,
+    intervalMs: 30_000,
+    label: 'Manager dashboard',
+  });
 
-  // ── fetch real data ───────────────────────────────────────────────
-  useEffect(() => {
-    let cancelled = false;
-    const fetchManager = async () => {
-      try {
-        const data = await getManagerSummary();
-        if (!cancelled) { setManager(data); setError(null); }
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load manager data');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    fetchManager();
-    const interval = setInterval(fetchManager, 30000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, []);
+  // The weekly trend only changes when sessions close, so it is a one-shot read
+  // (intervalMs: null) that `refetch` can refresh on demand.
+  const trend = usePolledResource<TrendPoint[]>(
+    async () => {
+      const res = await apiFetch('/api/analytics');
+      if (!res.ok) return [];
+      const payload = await res.json();
+      return (payload.weekly_risk_trend || []).map((w: any) => ({
+        week: w.week || '',
+        avgRisk: w.averageRisk || 0,
+        sessions: w.sessions || 0,
+        highCount: w.highCount || 0,
+      }));
+    },
+    { initial: [], intervalMs: null, label: 'Weekly trend' },
+  );
+  const manager = summary.data;
+  const trendData = trend.data;
 
-  if (error) return <div className="flex items-center justify-center h-full p-lg"><ErrorCard message={error} onRetry={() => { setLoading(true); setError(null); }} /></div>;
+  if (summary.error) {
+    return (
+      <div className="flex items-center justify-center h-full p-lg">
+        <ErrorCard message={summary.error} onRetry={summary.refetch} />
+      </div>
+    );
+  }
 
   // Single source of truth — manager is null while first fetch is in flight
   const data = {
@@ -91,7 +84,7 @@ export default function ManagerDashboard() {
     workers: manager?.workers ?? [],
   };
 
-  if (loading) {
+  if (summary.loading) {
     return (
       <div className="p-lg space-y-lg pb-32">
         <LoadingCard height="h-24" />
@@ -109,6 +102,22 @@ export default function ManagerDashboard() {
         <h1 className="text-display-lg font-bold text-on-surface">Manager Dashboard</h1>
         <p className="text-body-sm text-on-surface-variant mt-xs">Factory-wide ergonomic overview</p>
       </div>
+
+      {summary.degraded && (
+        <div
+          role="status"
+          className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-md py-sm text-[12px] text-amber-300"
+        >
+          <strong>Live refresh failed.</strong> Showing the last figures that loaded — the
+          backend has not answered since. Values may be out of date.
+          <button
+            onClick={summary.refetch}
+            className="ml-2 font-bold uppercase tracking-widest text-[11px] underline underline-offset-2"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {manager?.degraded && (
         <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-md py-sm text-[12px] text-amber-300">

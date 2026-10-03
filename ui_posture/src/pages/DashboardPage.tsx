@@ -31,6 +31,7 @@ import { RiskGauge } from '@/src/components/charts/RiskGauge';
 import { GettingStarted } from '@/src/components/common/GettingStarted';
 import { chartTooltipStyle, chartTick, chartColors, riskLevelColor } from '@/src/components/charts/chartTheme';
 import { useDashboard } from '@/src/hooks/useDashboard';
+import { usePolledResource } from '@/src/hooks/usePolling';
 import { useContextSnapshot } from '@/src/hooks/useContextSnapshot';
 import { useAlerts } from '@/src/hooks/useAlerts';
 import { useRecommendations } from '@/src/hooks/useRecommendations';
@@ -65,15 +66,28 @@ export default function DashboardPage() {
   const { setNotifOpen } = useOutletContext<{ setNotifOpen: (v: boolean) => void }>();
   const [latestDetail, setLatestDetail] = useState<SessionDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [supervisorSummary, setSupervisorSummary] = useState<SupervisorDashboardSummary | null>(null);
-  const [adminSummary, setAdminSummary] = useState<AdminDashboardSummary | null>(null);
-  const [summaryError, setSummaryError] = useState<string | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsResponse | null>(null);
 
   const latestCompleted = useMemo(() => sessions.find((s) => s.status === 'completed') ?? null, [sessions]);
   const latestCompletedId = latestCompleted?.id ?? null;
   const isElevated = !!user && elevatedRoles.has(user.role);
   const isAdmin = user?.role === 'admin';
+
+  // Supervisor/admin summary: one 5s polled resource (audit F-UX-04) that
+  // pauses while the tab is hidden and stops cleanly on role change, instead
+  // of a hand-rolled setInterval that kept running for non-elevated roles.
+  const summary = usePolledResource<SupervisorDashboardSummary | null>(
+    async () => (isAdmin ? await getAdminDashboardSummary() : await getSupervisorDashboardSummary()),
+    {
+      initial: null,
+      intervalMs: 5000,
+      enabled: !!user && isElevated,
+      label: 'Dashboard summary',
+    },
+  );
+  const supervisorSummary = isElevated ? summary.data : null;
+  const adminSummary = isAdmin ? (summary.data as AdminDashboardSummary | null) : null;
+  const summaryError = isElevated ? summary.error : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -94,39 +108,6 @@ export default function DashboardPage() {
       });
     return () => { cancelled = true; };
   }, [latestCompletedId]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setSummaryError(null);
-    setSupervisorSummary(null);
-    setAdminSummary(null);
-
-    if (!user || !isElevated) return;
-
-    const loadSummary = async () => {
-      try {
-        if (isAdmin) {
-          const summary = await getAdminDashboardSummary();
-          if (!cancelled) {
-            setAdminSummary(summary);
-            setSupervisorSummary(summary);
-          }
-          return;
-        }
-        const summary = await getSupervisorDashboardSummary();
-        if (!cancelled) setSupervisorSummary(summary);
-      } catch (err) {
-        if (!cancelled) setSummaryError(err instanceof Error ? err.message : 'Dashboard summary unavailable');
-      }
-    };
-
-    loadSummary();
-    const id = window.setInterval(loadSummary, 5000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, [isAdmin, isElevated, user]);
 
   useEffect(() => {
     let cancelled = false;

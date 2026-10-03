@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router';
 import { apiFetch } from '@/src/services/apiClient';
+import { useVisibilityAwareInterval } from '@/src/hooks/usePolling';
 import {
   CheckCircle, XCircle, AlertTriangle, RefreshCw, Clock,
   Server, Database, Globe, Cpu, Shield
@@ -105,10 +106,12 @@ export default function StatusPage() {
   };
 
   useEffect(() => {
-    checkServices();
-    const interval = setInterval(checkServices, 30000);
-    return () => clearInterval(interval);
+    void checkServices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- first load only
   }, []);
+  // 30s refresh, paused while the tab is hidden so a forgotten background tab
+  // stops hammering the health endpoints (audit F-UX-04).
+  useVisibilityAwareInterval(checkServices, 30_000);
 
   // Empty list (first load) is "unknown", not operational — [].every()
   // is vacuously true, which painted a false green banner on mount.

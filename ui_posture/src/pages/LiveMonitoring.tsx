@@ -166,6 +166,10 @@ export default function LiveMonitoring() {
 
   return (
     <div className="p-lg space-y-lg pb-xl">
+      {/* Page heading — this screen had no top-level heading at all, so neither
+          the screen reader outline nor the document title named the page. */}
+      <h1 className="sr-only">Live monitoring</h1>
+
       {/* ── Plain-language posture status (operator layer) ── */}
       <PostureStatusBanner riskLevel={liveStatus.riskLevel} active={isActive} currentTask={liveStatus.currentTask} />
 
@@ -230,6 +234,7 @@ export default function LiveMonitoring() {
             workerName={session.workerName}
             task={liveStatus.currentTask}
             reconnecting={session.cameraReconnecting}
+            fps={liveStatus.fps}
             onCaptureReady={registerCapture}
           />
           <TelemetrySidebar
@@ -385,12 +390,17 @@ function TelemetrySidebar({
   onLog?: (note: string, category: string) => void;
   onOverride?: (level: string, reason: string) => void;
 }) {
+  // A session can be "active" while not a single frame has been analysed yet
+  // (camera still opening, or a stalled feed). In that state the gauge and
+  // confidence tiles must not claim a real 0/LOW reading or "0% confidence"
+  // — show an explicit "no data yet" state instead.
+  const hasFrames = (session.framesAnalyzed ?? 0) > 0;
   return (
     <aside className="rounded border border-outline-variant bg-surface-container-low p-md space-y-md">
-      <RiskGauge liveStatus={liveStatus} active={active} />
+      <RiskGauge liveStatus={liveStatus} active={active} hasFrames={hasFrames} />
 
       {/* ── System Confidence — trust signal for the EHS manager ── */}
-      <SystemConfidenceTile contextSnapshot={contextSnapshot} liveStatus={liveStatus} active={active} />
+      <SystemConfidenceTile contextSnapshot={contextSnapshot} liveStatus={liveStatus} active={active} hasFrames={hasFrames} />
 
       {/* ── Risk Trajectory — temporal risk patterns ── */}
       <RiskTrajectoryTile contextSnapshot={contextSnapshot} active={active} />
@@ -759,7 +769,7 @@ function CameraFramingNote({ snapshot, unavailableFeatures, active }: { snapshot
   );
 }
 
-function SystemConfidenceTile({ contextSnapshot, liveStatus, active }: { contextSnapshot: ContextSnapshot | null; liveStatus: LiveStatus; active: boolean }) {
+function SystemConfidenceTile({ contextSnapshot, liveStatus, active, hasFrames = true }: { contextSnapshot: ContextSnapshot | null; liveStatus: LiveStatus; active: boolean; hasFrames?: boolean }) {
   const band = contextSnapshot?.confidence_band ?? 'medium';
   const cameraConf = liveStatus.confidence ?? null;
   const nUnavailable = contextSnapshot?.unavailable_features?.length ?? 0;
@@ -788,11 +798,13 @@ function SystemConfidenceTile({ contextSnapshot, liveStatus, active }: { context
   };
   const cfg = bandConfig[band] || bandConfig.medium;
 
-  if (!active) {
+  if (!active || !hasFrames) {
     return (
       <div className="rounded border border-white/10 bg-white/[0.03] p-sm">
         <p className="font-label-caps text-xs text-on-surface-variant uppercase tracking-widest">System Confidence</p>
-        <p className="text-sm text-on-surface-variant mt-0.5">Start monitoring to see confidence level.</p>
+        <p className="text-sm text-on-surface-variant mt-0.5">
+          {active ? 'No analysed frames yet — confidence appears once the camera streams.' : 'Start monitoring to see confidence level.'}
+        </p>
       </div>
     );
   }
@@ -821,7 +833,7 @@ function RiskTrajectoryTile({ contextSnapshot, active }: { contextSnapshot: Cont
     return (
       <div className="rounded border border-white/10 bg-white/[0.03] p-sm">
         <p className="font-label-caps text-xs text-on-surface-variant uppercase tracking-widest">Risk Trajectory</p>
-        <p className="text-sm text-on-surface-variant mt-0.5">Start monitoring to see risk trends.</p>
+        <p className="text-sm text-on-surface-variant mt-0.5">{active ? 'Waiting for risk data…' : 'Start monitoring to see risk trends.'}</p>
       </div>
     );
   }
@@ -896,7 +908,7 @@ function RiskTrajectoryTile({ contextSnapshot, active }: { contextSnapshot: Cont
   );
 }
 
-function RiskGauge({ liveStatus, active }: { liveStatus: LiveStatus; active: boolean }) {
+function RiskGauge({ liveStatus, active, hasFrames = true }: { liveStatus: LiveStatus; active: boolean; hasFrames?: boolean }) {
   const score = Math.max(0, Math.min(100, liveStatus.riskScore || 0));
   const color = liveStatus.riskLevel === 'high' ? '#fb7185' : liveStatus.riskLevel === 'moderate' ? '#f59e0b' : '#22c55e';
   const glowColor = liveStatus.riskLevel === 'high' ? 'rgba(251,113,133,0.4)' : liveStatus.riskLevel === 'moderate' ? 'rgba(245,158,11,0.4)' : 'rgba(34,197,94,0.4)';
@@ -904,17 +916,17 @@ function RiskGauge({ liveStatus, active }: { liveStatus: LiveStatus; active: boo
   const isHigh = liveStatus.riskLevel === 'high';
   const isMedium = liveStatus.riskLevel === 'moderate';
 
-  if (!active) {
+  if (!active || !hasFrames) {
     return (
       <div className="rounded-xl border border-white/10 bg-gradient-to-br from-white/[0.03] to-white/[0.01] p-lg text-center">
         <p className="font-label-caps text-xs text-on-surface-variant uppercase tracking-widest mb-md">Current Risk Index</p>
         <div className="mx-auto grid h-32 w-32 place-items-center rounded-full border-2 border-dashed border-white/10 bg-black/20">
           <div>
             <p className="font-label-mono text-3xl font-bold text-on-surface-variant">—</p>
-            <p className="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">Not measuring</p>
+            <p className="font-label-caps text-[10px] uppercase tracking-widest text-on-surface-variant">{active ? 'No data yet' : 'Not measuring'}</p>
           </div>
         </div>
-        <p className="mt-md text-xs italic text-on-surface-variant">Start monitoring to measure risk</p>
+        <p className="mt-md text-xs italic text-on-surface-variant">{active ? 'Waiting for the first analysed frame' : 'Start monitoring to measure risk'}</p>
       </div>
     );
   }
