@@ -172,6 +172,10 @@ export default function PricingPage() {
           <div className="flex items-center justify-center gap-3">
             <span className={`text-sm ${!annual ? 'text-white' : 'text-slate-500'}`}>Monthly</span>
             <button
+              type="button"
+              role="switch"
+              aria-checked={annual}
+              aria-label="Bill annually (save 20%)"
               onClick={() => setAnnual(!annual)}
               className={`relative w-12 h-6 rounded-full transition-colors ${annual ? 'bg-blue-600' : 'bg-slate-600'}`}
             >

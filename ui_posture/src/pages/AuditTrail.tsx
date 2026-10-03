@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Clock, AlertTriangle, CheckCircle, FileText, Download, Camera, User, Search, Filter, ArrowUpDown, Shield, Bell } from 'lucide-react';
-import { EmptyState } from '@/src/components/common';
+import { EmptyState, ErrorCard } from '@/src/components/common';
 import { getAuditLog } from '@/src/services/dashboardService';
 import type { AuditEntry } from '@/src/types/api';
 import { formatISTDateLong, formatISTTimeWithSeconds } from '@/src/utils/formatTime';
@@ -59,6 +59,8 @@ export default function AuditTrail() {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Retry re-runs the effect (refetch) instead of leaving the error card dead.
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -84,7 +86,7 @@ export default function AuditTrail() {
 
     fetchData();
     return () => { mounted = false; };
-  }, []);
+  }, [reloadKey]);
 
   const filtered = useMemo(() => {
     let list = [...entries];
@@ -196,7 +198,7 @@ export default function AuditTrail() {
   if (error) {
     return (
       <div className="p-lg">
-        <EmptyState title="Failed to load audit trail" message={error} />
+        <ErrorCard message={error} onRetry={() => setReloadKey((k) => k + 1)} />
       </div>
     );
   }

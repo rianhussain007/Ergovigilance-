@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router';
 import { FileText, Download, Search, Clock, Shield, TrendingUp, FileSpreadsheet, FileJson, ArrowLeft, AlertTriangle, CheckCircle, ChevronUp, Minus, ChevronDown, Loader2 } from 'lucide-react';
 import { useToast } from '@/src/hooks/useToast';
-import { EmptyState, SectionHeader, LoadingCard } from '@/src/components/common';
+import { useEndpointAccess } from '@/src/hooks/useCapability';
+import { EmptyState, ErrorCard, SectionHeader, LoadingCard } from '@/src/components/common';
 import { getReports, getSessionDetail, getRiskTrend, getSafetyReport, getWorkerTrends } from '@/src/services/dashboardService';
 import { apiFetch } from '@/src/services/apiClient';
 import { getStoredToken } from '@/src/auth/AuthContext';
@@ -83,6 +84,11 @@ export default function ReportsPage() {
   const [digestList, setDigestList] = useState<{ filename: string; generated_at: string; summary: { session_count: number } }[]>([]);
   const [loadingDigest, setLoadingDigest] = useState(false);
   const { addToast } = useToast();
+  // /reports is open to every role, but the risk digest beside it is
+  // supervisor+ (GET) and safety-manager+ (POST). Operators used to mount this
+  // page and immediately collect two 403s (audit F-UX-03).
+  const canReadDigest = useEndpointAccess('GET /api/reports/digest');
+  const canGenerateDigest = useEndpointAccess('POST /api/reports/digest/generate');
 
   const fetchReports = useCallback(async () => {
     try {
@@ -113,10 +119,12 @@ export default function ReportsPage() {
   }, []);
 
   useEffect(() => {
+    if (!canReadDigest) return;
     fetchDigests();
-  }, [fetchDigests]);
+  }, [fetchDigests, canReadDigest]);
 
   const handleGenerateDigest = async () => {
+    if (!canGenerateDigest) return;
     setLoadingDigest(true);
     try {
       const res = await apiFetch('/api/reports/digest/generate', { method: 'POST' });
@@ -269,26 +277,41 @@ export default function ReportsPage() {
         <p className="text-body-sm text-slate-500 dark:text-on-surface-variant mt-xs">Generate, search, and download ergonomic reports</p>
       </div>
 
-      {/* Nightly Risk Digest */}
+      {/* Nightly Risk Digest — supervisor+ (read), safety manager+ (generate) */}
       <section className="bg-white dark:bg-surface-container border border-slate-200 dark:border-outline-variant rounded-2xl p-lg shadow-sm dark:shadow-none">
         <div className="flex items-center justify-between flex-wrap gap-md mb-md">
           <div className="flex items-center gap-sm">
             <FileText className="w-5 h-5 text-blue-600 dark:text-primary" />
             <div>
               <h2 className="text-body-md font-bold text-on-surface">Nightly Risk Digest</h2>
-              <p className="text-body-sm text-on-surface-variant mt-0.5">Zero-touch summary of the last 24 h — written automatically each night to outputs/reports/</p>
+              <p className="text-body-sm text-on-surface-variant mt-0.5">Zero-touch summary of the last 24 h — written automatically each night</p>
             </div>
           </div>
-          <button
-            onClick={handleGenerateDigest}
-            disabled={loadingDigest}
-            className="flex items-center gap-sm rounded-lg border border-primary/40 bg-primary/10 px-md py-sm text-body-sm font-bold text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
-          >
-            <FileText className="w-4 h-4" />
-            {loadingDigest ? 'Generating…' : 'Generate Now'}
-          </button>
+          {canGenerateDigest && (
+            <button
+              onClick={handleGenerateDigest}
+              disabled={loadingDigest}
+              className="flex items-center gap-sm rounded-lg border border-primary/40 bg-primary/10 px-md py-sm text-body-sm font-bold text-primary hover:bg-primary/20 transition-colors disabled:opacity-50"
+            >
+              <FileText className="w-4 h-4" />
+              {loadingDigest ? 'Generating…' : 'Generate Now'}
+            </button>
+          )}
         </div>
-        {digestSummary && (
+
+        {!canReadDigest && (
+          <p className="text-body-sm text-on-surface-variant" role="note">
+            Safety digests are available to supervisors, safety managers and admins. Your reports
+            and exports below are unaffected — ask a supervisor if you need a digest.
+          </p>
+        )}
+
+        {canReadDigest && !canGenerateDigest && (
+          <p className="text-body-sm text-on-surface-variant mb-md" role="note">
+            You can read saved digests; generating one needs a safety manager or admin account.
+          </p>
+        )}
+        {canReadDigest && digestSummary && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-md text-body-sm mb-md">
             <div>
               <span className="text-on-surface-variant">Sessions (24 h)</span>
@@ -312,7 +335,7 @@ export default function ReportsPage() {
             </div>
           </div>
         )}
-        {digestList.length > 0 && (
+        {canReadDigest && digestList.length > 0 && (
           <ul className="space-y-1">
             {digestList.slice(0, 5).map((d) => (
               <li key={d.filename} className="flex items-center justify-between text-body-sm border-t border-outline-variant/50 pt-1">
@@ -401,7 +424,7 @@ export default function ReportsPage() {
         {loading ? (
           <LoadingCard height="h-40" />
         ) : error ? (
-          <EmptyState title="Error loading reports" message={error} />
+          <ErrorCard message={error} onRetry={fetchReports} />
         ) : filtered.length === 0 ? (
           <EmptyState title="No reports found" message="Run a monitoring session to generate reports." />
         ) : (

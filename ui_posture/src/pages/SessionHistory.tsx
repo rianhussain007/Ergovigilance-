@@ -126,6 +126,9 @@ export default function SessionHistory() {
   const [sortKey, setSortKey] = useState<SortKey>('date');
   const [sortAsc, setSortAsc] = useState(false);
   const [page, setPage] = useState(1);
+  // Bumping this re-runs the list effect — retry must refetch, not reload the
+  // whole SPA (a reload threw away filters, scroll and open panels).
+  const [listReloadKey, setListReloadKey] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -157,7 +160,7 @@ export default function SessionHistory() {
       if (!cancelled) setSessionsLoading(false);
     });
     return () => { cancelled = true; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [listReloadKey]);
 
   const fetchDetail = useCallback(async (id: string) => {
     setDetailLoading(true);
@@ -187,9 +190,13 @@ export default function SessionHistory() {
   // was 98% MEDIUM with one stray HIGH frame should not render as red. Falls
   // back to the peak (highest_risk_level) for records predating the field.
   const sessionRiskLevel = useCallback((s: SessionRecord): string => {
+    // O1: sessions where nobody was ever detected carry "NO DATA" — never
+    // coerce them to LOW (green would misreport no data as all-clear).
     const dom = (s.risk_level || '').toUpperCase();
+    if (dom.replace(/[^A-Z]/g, '') === 'NODATA') return 'NO DATA';
     if (dom === 'HIGH' || dom === 'MEDIUM' || dom === 'LOW') return dom;
     const rl = (s.highest_risk_level || '').toUpperCase();
+    if (rl.replace(/[^A-Z]/g, '') === 'NODATA') return 'NO DATA';
     if (rl === 'HIGH' || rl === 'MEDIUM' || rl === 'LOW') return rl;
     const hr = (s.highestRisk || '').toLowerCase();
     if (hr.includes('high')) return 'HIGH';
@@ -240,7 +247,7 @@ export default function SessionHistory() {
   const shownStart = filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
   const shownEnd = Math.min(safePage * PAGE_SIZE, filtered.length);
 
-  if (sessionsError) return <div className="flex items-center justify-center h-full p-lg"><ErrorCard message={sessionsError} onRetry={() => window.location.reload()} /></div>;
+  if (sessionsError) return <div className="flex items-center justify-center h-full p-lg"><ErrorCard message={sessionsError} onRetry={() => setListReloadKey((k) => k + 1)} /></div>;
 
   return (
     <div className="p-lg space-y-lg pb-32">
@@ -342,7 +349,7 @@ export default function SessionHistory() {
                       </td>
                       <td className="px-lg py-md text-body-sm text-on-surface">{s.duration}</td>
                       <td className="px-lg py-md">
-                        <span className={`text-body-sm font-bold ${sessionRiskLevel(s) === 'HIGH' ? 'text-danger' : sessionRiskLevel(s) === 'MEDIUM' ? 'text-warning' : 'text-success'}`}>
+                        <span className={`text-body-sm font-bold ${sessionRiskLevel(s) === 'HIGH' ? 'text-danger' : sessionRiskLevel(s) === 'MEDIUM' ? 'text-warning' : sessionRiskLevel(s) === 'NO DATA' ? 'text-slate-400' : 'text-success'}`}>
                           {sessionRiskLevel(s)}
                         </span>
                       </td>
@@ -427,7 +434,7 @@ export default function SessionHistory() {
                 </div>
                 <div className="bg-surface-container-low border border-outline-variant rounded-lg p-md">
                   <p className="text-[10px] font-bold uppercase text-on-surface-variant tracking-wider">Highest Risk</p>
-                  <p className={`text-body-sm font-medium mt-xs ${detail.highest_risk_level === 'HIGH' ? 'text-red-400' : detail.highest_risk_level === 'MEDIUM' ? 'text-orange-400' : 'text-green-400'}`}>{detail.highest_risk_level}</p>
+                  <p className={`text-body-sm font-medium mt-xs ${detail.highest_risk_level === 'NO DATA' ? 'text-slate-400' : detail.highest_risk_level === 'HIGH' ? 'text-red-400' : detail.highest_risk_level === 'MEDIUM' ? 'text-orange-400' : 'text-green-400'}`}>{detail.highest_risk_level === 'NO DATA' ? 'No person detected' : detail.highest_risk_level}</p>
                   {detail.highest_risk_timestamp && <p className="text-[10px] text-outline mt-0.5">at {detail.highest_risk_timestamp}</p>}
                 </div>
               </div>

@@ -167,7 +167,12 @@ export default function SettingsPage() {
               </button>
             ))}
           </div>
-          <p className="text-[10px] text-on-surface-variant mt-sm">Operator-facing labels and posture guidance will appear in the selected language</p>
+          <p className="text-[10px] text-on-surface-variant mt-sm">
+            Coverage today: navigation labels and the live-monitoring screen, including the
+            worker-facing posture banner (125 strings, translated in all three languages). Reports,
+            alerts, emails and exported documents remain in English. Any missing string falls back
+            to English rather than showing a raw key.
+          </p>
         </SettingSection>
 
         {/* ── Monitoring Section ──────────────────────────────── */}

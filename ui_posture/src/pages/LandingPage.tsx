@@ -338,6 +338,7 @@ function InteractiveDemoSection() {
             <a href="#how-it-works" className="text-sm text-slate-400 hover:text-white transition-colors">How It Works</a>
             <a href="#deployment-options" className="text-sm text-slate-400 hover:text-white transition-colors">Deploy</a>
             <a href="#command-center" className="text-sm text-slate-400 hover:text-white transition-colors">Command Center</a>
+            <Link to="/validation" className="text-sm text-slate-400 hover:text-white transition-colors">Validation</Link>
             <Link to="/pricing" className="text-sm text-slate-400 hover:text-white transition-colors">Pricing</Link>
             <Link
               to="/request-pilot"
@@ -374,6 +375,7 @@ function InteractiveDemoSection() {
               <a href="#how-it-works" onClick={() => setMobileMenuOpen(false)} className="text-sm text-slate-400 hover:text-white transition-colors py-2">How It Works</a>
               <a href="#deployment-options" onClick={() => setMobileMenuOpen(false)} className="text-sm text-slate-400 hover:text-white transition-colors py-2">Deploy</a>
               <a href="#command-center" onClick={() => setMobileMenuOpen(false)} className="text-sm text-slate-400 hover:text-white transition-colors py-2">Command Center</a>
+              <Link to="/validation" onClick={() => setMobileMenuOpen(false)} className="text-sm text-slate-400 hover:text-white transition-colors py-2">Validation</Link>
               <Link to="/pricing" onClick={() => setMobileMenuOpen(false)} className="text-sm text-slate-400 hover:text-white transition-colors py-2">Pricing</Link>
               <div className="flex flex-col gap-2 pt-2 border-t border-white/5">
                 <button
@@ -908,7 +910,7 @@ function InteractiveDemoSection() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
               {[
                 { value: '33', label: 'Skeletal Landmarks', suffix: '' },
-                { value: '87', label: 'Ground-Truth Accuracy', suffix: '%' },
+                { value: '87', label: 'Assessor Agreement · LOW/MEDIUM', suffix: '%' },
                 { value: '5', label: 'Task Classes', suffix: '' },
                 { value: '4', label: 'Risk Assessment Methods', suffix: '' },
               ].map((stat) => (
@@ -921,7 +923,9 @@ function InteractiveDemoSection() {
             <p className="text-center text-[11px] text-slate-500 mt-6 max-w-2xl mx-auto leading-relaxed">
               Ground-truth figure: 87.6% agreement with human assessors on 500 labeled frames
               (LOW/MEDIUM risk). HIGH-risk and minority-task validation is ongoing — see the
-              Validation page for the full model card.
+              Validation page for the full model card. ErgoVigilance is a screening aid, not a
+              medical device: it flags ergonomic risk for review, it does not diagnose or treat
+              anyone.
             </p>
           </AnimatedSection>
         </div>
@@ -996,7 +1000,7 @@ function InteractiveDemoSection() {
             {[
               { version: 'v1.0.0', date: 'Sep 2026', title: 'Initial Release', items: ['34-page React dashboard', 'YOLO cloud core with RTSP ingestion', 'MediaPipe on-premise engine', 'RULA/REBA risk scoring', 'Real-time pose tracking', 'PDF/CSV report export', 'Worker management', 'Alert system with email/Slack'] },
               { version: 'v0.9.0', date: 'Aug 2026', title: 'Cloud Platform', items: ['YOLOv8-pose cloud inference', 'Multi-camera RTSP support', 'API key authentication', 'PostgreSQL persistent storage', 'Webhook alert delivery', 'Model versioning & rollback', 'Data retention policies', 'Public status page'] },
-              { version: 'v0.8.0', date: 'Aug 2026', title: 'ML Pipeline', items: ['10 training scripts', 'Risk classifier (88.6% F1)', 'Task classifier (86.4% F1)', '5-class task recognition', 'Feature extraction from COCO_17 keypoints', 'Synthetic data generation', 'Model comparison dashboard'] },
+              { version: 'v0.8.0', date: 'Aug 2026', title: 'ML Pipeline', items: ['10 training scripts', 'Risk classifier for the LOW/MEDIUM bands', 'Task classifier across 5 work classes', 'Feature extraction from COCO_17 keypoints', 'Synthetic data generation', 'Model comparison dashboard'] },
             ].map((release, i) => (
               <AnimatedSection key={release.version} delay={i * 100}>
                 <div className="bg-white/[0.03] border border-white/10 rounded-xl p-6 hover:border-white/15 transition-colors">

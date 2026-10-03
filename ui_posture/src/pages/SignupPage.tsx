@@ -1,7 +1,8 @@
 import { FormEvent, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router';
 import { Building2, Mail, Lock, User, Loader2, AlertTriangle, CheckCircle, Eye, EyeOff, ArrowRight } from 'lucide-react';
-import { useAuth } from '@/src/auth/AuthContext';
+import { useAuth, type AuthUser } from '@/src/auth/AuthContext';
+import { resetActivation } from '@/src/services/activation';
 import { IndustrialBackdrop } from '@/src/components/common';
 import Logo from '../components/common/Logo';
 
@@ -31,7 +32,7 @@ const COUNTRIES = [
 ];
 
 export default function SignupPage() {
-  const { user } = useAuth();
+  const { user, adoptSession } = useAuth();
   const navigate = useNavigate();
   const [orgName, setOrgName] = useState('');
   const [industry, setIndustry] = useState('Manufacturing');
@@ -90,10 +91,14 @@ export default function SignupPage() {
         throw new Error(data.detail || 'Signup failed. Please try again.');
       }
       const data = await res.json();
-      // Store token and redirect
-      localStorage.setItem('ergovigilance_token', data.token);
-      localStorage.setItem('ergovigilance_user', JSON.stringify(data.user));
-      localStorage.setItem('ergovigilance_onboarded', 'false');
+      // Adopt the returned session through AuthContext (the canonical
+      // `ergovigilance_auth` record). Writing legacy keys here used to leave
+      // the app state null, so the guard bounced the new admin back to /login.
+      adoptSession(data.token, data.user as AuthUser);
+      // A fresh organization must see first-run onboarding: clear the
+      // activation state a previous account left in this browser (audit
+      // F-UX-17 — this is the one activation store all journeys read).
+      resetActivation();
       navigate('/onboarding', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Signup failed.');
@@ -123,7 +128,7 @@ export default function SignupPage() {
             <div>
               <h1 className="text-headline-md font-bold text-slate-900 dark:text-on-surface">Create your account</h1>
               <p className="text-body-sm text-slate-500 dark:text-on-surface-variant mt-1">
-                Start your free pilot — 3 cameras, 50 workers, no credit card required.
+                Start your free pilot — 4 cameras, 50 workers, no credit card required.
               </p>
             </div>
           </div>
@@ -296,7 +301,7 @@ export default function SignupPage() {
         </form>
 
         <p className="mt-lg text-center text-[11px] text-slate-400 dark:text-on-surface-variant/60">
-          Free pilot · No credit card · 3 cameras · 50 workers · Local processing
+          Free pilot · No credit card · 4 cameras · 50 workers · Local processing
         </p>
       </main>
     </div>

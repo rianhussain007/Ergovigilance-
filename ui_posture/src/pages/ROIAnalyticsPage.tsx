@@ -29,6 +29,19 @@ interface ROIMetrics {
   }[];
 }
 
+/**
+ * Minimum dataset before this page is allowed to show a dollar figure
+ * (audit F-UX-16). With one or two sessions the "savings" are arithmetic on
+ * noise — the page used to headline a five-figure sum computed from an empty
+ * facility (0 hours monitored) instead of saying it did not know yet.
+ */
+export const MIN_SESSIONS_FOR_ROI = 10;
+export const MIN_HOURS_FOR_ROI = 5;
+
+export function hasEnoughRoiData(metrics: { total_sessions: number; total_hours: number }): boolean {
+  return metrics.total_sessions >= MIN_SESSIONS_FOR_ROI && metrics.total_hours >= MIN_HOURS_FOR_ROI;
+}
+
 export default function ROIAnalyticsPage() {
   const [metrics, setMetrics] = useState<ROIMetrics | null>(null);
   const [loading, setLoading] = useState(true);
@@ -110,6 +123,8 @@ export default function ROIAnalyticsPage() {
     );
   }
 
+  const roiReady = hasEnoughRoiData(metrics);
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 p-6">
       {/* Header */}
@@ -125,48 +140,71 @@ export default function ROIAnalyticsPage() {
         </div>
       </div>
 
-      {/* Total Savings Hero */}
-      <div className="rounded-xl border border-green-500/20 bg-gradient-to-br from-green-500/10 to-green-500/5 p-6">
-        <div className="flex items-center justify-between">
+      {/* Total Savings Hero — gated on a real dataset (audit F-UX-16) */}
+      <div
+        className={`rounded-xl border p-6 ${roiReady ? 'border-green-500/20 bg-gradient-to-br from-green-500/10 to-green-500/5' : 'border-amber-500/30 bg-amber-500/5'}`}
+        data-testid="roi-hero"
+      >
+        <div className="flex items-center justify-between gap-6">
           <div>
-            <p className="text-sm text-green-400/80">Estimated Annual Savings</p>
-            <p className="text-4xl font-bold text-green-400">${metrics.cost_savings.total.toLocaleString()}</p>
-            <p className="mt-1 text-sm text-slate-400">
-              Based on {metrics.total_sessions} sessions, {metrics.total_hours} hours monitored
-            </p>
+            {roiReady ? (
+              <>
+                <p className="text-sm text-green-400/80">Estimated Annual Savings</p>
+                <p className="text-4xl font-bold text-green-400">
+                  ${metrics.cost_savings.total.toLocaleString()}
+                </p>
+                <p className="mt-1 text-sm text-slate-400">
+                  Based on {metrics.total_sessions} sessions, {metrics.total_hours} hours monitored
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-bold text-amber-300">Not enough data for a savings estimate</p>
+                <p className="mt-1 max-w-xl text-sm text-slate-300">
+                  This facility has {metrics.total_sessions} of {MIN_SESSIONS_FOR_ROI} required
+                  sessions and {metrics.total_hours} of {MIN_HOURS_FOR_ROI} required monitored hours.
+                  Dollar figures stay hidden until there is enough real monitoring data for them to
+                  mean anything — the session and alert counts below are live either way.
+                </p>
+              </>
+            )}
           </div>
-          <div className="text-right">
-            <p className="text-sm text-slate-500">Risk Reduction</p>
-            <p className="text-3xl font-bold text-white">{metrics.risk_reduction_pct}%</p>
-            <p className="text-sm text-slate-400">from baseline</p>
-          </div>
+          {roiReady && (
+            <div className="text-right">
+              <p className="text-sm text-slate-500">Risk Reduction</p>
+              <p className="text-3xl font-bold text-white">{metrics.risk_reduction_pct}%</p>
+              <p className="text-sm text-slate-400">from baseline</p>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Savings Breakdown */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <SavingsCard
-          icon={Shield}
-          label="Injury Prevention"
-          amount={metrics.cost_savings.injury_prevention}
-          detail={`${Math.round(metrics.cost_savings.injury_prevention / 42000)} injuries prevented`}
-          color="red"
-        />
-        <SavingsCard
-          icon={TrendingUp}
-          label="Productivity Gain"
-          amount={metrics.cost_savings.productivity_gain}
-          detail={`${metrics.total_hours} hours monitored`}
-          color="blue"
-        />
-        <SavingsCard
-          icon={CheckCircle2}
-          label="Compliance Savings"
-          amount={metrics.cost_savings.compliance_savings}
-          detail={`${metrics.compliance.osha_violations_prevented} violations prevented`}
-          color="green"
-        />
-      </div>
+      {/* Savings Breakdown — planning estimates, only with enough data */}
+      {roiReady && (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <SavingsCard
+            icon={Shield}
+            label="Injury Prevention"
+            amount={metrics.cost_savings.injury_prevention}
+            detail={`${Math.round(metrics.cost_savings.injury_prevention / 42000)} injuries prevented`}
+            color="red"
+          />
+          <SavingsCard
+            icon={TrendingUp}
+            label="Productivity Gain"
+            amount={metrics.cost_savings.productivity_gain}
+            detail={`${metrics.total_hours} hours monitored`}
+            color="blue"
+          />
+          <SavingsCard
+            icon={CheckCircle2}
+            label="Compliance Savings"
+            amount={metrics.cost_savings.compliance_savings}
+            detail={`${metrics.compliance.osha_violations_prevented} violations prevented`}
+            color="green"
+          />
+        </div>
+      )}
 
       {/* Key Metrics Grid */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -196,20 +234,28 @@ export default function ROIAnalyticsPage() {
         <p className="mt-3 text-center text-xs text-slate-500">
           Lower is better — target: below 40 (LOW risk)
         </p>
+        <p className="mt-1 text-center text-xs text-amber-300/80">
+          The weekly split is a fixed illustration until four weeks of sessions exist — only the most
+          recent week&rsquo;s score is measured from your data.
+        </p>
       </div>
 
-      {/* Compliance Score */}
-      <div className="rounded-xl border border-white/10 bg-white/5 p-6">
-        <h2 className="mb-4 text-lg font-semibold text-white">Compliance Readiness</h2>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <ComplianceGauge label="Documentation" score={metrics.compliance.documentation_score} />
-          <ComplianceGauge label="Audit Readiness" score={metrics.compliance.audit_readiness} />
-          <ComplianceGauge label="OSHA Compliance" score={Math.min(100, 80 + metrics.compliance.osha_violations_prevented * 5)} />
+      {/* Compliance Score — scores are derived from session volume, so they are
+          withheld until the same minimum dataset is met. */}
+      {roiReady && (
+        <div className="rounded-xl border border-white/10 bg-white/5 p-6">
+          <h2 className="mb-4 text-lg font-semibold text-white">Compliance Readiness</h2>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <ComplianceGauge label="Documentation" score={metrics.compliance.documentation_score} />
+            <ComplianceGauge label="Audit Readiness" score={metrics.compliance.audit_readiness} />
+            <ComplianceGauge label="OSHA Compliance" score={Math.min(100, 80 + metrics.compliance.osha_violations_prevented * 5)} />
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Business Case */}
-      <div className="rounded-xl border border-white/10 bg-white/5 p-6">
+      {/* Business Case — planning figures, same data gate */}
+      {roiReady && (
+        <div className="rounded-xl border border-white/10 bg-white/5 p-6">
         <h2 className="mb-4 text-lg font-semibold text-white">Business Case Summary</h2>
         <div className="space-y-3 text-sm text-slate-300">
           <div className="flex items-start gap-3">
@@ -237,12 +283,15 @@ export default function ROIAnalyticsPage() {
           </div>
           <p className="border-t border-white/10 pt-3 text-xs text-slate-400">
             Estimates only — planning figures, not measured outcomes: $42,000 is a
-            published industry benchmark for a musculoskeletal-disorder claim, and
-            the 15%-of-high-risk-events conversion is a heuristic. ErgoVigilance is
-            a screening aid and does not guarantee injury prevention.
+            published industry benchmark for a musculoskeletal-disorder claim, with
+            effective date 2024 (BLS/OSHA employer cost figures); the
+            15%-of-high-risk-events conversion is a heuristic, and the productivity
+            figure assumes $2.50 per monitored hour. ErgoVigilance is a screening aid
+            and does not guarantee injury prevention.
           </p>
         </div>
-      </div>
+        </div>
+      )}
     </div>
   );
 }

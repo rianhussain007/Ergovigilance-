@@ -3,6 +3,7 @@ import { Server, Database, Camera, Users, Settings, Activity, AlertTriangle, Ref
 import { getDeployment } from '@/src/services/dashboardService';
 import { apiFetch } from '@/src/services/apiClient';
 import { ErrorCard, LoadingCard } from '@/src/components/common';
+import { useVisibilityAwareInterval } from '@/src/hooks/usePolling';
 import type { DeploymentMetrics } from '@/src/types/api';
 
 /* ── Types ────────────────────────────────────────────────────────── */
@@ -106,13 +107,16 @@ export default function DeploymentCenter() {
     fetchData();
     fetchCameras();
     fetchAudit();
-    const interval = setInterval(() => {
-      fetchData();
-      fetchCameras();
-      fetchAudit();
-    }, 15000);
-    return () => { mountedRef.current = false; clearInterval(interval); };
+    return () => { mountedRef.current = false; };
   }, [fetchData, fetchCameras, fetchAudit]);
+
+  // 15s refresh that pauses while the tab is hidden (audit F-UX-04) — a
+  // deployment console left open in a background tab no longer polls forever.
+  useVisibilityAwareInterval(() => {
+    fetchData();
+    fetchCameras();
+    fetchAudit();
+  }, 15_000);
 
   // Auto-scroll audit log
   useEffect(() => {

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
 import { getStoredToken } from '@/src/auth/AuthContext';
 import { useStreamToken } from '@/src/hooks/useStreamToken';
+import { usePolledResource } from '@/src/hooks/usePolling';
 import { apiFetch } from '@/src/services/apiClient';
 import { CheckCircle2, XCircle, Loader2, Video, Sun, User, ScanFace, Camera as CameraIcon, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router';
@@ -47,37 +47,38 @@ function CheckRow({ ok, label, detail }: { ok: boolean; label: string; detail?: 
 
 export default function SetupWizardPage() {
   const navigate = useNavigate();
-  const [status, setStatus] = useState<SetupStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // 2s poll of the camera checks while this wizard is open (audit F-UX-04).
+  // Timing, timeout and hidden-tab pausing come from the shared primitive; the
+  // 403 branch keeps the role-specific guidance instead of a bare status code.
+  const setup = usePolledResource<SetupStatus | null>(
+    async () => {
+      const res = await apiFetch('/api/setup/status');
+      if (res.status === 403) {
+        // Reachable by operators, but /api/setup/status is supervisor+.
+        throw new Error(
+          'Camera checks need a supervisor, safety manager or admin account. Ask one of them to run this wizard — or continue to the dashboard; monitoring is unaffected.',
+        );
+      }
+      if (!res.ok) {
+        throw new Error(`Setup status unavailable (HTTP ${res.status}) — retrying every 2 seconds.`);
+      }
+      return (await res.json()) as SetupStatus;
+    },
+    { initial: null, intervalMs: 2000, label: 'Setup status' },
+  );
+  const status = setup.data;
+  const loading = setup.loading;
+  const error =
+    setup.error ??
+    (setup.degraded
+      ? 'Setup status unavailable — retrying every 2 seconds. The checks below may be out of date.'
+      : null);
   // Scoped stream token for the MJPEG <img> (shared hook). Falls back to
   // the legacy JWT path below when minting fails — never a blank feed
   // without explanation (the old code always sent the API JWT, which the
   // backend rejects with 401).
   const streamToken = useStreamToken(true);
   const token = getStoredToken();
-
-  useEffect(() => {
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const res = await apiFetch('/api/setup/status');
-        if (!res.ok) throw new Error(`Setup status failed (${res.status})`);
-        const data = await res.json();
-        if (!cancelled) {
-          setStatus(data);
-          setError(null);
-        }
-      } catch (err) {
-        if (!cancelled) setError(err instanceof Error ? err.message : 'Cannot reach the backend.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    poll();
-    const id = setInterval(poll, 2000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, []);
 
   const checks = status?.checks;
   const allPass = checks && Object.values(checks).every(Boolean);

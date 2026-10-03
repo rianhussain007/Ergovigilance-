@@ -14,6 +14,7 @@ interface ModelMetrics {
 interface GtEvaluation {
   accuracy?: number;
   overall?: { accuracy?: number };
+  n_samples?: number;
   n_labeled_frames?: number;
   [key: string]: unknown;
 }
@@ -55,6 +56,7 @@ export default function ValidationPage() {
     ? ((gt.accuracy ?? gt.overall?.accuracy ?? 0) * 100).toFixed(1)
     : null;
   const headline = gtAccuracy ? `${gtAccuracy}%` : heldOutAccuracy ? `${heldOutAccuracy}%` : '—';
+  const gtFrames = gt?.n_samples ?? gt?.n_labeled_frames ?? 500;
   const trainRows = metrics?.train_rows ?? 0;
 
   return (
@@ -90,15 +92,23 @@ export default function ValidationPage() {
               <p className="text-display-lg font-extrabold text-primary">{headline}</p>
               <p className="text-body-sm text-on-surface-variant">
                 {gtAccuracy
-                  ? 'overall accuracy on human-labeled ground-truth frames'
+                  ? `agreement with human assessors on ${gtFrames} labeled frames`
                   : 'held-out test-split accuracy on our training data'}
               </p>
+              {gtAccuracy ? (
+                <p className="text-body-sm text-on-surface-variant mt-xs">
+                  Scope: LOW/MEDIUM risk only — HIGH risk is not yet validated. Single-site
+                  evaluation. Screening aid, not a medical device.
+                </p>
+              ) : null}
             </div>
             <div className="flex-1 min-w-[260px]">
               {gtAccuracy ? (
                 <p className="text-body-sm text-on-surface-variant">
                   This number comes from frames labeled by a human against the same scoring the
-                  live engine uses, then evaluated by a model it has never seen.
+                  live engine uses, then evaluated by a model it has never seen. It measures
+                  agreement on LOW/MEDIUM risk decisions; HIGH risk decisions are not yet
+                  validated, and the data comes from a single site.
                 </p>
               ) : (
                 <p className="text-body-sm text-on-surface-variant">

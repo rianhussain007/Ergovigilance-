@@ -109,8 +109,9 @@ export default function RequestPilot() {
 
         <form onSubmit={handleSubmit} className="bg-surface-container border border-outline-variant rounded-xl p-lg space-y-6">
           <div>
-            <label className="block text-body-sm font-medium text-on-surface mb-2">Company Name</label>
+            <label htmlFor="pilot-companyName" className="block text-body-sm font-medium text-on-surface mb-2">Company Name</label>
             <input
+              id="pilot-companyName"
               type="text"
               name="companyName"
               value={formData.companyName}
@@ -121,8 +122,9 @@ export default function RequestPilot() {
             />
           </div>
           <div>
-            <label className="block text-body-sm font-medium text-on-surface mb-2">Contact Name</label>
+            <label htmlFor="pilot-contactName" className="block text-body-sm font-medium text-on-surface mb-2">Contact Name</label>
             <input
+              id="pilot-contactName"
               type="text"
               name="contactName"
               value={formData.contactName}
@@ -133,8 +135,9 @@ export default function RequestPilot() {
             />
           </div>
           <div>
-            <label className="block text-body-sm font-medium text-on-surface mb-2">Email</label>
+            <label htmlFor="pilot-email" className="block text-body-sm font-medium text-on-surface mb-2">Email</label>
             <input
+              id="pilot-email"
               type="email"
               name="email"
               value={formData.email}
@@ -145,8 +148,9 @@ export default function RequestPilot() {
             />
           </div>
           <div>
-            <label className="block text-body-sm font-medium text-on-surface mb-2">Role</label>
+            <label htmlFor="pilot-role" className="block text-body-sm font-medium text-on-surface mb-2">Role</label>
             <select
+              id="pilot-role"
               name="role"
               value={formData.role}
               onChange={handleChange}
@@ -160,8 +164,9 @@ export default function RequestPilot() {
             </select>
           </div>
           <div>
-            <label className="block text-body-sm font-medium text-on-surface mb-2">Number of Stations/Workers</label>
+            <label htmlFor="pilot-numStations" className="block text-body-sm font-medium text-on-surface mb-2">Number of Stations/Workers</label>
             <input
+              id="pilot-numStations"
               type="text"
               name="numStations"
               value={formData.numStations}
@@ -171,8 +176,9 @@ export default function RequestPilot() {
             />
           </div>
           <div>
-            <label className="block text-body-sm font-medium text-on-surface mb-2">Message (Optional)</label>
+            <label htmlFor="pilot-message" className="block text-body-sm font-medium text-on-surface mb-2">Message (Optional)</label>
             <textarea
+              id="pilot-message"
               name="message"
               value={formData.message}
               onChange={handleChange}
