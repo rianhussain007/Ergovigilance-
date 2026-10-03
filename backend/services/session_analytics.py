@@ -154,10 +154,14 @@ def _build_session_payload(
     alerts_data: Dict | None = None,
 ) -> Dict:
     """Build the canonical saved-session JSON payload from an analytics summary."""
+    no_person = summary["total_frames"] == 0
     payload = {
         "session_timestamp": session_timestamp,
         "session_duration_seconds": summary["session_duration_seconds"],
         "total_frames": summary["total_frames"],
+        # Explicit flag so consumers can tell a "ran but nobody was in frame"
+        # stub apart from a real analyzed session (O1: zero-person sessions).
+        "no_person_detected": no_person,
         "risk_percentages": summary["risk_percentages"],
         "most_frequent_issue": summary["most_frequent_issue"],
         "most_frequent_issue_count": summary["most_frequent_issue_count"],
@@ -184,8 +188,18 @@ def save_session_summary(
     session_timestamp: str | None = None,
     alerts_data: Dict | None = None,
     session_id: str | None = None,
+    allow_empty: bool = False,
 ) -> str | None:
-    if summary["total_frames"] == 0:
+    """Persist a session summary. Returns the path written, or None.
+
+    A session where nobody was ever detected (``total_frames == 0``) is
+    normally NOT written — that is still the default for callers that treat
+    zero frames as "nothing happened" (e.g. checkpointing). ``allow_empty=True``
+    (used by ``LiveMonitoringService.stop_session``) persists it as an explicit
+    ``no_person_detected`` stub so a real, empty shift still shows up in
+    session history instead of vanishing.
+    """
+    if summary["total_frames"] == 0 and not allow_empty:
         return None
 
     sessions_dir = Path(sessions_dir)

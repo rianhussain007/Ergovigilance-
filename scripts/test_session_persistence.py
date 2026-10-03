@@ -115,12 +115,31 @@ with tempfile.TemporaryDirectory() as tmp:
 
 
 # ---------------------------------------------------------------------------
-# 5.  Zero-frame summaries are not persisted
+# 5.  Zero-frame summaries: skipped by default, persisted as a stub on request
 # ---------------------------------------------------------------------------
 with tempfile.TemporaryDirectory() as tmp:
     path = save_session_summary(make_summary(total_frames=0), tmp)
-    check("zero-frame returns None", path, None)
-    check("zero-frame writes no file", len(list(Path(tmp).glob("session_*.json"))), 0)
+    check("zero-frame returns None (default)", path, None)
+    check("zero-frame writes no file (default)", len(list(Path(tmp).glob("session_*.json"))), 0)
+
+# O1: a session that ran but never saw a person must still show up in history.
+# ``allow_empty=True`` (used by stop_session) persists an explicit stub.
+with tempfile.TemporaryDirectory() as tmp:
+    path = save_session_summary(
+        make_summary(total_frames=0), tmp,
+        session_timestamp="20260703_000000", allow_empty=True,
+    )
+    check("allow_empty zero-frame returns a path", isinstance(path, str) and Path(path).exists(), True)
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    check("stub total_frames", data["total_frames"], 0)
+    check("stub flagged no_person_detected", data["no_person_detected"], True)
+    check("stub indexed", (Path(tmp) / "session_index.csv").exists(), True)
+
+# Non-empty sessions must never be flagged as no-person.
+with tempfile.TemporaryDirectory() as tmp:
+    path = save_session_summary(make_summary(), tmp, allow_empty=True)
+    data = json.loads(Path(path).read_text(encoding="utf-8"))
+    check("real session not flagged", data["no_person_detected"], False)
 
 
 # ---------------------------------------------------------------------------

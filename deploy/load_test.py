@@ -17,6 +17,7 @@ Requires: pip install aiohttp
 
 import asyncio
 import aiohttp
+import sys
 import time
 import json
 import argparse
@@ -33,6 +34,12 @@ class TestResults:
     errors: List[str] = field(default_factory=list)
     start_time: float = 0
     end_time: float = 0
+    # Worker accounting. A worker that cannot log in contributes no traffic,
+    # so a run that silently drops workers must never be quoted as N users
+    # (2026-09-28: the per-IP auth throttle admitted 10 of 20 logins and the
+    # report still said "20 users, 0 failed").
+    workers_started: int = 0
+    workers_authenticated: int = 0
 
     @property
     def duration(self) -> float:
@@ -68,6 +75,7 @@ class TestResults:
   ErgoVigilance Load Test Results
 ═══════════════════════════════════════════════════════════
   Duration:       {self.duration:.1f}s
+  Users:          {self.workers_authenticated}/{self.workers_started} authenticated
   Total Requests: {self.total_requests}
   Successful:     {self.successful} ({self.successful/max(self.total_requests,1)*100:.1f}%)
   Failed:         {self.failed} ({self.failed/max(self.total_requests,1)*100:.1f}%)
@@ -80,16 +88,22 @@ class TestResults:
 """
 
 
-async def login(session: aiohttp.ClientSession, url: str) -> str:
-    """Login and return JWT token."""
-    async with session.post(
-        f"{url}/api/auth/login",
-        json={"email": "admin@example.local", "password": "AdminPass123!"},
-    ) as resp:
-        if resp.status == 200:
-            data = await resp.json()
-            return data.get("token", "")
-    return ""
+async def login(session: aiohttp.ClientSession, url: str) -> tuple[str, str]:
+    """Login and return (JWT token, failure reason). Token is '' on failure."""
+    try:
+        async with session.post(
+            f"{url}/api/auth/login",
+            json={"email": "admin@example.local", "password": "AdminPass123!"},
+            timeout=aiohttp.ClientTimeout(total=10),
+        ) as resp:
+            if resp.status == 200:
+                data = await resp.json()
+                token = data.get("token", "")
+                return (token, "") if token else ("", "HTTP 200 without a token")
+            body = (await resp.text())[:100].replace("\n", " ")
+            return "", f"HTTP {resp.status} {body}"
+    except Exception as exc:
+        return "", f"{type(exc).__name__}: {str(exc)[:100]}"
 
 
 async def test_endpoint(
@@ -130,10 +144,11 @@ async def worker(
 ):
     """Simulate a single user session."""
     async with aiohttp.ClientSession() as session:
-        token = await login(session, url)
+        token, failure = await login(session, url)
         if not token:
-            results.errors.append(f"Worker {worker_id}: Login failed")
+            results.errors.append(f"Worker {worker_id}: login failed — {failure}")
             return
+        results.workers_authenticated += 1
 
         end_time = time.time() + duration
         endpoints = [
@@ -158,7 +173,7 @@ async def main(url: str, num_users: int, duration: float):
     print(f"\nStarting load test: {num_users} users for {duration}s")
     print(f"Target: {url}")
 
-    results = TestResults(start_time=time.time())
+    results = TestResults(start_time=time.time(), workers_started=num_users)
 
     # Verify target is reachable
     async with aiohttp.ClientSession() as session:
@@ -181,6 +196,8 @@ async def main(url: str, num_users: int, duration: float):
     report = {
         "url": url,
         "users": num_users,
+        "workers_started": results.workers_started,
+        "workers_authenticated": results.workers_authenticated,
         "duration": duration,
         "total_requests": results.total_requests,
         "successful": results.successful,
@@ -198,6 +215,16 @@ async def main(url: str, num_users: int, duration: float):
 
 
 if __name__ == "__main__":
+    # The summary uses box-drawing/check glyphs, and a Windows console defaults to
+    # cp1252 — printing it raised UnicodeEncodeError *after* the whole test had
+    # run, so the run was lost and the qualification harness saw exit 1
+    # (found 2026-09-28). Reconfigure instead of stripping the characters.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
     parser = argparse.ArgumentParser(description="ErgoVigilance Load Test")
     parser.add_argument("--url", default="http://localhost:8001", help="API URL")
     parser.add_argument("--users", type=int, default=10, help="Number of concurrent users")
