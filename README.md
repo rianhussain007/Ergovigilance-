@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://github.com/rianhussain007/Ergovigilance-/actions/workflows/ci.yml"><img src="https://github.com/rianhussain007/Ergovigilance-/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <img src="https://img.shields.io/badge/TRL-6%20closed-blue" alt="TRL-6 closed" />
-  <img src="https://img.shields.io/badge/tests-754%20passing-brightgreen" alt="754 tests passing" />
+  <img src="https://img.shields.io/badge/tests-765%20passing-brightgreen" alt="765 tests passing" />
   <img src="https://img.shields.io/badge/Python-3.13-3776AB" alt="Python 3.13" />
   <img src="https://img.shields.io/badge/React-19-61DAFB" alt="React 19" />
 </p>
@@ -237,7 +237,7 @@ posture_analysis/
 │   ├── disk_guard.py           #   Free-space low-watermark guard
 │   ├── training/               #   10 training scripts
 │   ├── Dockerfile              #   GPU + CPU support
-│   └── tests/                  #   170 tests (all passing)
+│   └── tests/                  #   181 tests (all passing)
 ├── ui_posture/                 # React 19 SPA (40 routes)
 │   ├── src/
 │   │   ├── pages/              #   Route pages (lazy-loaded)
@@ -283,7 +283,7 @@ See `backend_api/.env.production.example` for the full reference.
 # Backend (478 tests)
 cd backend_api && pytest -q
 
-# Cloud core (170 tests)
+# Cloud core (181 tests)
 python -m pytest yolo_cloud/tests -q
 
 # Frontend (106 vitest) + typecheck + build

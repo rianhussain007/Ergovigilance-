@@ -38,6 +38,7 @@ const ApiDocsPage = lazy(() => import('./pages/ApiDocsPage'));
 const CloudCamerasPage = lazy(() => import('./pages/CloudCamerasPage'));
 const CloudSettingsPage = lazy(() => import('./pages/CloudSettingsPage'));
 const PricingPage = lazy(() => import('./pages/PricingPage'));
+const LegalPage = lazy(() => import('./pages/LegalPage'));
 const ModelDashboardPage = lazy(() => import('./pages/ModelDashboardPage'));
 const YoloDemoPage = lazy(() => import('./pages/YoloDemoPage'));
 const ROIAnalyticsPage = lazy(() => import('./pages/ROIAnalyticsPage'));
@@ -50,6 +51,7 @@ const WebCamDemo = lazy(() => import('./pages/WebCamDemo'));
 const ModelCardPage = lazy(() => import('./pages/ModelCardPage'));
 const ConsentPage = lazy(() => import('./pages/ConsentPage'));
 const PilotChecklistPage = lazy(() => import('./pages/PilotChecklistPage'));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 
 function HomeRoute() {
   const { user } = useAuth();
@@ -118,8 +120,12 @@ export default function App() {
               <Route path="/pilot-checklist" element={<PilotChecklistPage />} />
               <Route path="/onboarding" element={<OnboardingChecklistPage />} />
               <Route path="/consent" element={<ConsentPage />} />
+              {/* Catch-all: unknown URLs get an in-shell 404 instead of a
+                  blank screen. Explicit routes above always win the match. */}
+              <Route path="*" element={<NotFoundPage />} />
             </Route>
             <Route path="/pricing" element={<PricingPage />} />
+            <Route path="/legal" element={<LegalPage />} />
             <Route path="/status" element={<StatusPage />} />
           </Routes>
         </AppSuspense>

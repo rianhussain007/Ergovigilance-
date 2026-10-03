@@ -219,6 +219,21 @@ a, button, [role="button"], input, select, textarea {
 
 .animate-fade-in { animation: fadeIn 0.2s ease-out; }
 
+/* ── Reduced motion (WCAG 2.3.3) ─────────────────────────────────────
+   The app leans on entrance/stagger/shimmer/pulse animations and spring
+   transitions. Users who ask their OS for less motion get the same UI with
+   animation effectively removed — state changes still happen, instantly. */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
 /* ── Card hover lift effect — apply via utility class ── */
 .card-hover {
     transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
