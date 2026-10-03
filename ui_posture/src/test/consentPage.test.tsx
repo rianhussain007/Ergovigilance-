@@ -137,22 +137,35 @@ describe('consent page interactions', () => {
     await waitFor(() => expect(postedUrls(mock, '/deny')).toContain('/api/consent/worker-consents/worker-001/deny'));
   });
 
-  it('withdraws only after confirmation, and for the chosen worker', async () => {
+  it('withdraws only after in-app confirmation, and for the chosen worker', async () => {
+    // window.confirm was replaced by a real dialog (ux_guards rule
+    // confirm-dialog): unstyleable, blockable in kiosk shells, and it gave no
+    // record context. The contract is the same — nothing is sent unless the
+    // user confirms, and the dialog names the worker it will affect.
     const mock = stubFetch();
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const user = userEvent.setup();
     renderConsentPage();
 
     await screen.findByText('Rohan Mehta');
     await user.click(screen.getByRole('button', { name: 'Withdraw consent for Rohan Mehta' }));
 
-    await waitFor(() => expect(confirmSpy).toHaveBeenCalled());
-    // Cancelled: nothing was sent.
+    const dialog = await screen.findByRole('dialog', { name: /withdraw consent\?/i });
+    expect(dialog).toHaveTextContent(/Rohan Mehta/);
+
+    // Cancel: nothing was sent.
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(postedUrls(mock, '/withdraw')).toEqual([]);
 
-    confirmSpy.mockReturnValue(true);
+    // Confirm: exactly the chosen worker's withdrawal is posted.
     await user.click(screen.getByRole('button', { name: 'Withdraw consent for Rohan Mehta' }));
-    await waitFor(() => expect(postedUrls(mock, '/withdraw')).toContain('/api/consent/worker-consents/worker-002/withdraw'));
+    await screen.findByRole('dialog', { name: /withdraw consent\?/i });
+    await user.click(screen.getByRole('button', { name: 'Withdraw consent' }));
+    await waitFor(() =>
+      expect(postedUrls(mock, '/withdraw')).toContain(
+        '/api/consent/worker-consents/worker-002/withdraw',
+      ),
+    );
   });
 
   it('filters the list by status', async () => {

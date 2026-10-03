@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router';
 import {
   Camera, Radio, BarChart3, CheckCircle2, ChevronRight, ChevronLeft,
   Play, AlertTriangle, Brain, Shield, Eye, ArrowRight, X, Loader2
 } from 'lucide-react';
 import { useAuth } from '@/src/auth/AuthContext';
+import { completeActivation, markActivationStep } from '@/src/services/activation';
+import { usePolledResource } from '@/src/hooks/usePolling';
 import { apiFetch } from '@/src/services/apiClient';
 
 /* ── Types ────────────────────────────────────────────────────────── */
@@ -70,49 +72,28 @@ export default function OnboardingFlow({ onComplete }: { onComplete: () => void 
   const navigate = useNavigate();
   const { user } = useAuth();
   const [step, setStep] = useState(0);
-  const [cameraStatus, setCameraStatus] = useState<SetupStatus | null>(null);
-  const [loading, setLoading] = useState(true);
   const [sessionStarted, setSessionStarted] = useState(false);
 
-  // Poll camera status when on camera step — supervisors and above only.
-  // /api/setup/status is role-gated (supervisor/safety_mgr/admin); calling
-  // it as operator 403s on every poll and spams the console.
+  // Poll camera status only while the camera step is on screen, and only for
+  // supervisors and above — /api/setup/status is role-gated, so polling it as
+  // an operator 403s on every tick and spams the console. One polled resource
+  // replaces the old "initial load + setInterval" pair (audit F-UX-04).
   const canProbeSetup = !!user && user.role !== 'operator';
-  useEffect(() => {
-    if (step !== 1 || !canProbeSetup) return; // Only poll on camera step
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const res = await apiFetch('/api/setup/status');
-        if (res.ok) {
-          const data = await res.json();
-          if (!cancelled) setCameraStatus(data);
-        }
-      } catch { /* ignore */ }
-    };
-    poll();
-    const id = setInterval(poll, 2000);
-    return () => { cancelled = true; clearInterval(id); };
-  }, [step, canProbeSetup]);
-
-  // Initial status load (same role gate as the poll above).
-  useEffect(() => {
-    if (!canProbeSetup) {
-      setLoading(false);
-      return;
-    }
-    const load = async () => {
-      try {
-        const res = await apiFetch('/api/setup/status');
-        if (res.ok) {
-          const data = await res.json();
-          setCameraStatus(data);
-        }
-      } catch { /* ignore */ }
-      setLoading(false);
-    };
-    load();
-  }, [canProbeSetup]);
+  const setup = usePolledResource<SetupStatus | null>(
+    async () => {
+      const res = await apiFetch('/api/setup/status');
+      if (!res.ok) throw new Error(`Camera checks unavailable (HTTP ${res.status})`);
+      return (await res.json()) as SetupStatus;
+    },
+    {
+      initial: null,
+      intervalMs: 2000,
+      enabled: step === 1 && canProbeSetup,
+      label: 'Camera checks',
+    },
+  );
+  const cameraStatus = setup.data;
+  const loading = setup.loading || (setup.data === null && !setup.error);
 
   const checks = cameraStatus?.checks;
   const allChecksPass = checks && Object.values(checks).every(Boolean);
@@ -128,24 +109,31 @@ export default function OnboardingFlow({ onComplete }: { onComplete: () => void 
       });
       if (res.ok) {
         setSessionStarted(true);
+        markActivationStep('session');
         setStep(2);
       }
     } catch { /* ignore */ }
   }, []);
 
+  // Both exits write the single activation store (audit F-UX-17).
   const handleSkip = () => {
-    localStorage.setItem('ergovigilance_onboarded', 'true');
+    completeActivation();
     onComplete();
   };
 
   const handleFinish = () => {
-    localStorage.setItem('ergovigilance_onboarded', 'true');
+    completeActivation();
     navigate('/dashboard');
     onComplete();
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-slate-50 dark:bg-[#10131a] flex flex-col">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Getting started"
+      className="fixed inset-0 z-[100] bg-slate-50 dark:bg-[#10131a] flex flex-col"
+    >
       {/* ── Progress Bar ──────────────────────────────────────── */}
       <div className="h-1 bg-slate-200 dark:bg-white/5">
         <div

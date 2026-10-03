@@ -340,7 +340,7 @@ export default function WorkersPage() {
   return (
     <div className="p-lg space-y-lg">
       <div className="flex items-center justify-between">
-        <SectionHeader title="Workers" />
+        <SectionHeader title="Workers" as="h1" />
         {isManager && (
           <button onClick={openAdd} className="flex items-center gap-sm px-md py-sm rounded-lg text-body-sm font-medium bg-primary text-on-primary hover:bg-primary/90 transition-colors">
             <Plus className="w-4 h-4" />

@@ -271,7 +271,7 @@ export default function UsersPage() {
   return (
     <div className="p-lg space-y-lg">
       <div className="flex items-center justify-between">
-        <SectionHeader title="Users" />
+        <SectionHeader title="Users" as="h1" />
         {isAdmin && (
           <div className="flex items-center gap-2">
             <button onClick={() => { setShowInvite(true); setInviteEmail(''); setInviteRole('operator'); setInviteError(null); setInviteResult(null); }} className="flex items-center gap-sm px-md py-sm rounded-lg text-body-sm font-medium border border-outline-variant text-on-surface hover:bg-surface-container-highest transition-colors">

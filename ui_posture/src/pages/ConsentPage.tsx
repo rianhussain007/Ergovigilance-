@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Shield, Check, X, Clock, FileText, Download, Users, AlertTriangle, Eye, EyeOff, Trash2 } from 'lucide-react';
 import { useAuth } from '@/src/auth/AuthContext';
 import { apiFetch } from '@/src/services/apiClient';
-import { EmptyState, SectionHeader, LoadingCard } from '@/src/components/common';
+import { ConfirmDialog, EmptyState, SectionHeader, LoadingCard } from '@/src/components/common';
 import { useToast } from '@/src/hooks/useToast';
 
 interface WorkerConsent {
@@ -66,6 +66,7 @@ export default function ConsentPage() {
   const [showPolicy, setShowPolicy] = useState(false);
   const [filter, setFilter] = useState<string>('all');
   const [bulkAction, setBulkAction] = useState<string | null>(null);
+  const [pendingWithdraw, setPendingWithdraw] = useState<{ id: string; name: string } | null>(null);
 
   const fetchConsents = useCallback(async () => {
     try {
@@ -118,8 +119,10 @@ export default function ConsentPage() {
     }
   };
 
+  // Withdrawal is irreversible-ish (monitoring stops, data is purged after the
+  // retention window), so it asks in-app rather than via window.confirm — which
+  // is unstyleable, blockable in kiosk shells, and gives no record context.
   const handleWithdrawConsent = async (workerId: string) => {
-    if (!confirm('Are you sure? This will stop monitoring for this worker and delete their session data after retention period.')) return;
     try {
       const res = await apiFetch(`/api/consent/worker-consents/${workerId}/withdraw`, {
         method: 'POST',
@@ -372,7 +375,7 @@ export default function ConsentPage() {
                     )}
                     {worker.consent_status === 'granted' && (
                       <button
-                        onClick={() => handleWithdrawConsent(worker.worker_id)}
+                        onClick={() => setPendingWithdraw({ id: worker.worker_id, name: worker.name })}
                         className="px-sm py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-[11px] font-bold hover:bg-amber-500/20 transition-colors"
                         aria-label={`Withdraw consent for ${worker.name}`}
                       >
@@ -437,6 +440,20 @@ export default function ConsentPage() {
           </div>
         </div>
       </section>
+
+      <ConfirmDialog
+        open={pendingWithdraw !== null}
+        destructive
+        title="Withdraw consent?"
+        message={`Monitoring stops immediately for ${pendingWithdraw?.name ?? 'this worker'} and their session data is purged once the retention window passes. This cannot be undone from here — re-consent is a new grant.`}
+        confirmLabel="Withdraw consent"
+        onCancel={() => setPendingWithdraw(null)}
+        onConfirm={() => {
+          const target = pendingWithdraw;
+          setPendingWithdraw(null);
+          if (target) void handleWithdrawConsent(target.id);
+        }}
+      />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import {
   Activity, AlertTriangle, CheckCircle, Clock3, FileText,
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { SectionHeader, LoadingCard, ErrorCard, EmptyState } from '@/src/components/common';
 import { apiFetch } from '@/src/services/apiClient';
+import { usePolledResource } from '@/src/hooks/usePolling';
 import { useAuth } from '@/src/auth/AuthContext';
 import { formatISTSessionLabel } from '@/src/utils/formatTime';
 
@@ -61,6 +62,17 @@ const RISK_STYLES: Record<string, {
     badge: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300',
     icon: 'text-emerald-500 dark:text-emerald-400',
     heading: 'text-emerald-800 dark:text-emerald-200',
+  },
+  // O1: "no data" = session ran but nobody was ever in frame.
+  // Deliberately neutral (not green) so an empty shift never reads as "safe".
+  'no data': {
+    text: 'text-slate-600 dark:text-slate-300',
+    bg: 'bg-slate-100 dark:bg-slate-500/10',
+    border: 'border-slate-300 dark:border-slate-400/30',
+    ring: 'ring-slate-300 dark:ring-slate-400/20',
+    badge: 'bg-slate-200 text-slate-700 dark:bg-slate-500/20 dark:text-slate-300',
+    icon: 'text-slate-400 dark:text-slate-400',
+    heading: 'text-slate-700 dark:text-slate-200',
   },
   medium: {
     text: 'text-amber-700 dark:text-amber-300',
@@ -137,12 +149,16 @@ const CONFIDENCE_COLORS: Record<string, string> = {
 function RiskSparkline({ sessions }: { sessions: WorkerSummary['sessions'] }) {
   const points = useMemo(() => {
     const riskMap: Record<string, number> = { LOW: 1, MEDIUM: 2, HIGH: 3 };
-    return sessions.slice(0, 10).reverse().map((s, i) => ({
-      x: i,
-      y: riskMap[s.highestRisk] || 1,
-      risk: s.highestRisk,
-      task: s.task,
-    }));
+    return sessions
+      .filter((s) => s.highestRisk !== 'NO DATA')  // O1: no-data stubs carry no risk point
+      .slice(0, 10)
+      .reverse()
+      .map((s, i) => ({
+        x: i,
+        y: riskMap[s.highestRisk] || 1,
+        risk: s.highestRisk,
+        task: s.task,
+      }));
   }, [sessions]);
 
   if (points.length < 2) return null;
@@ -196,37 +212,26 @@ function RiskSparkline({ sessions }: { sessions: WorkerSummary['sessions'] }) {
 export default function WorkerSelfView() {
   const { user, isDemoMode } = useAuth();
   const navigate = useNavigate();
-  const [data, setData] = useState<WorkerSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // 5s poll while live; demo data is synthetic and never changes, so it is
+  // polled far less often. Hidden tabs pause entirely (audit F-UX-04), and
+  // "Retry" now genuinely refetches instead of leaving the page spinning.
+  const summary = usePolledResource<WorkerSummary | null>(
+    async () => {
+      const res = await apiFetch('/api/worker/my-summary');
+      if (!res.ok) throw new Error('Failed to load your summary');
+      return (await res.json()) as WorkerSummary;
+    },
+    { initial: null, intervalMs: isDemoMode ? 30_000 : 5000, label: 'Your summary' },
+  );
+  const data = summary.data;
 
-  useEffect(() => {
-    let cancelled = false;
-    const fetchData = async () => {
-      try {
-        const res = await apiFetch('/api/worker/my-summary');
-        if (!res.ok) throw new Error('Failed to load your summary');
-        const result = await res.json();
-        if (!cancelled) { setData(result); setError(null); }
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    fetchData();
-    // Poll less frequently in demo mode (data is synthetic, doesn't change)
-    const interval = setInterval(fetchData, isDemoMode ? 30000 : 5000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, [isDemoMode]);
-
-  if (error) return (
+  if (summary.error) return (
     <div className="flex items-center justify-center h-full p-lg">
-      <ErrorCard message={error} onRetry={() => { setLoading(true); setError(null); }} />
+      <ErrorCard message={summary.error} onRetry={summary.refetch} />
     </div>
   );
 
-  if (loading || !data) {
+  if (summary.loading || !data) {
     return (
       <div className="p-lg space-y-lg pb-xl">
         <LoadingCard height="h-24" />
@@ -379,7 +384,7 @@ export default function WorkerSelfView() {
                   className="w-full flex items-center gap-md p-md rounded-lg border border-slate-100 dark:border-outline-variant/50 bg-slate-50/50 dark:bg-surface-container-low hover:bg-slate-100 dark:hover:bg-surface-container-higher transition-colors text-left group"
                 >
                   <div className={`w-1.5 h-10 rounded-full shrink-0 ${
-                    riskKey === 'high' ? 'bg-red-500' : riskKey === 'medium' ? 'bg-amber-500' : 'bg-emerald-500'
+                    riskKey === 'high' ? 'bg-red-500' : riskKey === 'medium' ? 'bg-amber-500' : riskKey === 'no data' ? 'bg-slate-300 dark:bg-slate-600' : 'bg-emerald-500'
                   }`} />
                   <div className="flex-1 min-w-0">
                     <p className="text-body-sm font-medium text-slate-800 dark:text-on-surface truncate">{s.task}</p>

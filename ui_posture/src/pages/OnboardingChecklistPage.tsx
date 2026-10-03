@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/src/auth/AuthContext';
 import { apiFetch, friendlyHttpError } from '@/src/services/apiClient';
+import { completeActivation, markActivationStep } from '@/src/services/activation';
+
 import Logo from '../components/common/Logo';
 
 /* ── Step definitions ──────────────────────────────────────────── */
@@ -104,6 +106,7 @@ export default function OnboardingChecklistPage() {
         return;
       }
       setWorkerResult(`${workerName.trim()} (${empId})`);
+      markActivationStep('worker');
       setStep(3);
     } catch (e) {
       // Network failure (backend down) — stay with guidance, not a fake skip.
@@ -135,6 +138,7 @@ export default function OnboardingChecklistPage() {
       }
       const data = await res.json();
       setSessionResult({ id: data.id || 'unknown', status: data.status || 'started' });
+      markActivationStep('session');
       setStep(4);
     } catch {
       setError('Network error — is the backend running? See docs/DEV_START.md, or skip setup above.');
@@ -142,7 +146,8 @@ export default function OnboardingChecklistPage() {
   };
 
   const handleFinish = () => {
-    localStorage.setItem('ergovigilance_onboarded', 'true');
+    // Same activation store the first-login modal writes (audit F-UX-17).
+    completeActivation();
     navigate('/dashboard', { replace: true });
   };
 
@@ -160,7 +165,7 @@ export default function OnboardingChecklistPage() {
         <div className="mx-auto max-w-3xl flex items-center justify-between px-6 py-4">
           <Logo className="h-8 w-auto" variant="light" />
           <button
-            onClick={() => { localStorage.setItem('ergovigilance_onboarded', 'true'); navigate('/dashboard'); }}
+            onClick={() => { completeActivation(); navigate('/dashboard'); }}
             className="text-xs text-slate-400 hover:text-slate-600 dark:text-on-surface-variant dark:hover:text-on-surface transition-colors"
           >
             Skip setup →
@@ -170,6 +175,8 @@ export default function OnboardingChecklistPage() {
 
       <main className="flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-[36rem]">
+          <h1 className="sr-only">Factory setup</h1>
+
           {/* Progress dots */}
           <div className="flex items-center justify-center gap-2 mb-8">
             {STEPS.map((st, i) => {
