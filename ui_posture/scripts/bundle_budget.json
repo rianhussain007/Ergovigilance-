@@ -1,0 +1,9 @@
+{
+  "$comment": "Budgets for scripts/check_bundle_budget.mjs. Raising any number is a deliberate, reviewable change; lowering them is the goal.",
+  "report": true,
+  "budgets": {
+    "maxChunkKb": 500,
+    "entryGzipKb": 90,
+    "totalGzipKb": 520
+  }
+}

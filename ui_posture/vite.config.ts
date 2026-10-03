@@ -6,6 +6,34 @@ import {defineConfig} from 'vite';
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
+    build: {
+      // Chunking (docs/UX_SCORE_8_PROGRAM.md §W6). The single 521 kB entry chunk
+      // we shipped mixed React, recharts, motion and every icon into one file,
+      // so any dependency bump invalidated the whole app download. Vendor code
+      // now sits in long-lived chunks and the entry stays under budget
+      // (scripts/check_bundle_budget.mjs fails the build if that stops being
+      // true).
+      rollupOptions: {
+        output: {
+          manualChunks(id: string) {
+            if (!id.includes('node_modules')) return undefined;
+            if (id.includes('recharts') || id.includes('d3-')) return 'vendor-charts';
+            if (id.includes('motion') || id.includes('framer-motion')) return 'vendor-motion';
+            if (id.includes('lucide-react')) return 'vendor-icons';
+            if (id.includes('@google/genai')) return 'vendor-ai';
+            if (
+              id.includes('/react/') ||
+              id.includes('react-dom') ||
+              id.includes('react-router') ||
+              id.includes('scheduler')
+            ) {
+              return 'vendor-react';
+            }
+            return 'vendor';
+          },
+        },
+      },
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

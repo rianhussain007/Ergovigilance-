@@ -1,0 +1,62 @@
+{
+  "$comment": "Debt register for scripts/ux_guards.mjs. Every entry needs a reason; hexColours ceilings may only be lowered.",
+  "allowlist": {
+    "rules": {
+      "token-in-url": [
+        "src/services/dashboardService.ts",
+        "src/pages/ApiDocsPage.tsx",
+        "src/pages/MultiCameraView.tsx"
+      ],
+      "interval-helper": [
+        "src/hooks/usePolling.ts",
+        "src/hooks/useStreamToken.ts",
+        "src/components/layout/Header.tsx",
+        "src/components/common/LiveTimeline.tsx",
+        "src/components/common/AlertToast.tsx",
+        "src/components/common/ProductTour.tsx",
+        "src/components/landing/LandingSkeleton.tsx",
+        "src/pages/LandingPage.tsx",
+        "src/pages/YoloDemoPage.tsx"
+      ],
+      "confirm-dialog": [],
+      "full-reload": [],
+      "img-alt": [],
+      "dialog-aria-modal": [],
+      "banned-claims": []
+    },
+    "reasons": {
+      "token-in-url": "Media and WebSocket URLs still carry the session JWT in the query string. Tracked as F-UX-05; the fix is a short-lived scoped media token (useStreamToken is the first half). The MultiCameraView hit is the documented fallback used only when minting a scoped token fails. Do not add new call sites.",
+      "src/App.tsx": "The Suspense fallback is painted before any theme is applied, so it hardcodes the dark background to avoid a white flash on first load.",
+      "interval-helper": "Local UI clocks/timers and animation counters, plus the polling primitive itself. These are not data polls and have no backend cost.",
+      "hexColors": "Raw hex is design-system debt (the palette lives in index.css tokens). Counts are ratchets: they may go down, never up. The remaining hits are chart colours (SVG fills need literal values), brand marks, and public dark-only pages."
+    },
+    "hexColors": {
+      "src/App.tsx": 1,
+      "src/pages/ReplayPage.tsx": 14,
+      "src/components/timeline/FeatureGraph.tsx": 14,
+      "src/pages/DeploymentCenter.tsx": 12,
+      "src/pages/LandingPage.tsx": 9,
+      "src/pages/MultiCameraView.tsx": 8,
+      "src/pages/LiveMonitoring.tsx": 7,
+      "src/components/landing/LandingSkeleton.tsx": 6,
+      "src/components/charts/RiskGauge.tsx": 6,
+      "src/pages/WorkerSelfView.tsx": 5,
+      "src/pages/WebCamDemo.tsx": 5,
+      "src/pages/VideoReviewPage.tsx": 3,
+      "src/pages/DashboardPage.tsx": 3,
+      "src/components/common/Logo.tsx": 3,
+      "src/pages/StatusPage.tsx": 2,
+      "src/pages/LegalPage.tsx": 2,
+      "src/components/common/OnboardingFlow.tsx": 2,
+      "src/pages/WorkersPage.tsx": 1,
+      "src/pages/UsersPage.tsx": 1,
+      "src/pages/PricingPage.tsx": 1,
+      "src/pages/ModelCardPage.tsx": 1,
+      "src/pages/ManagerDashboard.tsx": 1,
+      "src/pages/CloudOnboardingPage.tsx": 1,
+      "src/components/common/HealthScore.tsx": 1,
+      "src/components/charts/CameraPanel.tsx": 1,
+      "src/components/RouteErrorBoundary.tsx": 1
+    }
+  }
+}

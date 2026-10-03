@@ -120,8 +120,19 @@ jobs:
       - name: Unit tests (vitest)
         run: npx vitest run
 
+      # Static UX rules (docs/UX_SCORE_8_PROGRAM.md §W5): banned claims,
+      # window.confirm, location.reload, raw hex ratchet, tokens in URLs,
+      # <img> without alt, dialog semantics, ad-hoc setInterval.
+      - name: UX guards
+        run: node scripts/ux_guards.mjs
+
       - name: Build
         run: npm run build
+
+      # Measured performance budget: fails if any chunk exceeds 500 kB raw,
+      # the entry chunk grows past its gzip ceiling, or the build total grows.
+      - name: Bundle budget
+        run: node scripts/check_bundle_budget.mjs
 
   # ── Docker build ───────────────────────────────────────────────
   docker:
