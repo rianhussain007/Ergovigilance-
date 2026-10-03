@@ -8,7 +8,7 @@
  */
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 import { ThemeProvider } from '../hooks/useTheme';
 import { ToastProvider } from '../hooks/useToast';
@@ -37,6 +37,23 @@ function renderApp() {
 }
 
 describe('frontend smoke', () => {
+  // Cold code-split chunks are the slowest part of this file: the 2026-09-28
+  // qualification run spent ~52s in imports overall, and the first test below
+  // timed out at its 10s waitFor while the dashboard chunk was still
+  // transforming on a loaded box (the identical navigation passed in 927ms
+  // once the module was warm). Warm the chunks this file navigates to once,
+  // so each test's timeout measures app behaviour instead of Vite's cold
+  // transform speed. Failing to warm up still fails this hook loudly.
+  beforeAll(async () => {
+    await Promise.all([
+      import('../pages/DashboardPage'),
+      import('../pages/LiveMonitoring'),
+      import('../pages/SessionHistory'),
+      import('../pages/ReportsPage'),
+      import('../pages/SettingsPage'),
+    ]);
+  }, 180_000);
+
   beforeEach(() => {
     // Start at the login page: unauthenticated / renders the landing page,
     // not the auth form.
@@ -69,9 +86,8 @@ describe('frontend smoke', () => {
     await user.click(screen.getByRole('button', { name: /sign in/i }));
 
     // After the mocked login, the form navigates to /dashboard. The route
-    // pages are code-split (React.lazy), so the first navigation loads the
-    // dashboard chunk dynamically — give it generous time in CI (smoke tests
-    // routinely see 4-6s chunk loads on a loaded dev machine).
+    // pages are code-split (React.lazy); the chunks are pre-warmed in
+    // beforeAll above, so this wait only needs to cover the login + render.
     await waitFor(
       () => {
         expect(screen.getByRole('heading', { name: /my dashboard/i })).toBeInTheDocument();

@@ -6,7 +6,7 @@
  */
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from '../App';
 import { ThemeProvider } from '../hooks/useTheme';
 import { ToastProvider } from '../hooks/useToast';
@@ -33,6 +33,19 @@ function renderApp() {
     </ThemeProvider>,
   );
 }
+
+// Same cold-lazy-chunk flake class as smoke.test.tsx: `findByRole` waits 1 s
+// for the login heading while Vite may still be transforming the code-split
+// LoginPage chunk on a loaded box (seen during the 2026-10-02 audit run).
+// Warm the chunks this file navigates to once, so timeouts measure app
+// behaviour, not the dev server's transform speed.
+beforeAll(async () => {
+  await Promise.all([
+    import('../pages/LoginPage'),
+    import('../pages/DashboardPage'),
+    import('../pages/UsersPage'),
+  ]);
+}, 180_000);
 
 describe('login form validation', () => {
   beforeEach(() => {

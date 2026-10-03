@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { NAV_SECTIONS } from '../components/Sidebar';
 import { isPathAllowed, rolePaths } from '../auth/routes';
@@ -35,4 +37,21 @@ describe('isPathAllowed', () => {
   it('requires exact match otherwise', () => {
     expect(isPathAllowed('/dashboard/extra', ['/dashboard'])).toBe(false);
   });
+});
+
+describe('rolePaths entries resolve to real routes', () => {
+  const appSource = readFileSync(path.resolve(process.cwd(), 'src/App.tsx'), 'utf8');
+  const declaredRoutes = new Set(
+    [...appSource.matchAll(/<Route\s+path="([^"]+)"/g)].map(([, route]) => route),
+  );
+
+  for (const [role, paths] of Object.entries(rolePaths)) {
+    for (const route of paths) {
+      if (route === '/') continue; // the landing route is declared without a path
+      it(`${role}: ${route} is a declared route`, () => {
+        // A path no <Route> declares would make the guard allow a 404.
+        expect(declaredRoutes.has(route), `${route} is not declared in App.tsx`).toBe(true);
+      });
+    }
+  }
 });

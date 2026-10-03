@@ -45,6 +45,8 @@ export interface LiveStatus {
   taskConfidence?: number;
   taskDurationSeconds: number;
   workerStatus: string;
+  /** Real analysis FPS from the pipeline (0 when no frames are flowing). */
+  fps?: number;
 }
 
 export interface ErgonomicFeature {
