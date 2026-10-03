@@ -1,0 +1,10 @@
+{
+  "YOLO_MODEL": "yolov8s-pose.pt",
+  "YOLO_DEVICE": "cpu",
+  "YOLO_CONFIDENCE": 0.5,
+  "INFERENCE_FPS": 10.0,
+  "RTSP_TRANSPORT": "tcp",
+  "RTSP_TIMEOUT": 5,
+  "RTSP_RECONNECT_DELAY": 2.0,
+  "SESSION_IDLE_TIMEOUT": 60
+}

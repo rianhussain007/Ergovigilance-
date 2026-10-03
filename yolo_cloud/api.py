@@ -62,10 +62,31 @@ router = APIRouter(prefix="/cloud", tags=["Cloud Core"])
 
 @router.get("/health")
 async def health():
-    """Health check for the cloud service."""
+    """Health check for the cloud service.
+
+    Also carries the three stats the Cloud Cameras header renders
+    (``total_frames`` / ``avg_latency_ms`` / ``alerts_today``); without
+    them the header showed a permanent "0 frames / -ms / 0 alerts"
+    (stale UI/API contract, found 2026-09-27).
+    """
     service = get_cloud_service()
     cameras = service.get_all_cameras()
     from yolo_cloud import disk_guard
+
+    total_frames = sum(int(c.get("frame_count") or 0) for c in cameras)
+    # Mean of per-camera p50 end-to-end latency (only cameras that have
+    # samples vote; empty buffers report null so the UI shows "-").
+    p50s = [
+        (m.get("latency_ms") or {}).get("p50")
+        for m in service.get_processing_metrics()
+    ]
+    p50s = [v for v in p50s if v is not None]
+    today = datetime.now().date().isoformat()
+    alerts_today = sum(
+        1
+        for a in service.get_alerts(1000)
+        if str(a.get("timestamp", "")).startswith(today)
+    )
     return {
         "status": "healthy",
         "engine": "yolov8-pose",
@@ -73,6 +94,9 @@ async def health():
         "cameras_configured": len(cameras),
         "cameras_active": sum(1 for c in cameras if c.get("is_active")),
         "device": settings.YOLO_DEVICE,
+        "total_frames": total_frames,
+        "avg_latency_ms": round(sum(p50s) / len(p50s), 1) if p50s else None,
+        "alerts_today": alerts_today,
         "disk_guard": disk_guard.stats_snapshot(),
     }
 

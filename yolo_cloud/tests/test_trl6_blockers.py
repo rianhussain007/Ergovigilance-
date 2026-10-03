@@ -234,6 +234,40 @@ class TestAlertClips:
         assert processor._session.alerts[-1]["clip"]["frames"] == 6
         assert "clip" in processor._session.alerts[-1]
 
+    def test_sustained_medium_does_not_fire_once_per_frame(self, tmp_path, monkeypatch):
+        """One useful alert, not fifty (handbook p12).
+
+        The frame-based cooldown (10 frames / INFERENCE_FPS = 1 s) is
+        longer than the CPU-bound ~1 s scoring cadence, so a sustained
+        MEDIUM condition fired a fresh alert on every scored frame — 40
+        identical "MEDIUM risk detected" alerts in 2 minutes (observed
+        2026-09-27), each also triggering a notification push.
+        """
+        processor = _processor(tmp_path, monkeypatch)
+        processor._session = CloudSession(
+            session_id="CLOUD-SPAM",
+            camera_id="cam-1",
+            camera_name="Cell A",
+            start_time=0.0,
+        )
+
+        # Ten consecutive seconds of the same condition: one alert only.
+        for i in range(10):
+            processor._check_alert(
+                "MEDIUM", 55.0, "Neutral Standing", 1, 1000.0 + i
+            )
+        assert len(processor._session.alerts) == 1
+
+        # A severity escalation fires immediately despite the cooldown.
+        processor._check_alert("HIGH", 85.0, "Deep Bend", 1, 1010.0)
+        assert len(processor._session.alerts) == 2
+
+        # A reminder is allowed again after the sustained floor.
+        processor._check_alert(
+            "MEDIUM", 55.0, "Neutral Standing", 1, 1010.0 + 61.0
+        )
+        assert len(processor._session.alerts) == 3
+
     def test_service_returns_the_clip_and_survives_camera_removal(self, tmp_path, monkeypatch):
         processor = _processor(tmp_path, monkeypatch)
         for shade in range(4):

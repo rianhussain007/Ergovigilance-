@@ -275,6 +275,15 @@ class CloudCameraProcessor:
     IDLE_TIMEOUT = settings.SESSION_IDLE_TIMEOUT
     # Minimum frames before creating an alert (avoid spam)
     ALERT_COOLDOWN = 10  # frames between same-type alerts
+    # Wall-clock floor for repeating a same-severity alert on the same
+    # track. The frame-based window above is 10/INFERENCE_FPS = 1 s,
+    # which on the CPU-bound ~1 fps cadence let EVERY scored frame fire
+    # (40 identical "MEDIUM risk detected" alerts in 2 minutes, observed
+    # 2026-09-27) — the handbook promises "one useful alert, not fifty"
+    # with a 60 s sustained cooldown. Severity escalation (MEDIUM→HIGH)
+    # bypasses the floor.
+    SUSTAINED_COOLDOWN_S = 60.0
+    _SEVERITY_RANK = {"LOW": 0, "MEDIUM": 1, "HIGH": 2}
     # Timeline entry every N frames
     TIMELINE_SAMPLE_RATE = 5  # every 5th processed frame
     # Max sampled points retained per track (oldest dropped) to bound session size
@@ -290,6 +299,7 @@ class CloudCameraProcessor:
         self._last_frame_time = 0.0
         self._last_checkpoint = 0.0
         self._last_alert_time: dict[int, float] = {}  # track_id -> timestamp
+        self._last_alert_level: dict[int, str] = {}  # track_id -> last alerted severity
         self._alert_counter = 0
         self._frame_counter = 0
         # Frame-skip accounting (YOLO_SCORE_EVERY): frames pulled vs scored.
@@ -799,8 +809,22 @@ class CloudCameraProcessor:
         quality: Optional[dict] = None,
     ) -> None:
         """Check if we should fire an alert (cooldown is keyed by track_id)."""
-        last = self._last_alert_time.get(track_id, 0)
-        if timestamp - last < self.ALERT_COOLDOWN * (1.0 / settings.INFERENCE_FPS):
+        last = self._last_alert_time.get(track_id)
+        last_level = self._last_alert_level.get(track_id)
+        # Escalation (MEDIUM -> HIGH) always fires; same or lower severity
+        # must wait out the sustained floor.
+        escalated = self._SEVERITY_RANK.get(risk_level, 0) > self._SEVERITY_RANK.get(
+            last_level or "", -1
+        )
+        cooldown = (
+            0.0
+            if escalated
+            else max(
+                self.ALERT_COOLDOWN * (1.0 / settings.INFERENCE_FPS),
+                self.SUSTAINED_COOLDOWN_S,
+            )
+        )
+        if last is not None and timestamp - last < cooldown:
             return
 
         self._alert_counter += 1
@@ -831,6 +855,7 @@ class CloudCameraProcessor:
             alert_dict["quality"] = dict(quality)
         self._session.alerts.append(alert_dict)
         self._last_alert_time[track_id] = timestamp
+        self._last_alert_level[track_id] = risk_level
         # Accelerator only: the 5 Hz WS snapshot stays the guaranteed path, so a
         # failure here is logged and dropped rather than retried.
         try:
