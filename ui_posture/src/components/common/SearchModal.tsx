@@ -1,8 +1,10 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Search, FileText, Activity, User, Calendar, Radio, BarChart3, Settings, Users, Camera, Brain, Shield, ClipboardList } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { apiFetch } from '@/src/services/apiClient';
+import { useAuth } from '@/src/auth/AuthContext';
+import { isPathAllowed, rolePaths } from '@/src/auth/routes';
 
 /* ── Types ────────────────────────────────────────────────────────── */
 
@@ -18,7 +20,8 @@ interface SearchResult {
 
 /* ── Static navigation items (always available as fallback) ───────── */
 
-const NAV_ITEMS: SearchResult[] = [
+/** Exported for the palette↔rolePaths contract test (capabilities.test.ts). */
+export const NAV_ITEMS: SearchResult[] = [
   { label: 'Dashboard', description: 'Live monitoring overview', icon: Activity, route: '/dashboard', category: 'Navigation', type: 'nav' },
   { label: 'Live Monitoring', description: 'Real-time camera feed and pose analysis', icon: Radio, route: '/monitoring', category: 'Navigation', type: 'nav' },
   { label: 'Session History', description: 'Browse past monitoring sessions', icon: Calendar, route: '/sessions', category: 'Navigation', type: 'nav' },
@@ -48,6 +51,16 @@ const ICON_MAP: Record<string, typeof FileText> = {
 /* ── Main Component ───────────────────────────────────────────────── */
 
 export function SearchModal() {
+  const { user } = useAuth();
+  const role = user?.role;
+  // The palette used to offer every page to every role, so Ctrl+K → Users as an
+  // operator landed on a silent redirect (audit F-UX-02/F-UX-14). Filter both
+  // the static nav items and the server results through the same rule the
+  // router guard uses.
+  const navItems = useMemo(
+    () => (role ? NAV_ITEMS.filter((item) => isPathAllowed(item.route, rolePaths[role])) : []),
+    [role],
+  );
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -69,24 +82,26 @@ export function SearchModal() {
       const res = await apiFetch(`/api/search?q=${encodeURIComponent(q)}&limit=10`);
       if (res.ok) {
         const data = await res.json();
-        const items: SearchResult[] = (data.results || []).map((r: any) => ({
-          ...r,
-          icon: ICON_MAP[r.type || 'nav'] || Activity,
-        }));
+        const items: SearchResult[] = (data.results || [])
+          .map((r: any) => ({
+            ...r,
+            icon: ICON_MAP[r.type || 'nav'] || Activity,
+          }))
+          .filter((r: SearchResult) => !role || isPathAllowed(r.route, rolePaths[role]));
         setResults(items);
       }
     } catch {
       // Fallback: filter local nav items
       const ql = q.toLowerCase();
       setResults(
-        NAV_ITEMS.filter(
+        navItems.filter(
           (r) => r.label.toLowerCase().includes(ql) || r.description.toLowerCase().includes(ql)
         )
       );
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [navItems, role]);
 
   // Debounced search
   const handleQueryChange = useCallback((value: string) => {
@@ -132,7 +147,7 @@ export function SearchModal() {
 
   // Keyboard navigation within results
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    const items = query.trim() ? results : NAV_ITEMS;
+    const items = query.trim() ? results : navItems;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setSelectedIndex((i) => (i + 1) % items.length);
@@ -143,10 +158,10 @@ export function SearchModal() {
       e.preventDefault();
       handleSelect(items[selectedIndex].route);
     }
-  }, [query, results, selectedIndex]);
+  }, [query, results, selectedIndex, navItems]);
 
   // When no query, show nav items; when querying, show server results
-  const displayItems = query.trim() ? results : NAV_ITEMS;
+  const displayItems = query.trim() ? results : navItems;
 
   // Group results by category
   const grouped = displayItems.reduce<Record<string, SearchResult[]>>((acc, item) => {

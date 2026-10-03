@@ -14,8 +14,10 @@ import { useAlertToasts } from '@/src/hooks/useAlertToasts';
 import OnboardingFlow from '@/src/components/common/OnboardingFlow';
 import { ProductTour, KeyboardHelpPanel, useKeyboardShortcuts, useProductTour, FloatingHelpButton } from '@/src/components/common/ProductTour';
 import SkipLink from '@/src/components/common/SkipLink';
+import { AccessDenied } from '@/src/components/common/AccessDenied';
 import { useFocusOnNavigate } from '@/src/hooks/useFocusOnNavigate';
 import { rolePaths, isPathAllowed } from '@/src/auth/routes';
+import { isActivationComplete, completeActivation } from '@/src/services/activation';
 
 const roleConfig: Record<Role, { label: string; icon: React.ElementType }> = {
   operator: { label: 'Operator', icon: HardHat },
@@ -92,7 +94,7 @@ function DemoModeBanner({ isDemoMode }: { isDemoMode: boolean }) {
 }
 
 export default function Layout() {
-  const { user, logout, isDemoMode } = useAuth();
+  const { user, logout, isDemoMode, isDemoSession } = useAuth();
   const { dashboard } = useDashboard();
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -112,8 +114,10 @@ export default function Layout() {
     if (isMobile) setSidebarCollapsed(true);
   }, [isMobile]);
   const [showOnboarding, setShowOnboarding] = useState(() => {
-    // Show onboarding for new users (first login) unless they've completed it or are in demo mode
-    return !localStorage.getItem('ergovigilance_onboarded') && !isDemoMode;
+    // One activation store drives this modal (audit F-UX-17): the checklist at
+    // /onboarding writes the same state, so finishing one journey never leaves
+    // the other re-appearing on the next login.
+    return !isActivationComplete() && !isDemoSession;
   });
   const location = useLocation();
 
@@ -131,7 +135,11 @@ export default function Layout() {
     // every demo entry starts the guided tour. We only suppress a re-show when
     // the user dismissed the tour moments ago (e.g. a page refresh right after
     // ending it) — short session window, NOT 24h.
-    if (isDemoMode) {
+    //
+    // Keyed on isDemoSession (this browser entered via Try Demo) rather than
+    // isDemoMode (what the server actually serves): the tour is a UX
+    // affordance, while isDemoMode alone drives the data-provenance banner.
+    if (isDemoSession) {
       const lastDismissed = localStorage.getItem('ergovigilance_tour_dismissed_at');
       const recentlyDismissed = lastDismissed && (Date.now() - Number(lastDismissed)) < 300000;
       if (!recentlyDismissed) {
@@ -139,7 +147,7 @@ export default function Layout() {
         return () => clearTimeout(timer);
       }
     }
-  }, [isDemoMode, startTour]);
+  }, [isDemoSession, startTour]);
 
   // Stable callbacks for keyboard shortcuts (prevent listener churn)
   const handleToggleSearch = useCallback(() => {
@@ -169,15 +177,23 @@ export default function Layout() {
 
   const role = user.role;
   const allowedPaths = rolePaths[role];
-  if (!isPathAllowed(location.pathname, allowedPaths)) {
-    return <Navigate to="/dashboard" replace />;
-  }
+  // A forbidden path used to silently redirect to /dashboard (audit F-UX-02).
+  // It now renders an explanation *inside* the layout, so the sidebar stays
+  // usable and the page never fires requests its role cannot make.
+  const pathAllowed = isPathAllowed(location.pathname, allowedPaths);
 
   const currentRole = roleConfig[role];
   const RoleIcon = currentRole.icon;
 
   if (showOnboarding) {
-    return <OnboardingFlow onComplete={() => setShowOnboarding(false)} />;
+    return (
+      <OnboardingFlow
+        onComplete={() => {
+          completeActivation();
+          setShowOnboarding(false);
+        }}
+      />
+    );
   }
 
   return (
@@ -243,7 +259,11 @@ export default function Layout() {
             >
               <ErrorBoundary>
                 {user && <DemoModeBanner isDemoMode={isDemoMode} />}
-                <Outlet context={{ setNotifOpen }} />
+                {pathAllowed ? (
+                  <Outlet context={{ setNotifOpen }} />
+                ) : (
+                  <AccessDenied pathname={location.pathname} />
+                )}
               </ErrorBoundary>
             </motion.div>
           </AnimatePresence>
@@ -263,8 +283,11 @@ export default function Layout() {
 
       {notifOpen && (
         <>
-          <div className="fixed inset-0 z-50" onClick={() => setNotifOpen(false)} />
+          <div className="fixed inset-0 z-50" onClick={() => setNotifOpen(false)} aria-hidden="true" />
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Alerts"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}

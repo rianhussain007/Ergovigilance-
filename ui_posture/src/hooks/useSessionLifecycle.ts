@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { getStoredToken } from '@/src/auth/AuthContext';
-import { apiFetch } from '@/src/services/apiClient';
+import { apiFetch, toApiError } from '@/src/services/apiClient';
 import { useSettings } from './useSettings';
+import { useVisibilityAwareInterval } from './usePolling';
 
 export type SessionStatus = 'idle' | 'starting' | 'monitoring' | 'stopping' | 'error';
 
@@ -16,16 +17,18 @@ export interface UseSessionLifecycleReturn {
 /**
  * Hook for managing the live monitoring session lifecycle.
  *
- * Controls POST /api/session/start and POST /api/session/stop.
- * Polls GET /api/session/status to stay in sync.
+ * Controls POST /api/session/start and POST /api/session/stop, and keeps in
+ * sync with GET /api/session/status. Status polling is visibility-aware: it
+ * runs every 2 s while a session is live and the tab is visible, and pauses
+ * otherwise (it resumes immediately when the tab comes back).
  */
 export function useSessionLifecycle(): UseSessionLifecycleReturn {
   const [status, setStatus] = useState<SessionStatus>('idle');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pollingActive, setPollingActive] = useState(false);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
-  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const clearError = useCallback(() => {
     if (errorTimerRef.current) {
@@ -47,12 +50,7 @@ export function useSessionLifecycle(): UseSessionLifecycleReturn {
     }, 6000);
   }, []);
 
-  const stopPolling = useCallback(() => {
-    if (pollingRef.current) {
-      clearInterval(pollingRef.current);
-      pollingRef.current = null;
-    }
-  }, []);
+  const stopPolling = useCallback(() => setPollingActive(false), []);
 
   const pollStatus = useCallback(async () => {
     if (!getStoredToken()) {
@@ -78,17 +76,17 @@ export function useSessionLifecycle(): UseSessionLifecycleReturn {
         stopPolling();
       }
     } catch {
-      // Silently ignore poll errors
+      // Transient poll failure: keep the current UI state and retry on the
+      // next tick. Start/stop themselves surface errors to the user.
     }
   }, [stopPolling, clearError]);
 
-  const startPolling = useCallback(() => {
-    stopPolling();
-    pollingRef.current = setInterval(pollStatus, 2000);
-  }, [pollStatus, stopPolling]);
+  useVisibilityAwareInterval(() => { void pollStatus(); }, pollingActive ? 2000 : null);
+
+  const startPolling = useCallback(() => setPollingActive(true), []);
 
   const { settings } = useSettings();
-  
+
   const startSession = useCallback(async (workerId?: string, cameraIdOverride?: string) => {
     if (status === 'starting' || status === 'monitoring') return;
 
@@ -118,8 +116,7 @@ export function useSessionLifecycle(): UseSessionLifecycleReturn {
       startPolling();
     } catch (err) {
       if (!mountedRef.current) return;
-      const msg = err instanceof Error ? err.message : 'Failed to start session';
-      setErrorAutoClear(msg);
+      setErrorAutoClear(toApiError(err, 'Start monitoring').message);
       setStatus('idle');
     }
   }, [status, startPolling, clearError, setErrorAutoClear, settings.cameraId]);
@@ -147,22 +144,21 @@ export function useSessionLifecycle(): UseSessionLifecycleReturn {
       setStatus('idle');
     } catch (err) {
       if (!mountedRef.current) return;
-      const msg = err instanceof Error ? err.message : 'Failed to stop session';
-      setErrorAutoClear(msg);
-      pollStatus();
+      setErrorAutoClear(toApiError(err, 'Stop monitoring').message);
+      void pollStatus();
     }
   }, [status, stopPolling, clearError, setErrorAutoClear, pollStatus]);
 
-  // On mount, check if a session is already running
+  // On mount, check if a session is already running.
   useEffect(() => {
     mountedRef.current = true;
-    pollStatus();
+    void pollStatus();
     return () => {
       mountedRef.current = false;
       if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
-      stopPolling();
+      setPollingActive(false);
     };
-  }, [pollStatus, stopPolling]);
+  }, [pollStatus]);
 
   return { status, sessionId, error, startSession, stopSession };
 }

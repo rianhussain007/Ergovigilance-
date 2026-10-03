@@ -89,7 +89,12 @@ export default function CameraCapture({ onCapture, onClose, title = 'Capture Fac
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-      <div className="bg-surface-container rounded-2xl border border-outline-variant/30 shadow-2xl max-w-[32rem] w-full mx-4 overflow-hidden">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        className="bg-surface-container rounded-2xl border border-outline-variant/30 shadow-2xl max-w-[32rem] w-full mx-4 overflow-hidden"
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-outline-variant/20">
           <div className="flex items-center gap-2">

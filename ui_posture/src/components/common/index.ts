@@ -2,6 +2,7 @@ export { LoadingCard } from './LoadingCard';
 export { ErrorCard } from './ErrorCard';
 export { EmptyState } from './EmptyState';
 export { SectionHeader } from './SectionHeader';
+export { ConfirmDialog } from './ConfirmDialog';
 export { StatusBadge } from './StatusBadge';
 export { ReportButton } from './ReportButton';
 export { WorkerProfile } from './WorkerProfile';

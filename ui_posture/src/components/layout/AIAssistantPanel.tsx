@@ -288,8 +288,13 @@ export default function AIAssistantPanel({ open, onClose }: AIAssistantPanelProp
 
   return (
     <>
-      <div className="fixed inset-0 z-50" onClick={onClose} />
-      <div className="fixed top-0 right-0 bottom-0 z-50 w-96 bg-surface-container border-l border-outline-variant shadow-2xl flex flex-col">
+      <div className="fixed inset-0 z-50" onClick={onClose} aria-hidden="true" />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="AI safety assistant"
+        className="fixed top-0 right-0 bottom-0 z-50 w-96 bg-surface-container border-l border-outline-variant shadow-2xl flex flex-col"
+      >
         {/* Header */}
         <div className="flex items-center justify-between p-lg border-b border-outline-variant">
           <div className="flex items-center gap-md">

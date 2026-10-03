@@ -85,7 +85,8 @@ const TOUR_STEPS: TourStep[] = [
     title: 'Posture Status Banner',
     description:
       'A plain-language banner tells the worker exactly what to do: "Posture OK" or "Stop — unsafe posture".',
-    detail: 'Available in English, Hindi, and Chinese via Settings → Language.',
+    detail:
+      'The worker banner and the live-monitoring screen are translated into English, Hindi and Chinese (Settings → Language); other pages are English-only today.',
   },
   {
     id: 'alerts',
@@ -306,10 +307,17 @@ export function ProductTour({ onComplete }: { onComplete: () => void }) {
 
   const tooltipStyle = computeTooltipStyle(spotlightRect, step.position);
 
+  const dismiss = useCallback(() => {
+    if (!completedRef.current) {
+      completedRef.current = true;
+      onComplete();
+    }
+  }, [onComplete]);
+
   return (
-    <div className="fixed inset-0 z-[200]">
-      {/* Backdrop with spotlight hole */}
-      <div className="absolute inset-0">
+    <div role="dialog" aria-modal="true" aria-label="Guided product tour" className="fixed inset-0 z-[200]">
+      {/* Backdrop with spotlight hole — click outside the card to dismiss */}
+      <div className="absolute inset-0" onClick={dismiss}>
         <div className="absolute inset-0 bg-black/60" />
         {spotlightRect && (
           <div
@@ -339,7 +347,7 @@ export function ProductTour({ onComplete }: { onComplete: () => void }) {
 
       {/* Close button */}
       <button
-        onClick={() => { if (!completedRef.current) { completedRef.current = true; onComplete(); } }}
+        onClick={dismiss}
         className="absolute top-6 right-6 z-10 w-10 h-10 rounded-full bg-black/60 backdrop-blur-sm border border-white/10 flex items-center justify-center text-white/60 hover:text-white hover:border-white/30 transition-all"
         title="End tour"
       >
@@ -429,7 +437,13 @@ export function KeyboardHelpPanel({ onClose }: { onClose: () => void }) {
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Keyboard shortcuts"
+      className="fixed inset-0 z-[150] flex items-center justify-center bg-black/50"
+      onClick={onClose}
+    >
       <div
         className="w-[480px] max-w-[calc(100vw-2rem)] bg-slate-900 border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}

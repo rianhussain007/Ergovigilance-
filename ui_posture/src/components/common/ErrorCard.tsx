@@ -6,8 +6,14 @@ interface ErrorCardProps {
 }
 
 export function ErrorCard({ message, onRetry }: ErrorCardProps) {
+  // role="alert" so the failure is announced the moment it appears
+  // (audit F-UX-11); the retry button is the first focusable control.
   return (
-    <div className="bg-surface-container border border-red-500/30 rounded-xl p-lg flex flex-col items-center justify-center gap-md text-center min-h-[160px]">
+    <div
+      role="alert"
+
+      className="bg-surface-container border border-red-500/30 rounded-xl p-lg flex flex-col items-center justify-center gap-md text-center min-h-[160px]"
+    >
       <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
         <AlertTriangle className="w-5 h-5 text-red-400" />
       </div>
