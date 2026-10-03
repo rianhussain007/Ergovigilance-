@@ -2,6 +2,14 @@
 
 Companion to `docs/TRL7_QUALIFICATION_PLAN.md` (C1–C4) and
 `docs/SELL_READINESS_AUDIT.md` (commercial gaps). Written 2026-09-26.
+Synced 2026-10-02: §2 carries the measured status and the evidence pack is
+`docs/TRL8_QUALIFICATION_EVIDENCE.md` (+ the generated
+`docs/TRL8_TRACEABILITY.md`). Regenerate both with
+`python scripts/qualification/run_qualification.py --write-docs`; the
+harness exits non-zero if any executed check fails, or if the matrix cites
+a check or file that does not exist. The 2026-10-02 battery
+(`outputs/qualification/20261002T051101Z/`) returned 14 pass / 0 fail /
+0 blocked / 2 opt-in skips — QUALIFIED.
 
 ## 1. Where TRL-7 ends
 
@@ -16,17 +24,22 @@ NASA TRL-8: *system complete and qualified through test and
 demonstration.* For ErgoVigilance = the register's P1 column
 (`DEEP_AUDIT_REPORT.md`, "P1 — TRL-8 qualification"), each its own SHA:
 
-| # | P1 item | Owner / status 2026-09-26 |
-|---|---|---|
-| 1 | Pen-test + remediation | User (book vendor); fixes in-repo after |
-| 2 | DPIA + signed DPA/SCCs, SOC2 evidence | User + lawyer; `DPA_TEMPLATE.md` exists |
-| 3 | Offsite backup + timed RTO drill | Hermetic drill exists (`deploy/backup_restore_drill.sh`); RTO run pending |
-| 4 | PG retention + crypto-erasure | Telemetry prune landed (`efa8b15`); erasure procedure open |
-| 5 | HPA / load qualification | `deploy/load_test.py` exists; 50-cam run unmeasured |
-| 6 | SBOM + Trivy + secret-scan, pinned images, `readOnlyRootFilesystem` | Agent 2 (TRL-8 supply-chain lane) |
-| 7 | Frontend unit tests | Agent 2 |
-| 8 | Stale-doc quarantine + count reconciliation | Agent 2 (verify pass) |
-| 9 | Pilot accuracy re-measure → Safe Claims edit | Ergonomist + deliberate reviewed edit only (§4.5 rules) |
+| # | P1 item | Status 2026-09-28 | Evidence / what closes the rest |
+|---|---|---|---|
+| 1 | Pen-test + remediation | EXTERNAL-PENDING | Scope pack `docs/PENTEST_SCOPE.md` (check `pentest-scope`); a vendor must execute it |
+| 2 | DPIA + signed DPA/SCCs, SOC2 evidence | EXTERNAL-PENDING | `docs/DPA_TEMPLATE.md`, `docs/PRIVACY.md`, erasure/export endpoints (check `privacy-pack`); lawyer + audit required |
+| 3 | Offsite backup + timed RTO drill | PARTIAL-INREPO | Hermetic drill PASS with **RTO 4 s** (2026-10-02; check `backup-restore-drill`, `outputs/backup_drill/result.json`); offsite replication is still an operator target |
+| 4 | PG retention + crypto-erasure | CLOSED-INREPO | Single retention policy + key destruction + page reclaim (check `erasure-ops`) |
+| 5 | HPA / load qualification | PARTIAL-INREPO | Concurrent-user load — 20/20 workers authenticated, 61.3 rps, p95 379 ms — plus kill/reconnect drill, measured single-host (checks `load`, `reconnect-drill`); the 50-camera run needs a cluster and more feeds than exist |
+| 6 | SBOM + Trivy + secret-scan, pinned images, `readOnlyRootFilesystem` | CLOSED-INREPO | Pinned hard gates + CycloneDX SBOM in `.github/workflows/ci.yml` (check `supply-chain-gates` 6/6; `--with-scans` runs the engines locally) |
+| 7 | Frontend unit tests | CLOSED-INREPO | vitest + typecheck + build (checks `frontend-unit`, `frontend-typecheck`, `frontend-build`) |
+| 8 | Stale-doc quarantine + count reconciliation | PARTIAL-INREPO | `doc-counts` re-derives every quoted count from the suites it ran (5 stale numbers found and fixed 2026-09-28; parser and red-suite handling hardened 2026-10-02); frozen dated records excluded by design |
+| 9 | Pilot accuracy re-measure → Safe Claims edit | SITE-DEPENDENT | Ergonomist-labelled pilot sample; deliberate reviewed edit only (§4.5 rules) |
+
+**The harness is the gate, not this table:**
+`scripts/qualification/run_qualification.py` returns 0 only when every
+executed check passed, and it refuses to run when a matrix row cites a
+check that does not exist or an implementation file that is missing.
 
 Out of scope for TRL-8 (TRL-9): second site, production upgrades,
 support track record.
@@ -64,3 +77,7 @@ pilot week either produces ledger rows or a shortfall note.
   unchanged through TRL-9; pilot numbers enter only via deliberate edit.
 - One SHA per item; `file:line` cites; no other agent's lanes
   (Agent 2: CI/supply-chain/frontend; deploy session: TLS/drills).
+  The supply-chain and frontend lanes have since landed (§2 rows 6–7).
+- TRL-8 is not claimed complete while rows 1, 2, 5 and 9 are open, and
+  TRL-9 is not claimed at all until a paid site and its operating window
+  exist — see `docs/TRL8_QUALIFICATION_EVIDENCE.md` §5–§6.
