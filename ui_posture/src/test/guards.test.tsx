@@ -7,7 +7,7 @@
  *   - role without the path → silently redirected to /dashboard,
  *   - role with the path → the page renders where it stands.
  */
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import Layout from '../components/Layout';
@@ -83,12 +83,25 @@ describe('Layout route guard', () => {
     expect(screen.queryByText('DASHBOARD PROBE')).not.toBeInTheDocument();
   });
 
-  it('redirects an operator away from the admin-only /users route', async () => {
+  it('explains the refusal on the admin-only /users route instead of redirecting', async () => {
     signInAs('operator');
     renderGuard('/users');
 
-    await screen.findByText('DASHBOARD PROBE');
+    const denial = await screen.findByTestId('access-denied');
+    expect(denial).toHaveTextContent('/users');
+    expect(denial).toHaveTextContent(/Operator role/i);
+    expect(denial).toHaveTextContent(/available to Admin/i);
+    // The restricted page must not mount — this is what stops the operator
+    // 403 spikes on pages like /users and /setup.
     expect(screen.queryByText('USERS PROBE')).not.toBeInTheDocument();
+    // …and navigation stays usable.
+    expect(screen.getByRole('link', { name: /go to dashboard/i })).toBeInTheDocument();
+
+    // The denial reaches the shared live region, so a screen-reader user hears
+    // why the page changed instead of landing on unexplained content.
+    await waitFor(() => {
+      expect(document.getElementById('a11y-announcer')?.textContent).toMatch(/access denied/i);
+    });
   });
 
   it('lets an admin stay on /users', async () => {

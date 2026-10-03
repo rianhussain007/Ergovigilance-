@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
 
 export type Role = 'operator' | 'supervisor' | 'safety_mgr' | 'admin';
 
@@ -19,8 +19,25 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   completeMfaLogin: (pendingToken: string, code: string) => Promise<void>;
   demoLogin: () => Promise<void>;
+  /**
+   * Adopt a token+user that was minted outside this provider (self-service
+   * signup returns a ready session). Without this, signup could only write
+   * storage directly and the in-memory auth state stayed null — the Layout
+   * guard then bounced the brand-new admin straight back to /login.
+   */
+  adoptSession: (token: string, user: AuthUser) => void;
   logout: () => void;
+  /**
+   * True only when the BACKEND reports demo mode (`GET /api/demo-mode`). This is
+   * what the "synthetic data" banner renders from — never a client-side guess.
+   */
   isDemoMode: boolean;
+  /**
+   * True when THIS browser session was started with the Try Demo button. It is
+   * a UX signal only (guided tour, onboarding suppression) and must never be
+   * used to make a claim about what data the server is serving.
+   */
+  isDemoSession: boolean;
 }
 
 /**
@@ -98,7 +115,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener(AUTH_INVALID_EVENT, handleInvalidAuth);
   }, []);
 
-  const [isDemoMode, setIsDemoMode] = useState(() => {
+  // `demo` in local storage records only that THIS session was started through
+  // the Try Demo button. It is NOT evidence that the backend is serving
+  // synthetic data — the backend reads DEMO_MODE once at import time, so a
+  // server booted without it keeps answering with real rows. The banner in
+  // Layout must therefore key off the server's answer (see demoModeConfirmed
+  // below), never off this flag alone.
+  const [demoLoginUsed, setDemoLoginUsed] = useState(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
@@ -108,6 +131,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {}
     return false;
   });
+
+  // Server-authoritative: does the backend actually report demo mode? Null
+  // until answered; a failed probe is treated as "not demo" so the app never
+  // claims synthetic data it cannot prove.
+  const [demoModeConfirmed, setDemoModeConfirmed] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/demo-mode')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (!cancelled) setDemoModeConfirmed(body?.demo_mode === true);
+      })
+      .catch(() => {
+        if (!cancelled) setDemoModeConfirmed(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [auth?.token]);
+
+  const isDemoMode = demoModeConfirmed === true;
 
   const login = async (email: string, password: string) => {
     const res = await fetch('/api/auth/login', {
@@ -127,7 +172,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     const next = { token: data.token, user: data.user as AuthUser };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    setIsDemoMode(false);
+    setDemoLoginUsed(false);
     setAuth(next);
   };
 
@@ -144,7 +189,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const data = await res.json();
     const next = { token: data.token, user: data.user as AuthUser };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    setIsDemoMode(false);
+    setDemoLoginUsed(false);
     setAuth(next);
   };
 
@@ -160,12 +205,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Every "Try Demo" must start with the guided tour — never carry over a
     // dismissal from a previous demo or real session.
     localStorage.removeItem('ergovigilance_tour_dismissed_at');
-    setIsDemoMode(true);
+    setDemoLoginUsed(true);
+    // Re-probe /api/demo-mode so the banner matches what the server is actually
+    // serving (a fresh token changes the probe key).
+    setDemoModeConfirmed(null);
+    setAuth(next);
+  };
+
+  const adoptSession = (token: string, user: AuthUser) => {
+    const next = { token, user };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    setDemoLoginUsed(false);
+    setDemoModeConfirmed(null);
     setAuth(next);
   };
 
   const logout = () => {
     clearStoredAuth();
+    setDemoLoginUsed(false);
+    setDemoModeConfirmed(null);
     setAuth(null);
   };
 
@@ -175,9 +233,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     login,
     completeMfaLogin,
     demoLogin,
+    adoptSession,
     logout,
     isDemoMode,
-  }), [auth, isDemoMode]);
+    isDemoSession: demoLoginUsed,
+  }), [auth, isDemoMode, demoLoginUsed]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
