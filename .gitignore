@@ -138,3 +138,12 @@ backend_api/data/
 # Demo video asset (local sample footage for DEMO_VIDEO_PATH) — footage is
 # never committed; each dev cuts their own from local recordings
 demo-assets/
+
+# QA / qualification run evidence — local-only by default:
+# process logs, *.out dumps, pytest transcripts, sample footage,
+# and signed QA tokens (results/qa-pass/evidence.jsonl).
+# Force-add individual scripts with `git add -f` only after scrubbing tokens.
+results/qa-pass/
+results/*.out
+results/pytest_*.txt
+ui_posture/results/
