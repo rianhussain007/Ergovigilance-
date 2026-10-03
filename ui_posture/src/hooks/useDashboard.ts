@@ -1,80 +1,63 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useEffect } from 'react';
 import type { DashboardResponse, SessionRecord } from '@/src/types/api';
 import { getDashboardData, getSessions } from '@/src/services/dashboardService';
-import { getStoredToken } from '@/src/auth/AuthContext';
 import { useSettings } from './useSettings';
 import { useDashboardWS } from './useWebSocket';
+import { usePolledResource } from './usePolling';
 
 export interface UseDashboardReturn {
   dashboard: DashboardResponse | null;
   sessions: SessionRecord[];
   loading: boolean;
   error: string | null;
+  /** A later poll failed while data is on screen: what you see may be stale. */
+  degraded: boolean;
   refetch: () => void;
   refetchSessions: () => void;
 }
 
 /**
- * Default hook — reads from the real API.
+ * Dashboard data with WebSocket live merging.
  *
- * Dashboard data polls at settings.refreshInterval.
- * Sessions load once on mount and only refetch on explicit action (refetchSessions).
- * This avoids scanning 140 session files on every poll cycle.
+ * Dashboard polls at `settings.refreshInterval` (floor 5 s) and pauses while
+ * the tab is hidden. Sessions load once and only refetch on explicit action —
+ * the backend scans session files per page, so polling them would be wasteful.
  *
- * Pass enabled=false to skip the fetch, poll, and WebSocket entirely —
- * prevents duplicate polls/sockets per page from Layout + page subscribing
- * independently.
+ * Pass enabled=false to skip fetching, polling and the WebSocket entirely.
  */
 export function useDashboard(enabled: boolean = true): UseDashboardReturn {
   const { settings } = useSettings();
-  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
-  const [sessions, setSessions] = useState<SessionRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const mountedRef = useRef(true);
-  const sessionsLoadedRef = useRef(false);
+  const pollSeconds = Math.max(5, Number(settings.refreshInterval) || 30);
+
+  const {
+    data: dashboard,
+    loading,
+    error,
+    degraded,
+    refetch,
+    mutate,
+  } = usePolledResource(getDashboardData, {
+    initial: null,
+    intervalMs: pollSeconds * 1000,
+    enabled,
+    label: 'Dashboard',
+  });
+
+  const {
+    data: sessions,
+    refetch: refetchSessions,
+  } = usePolledResource(
+    () => getSessions(1, 25).then((resp) => resp.sessions),
+    { initial: [], intervalMs: null, enabled, label: 'Sessions' },
+  );
+
   const { data: wsData } = useDashboardWS(enabled);
 
-  const fetchDashboard = useCallback(async () => {
-    if (!getStoredToken()) {
-      if (!mountedRef.current) return;
-      setDashboard(null);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-    try {
-      const dash = await getDashboardData();
-      if (!mountedRef.current) return;
-      setDashboard(dash);
-      setError(null);
-    } catch (err) {
-      if (!mountedRef.current) return;
-      setError(err instanceof Error ? err.message : 'Failed to load data');
-    } finally {
-      if (mountedRef.current) setLoading(false);
-    }
-  }, []);
-
-  const fetchSessions = useCallback(async () => {
-    if (!getStoredToken()) return;
-    try {
-      const resp = await getSessions(1, 25);
-      if (!mountedRef.current) return;
-      setSessions(resp.sessions);
-      sessionsLoadedRef.current = true;
-    } catch {
-      // Silent — sessions are non-critical for dashboard
-    }
-  }, []);
-
-  // Apply WebSocket live data to dashboard when available
-  // NOTE: dashboard deliberately excluded from deps — the functional updater
-  // form of setDashboard always receives the latest state, and including
-  // dashboard here creates an infinite loop (setDashboard → new ref → effect fires again).
+  // Apply WebSocket live data on top of the polled snapshot. The functional
+  // updater receives the latest state; `dashboard` is intentionally not a dep.
   useEffect(() => {
     if (!wsData) return;
-    setDashboard((prev) => {
+    mutate((prev) => {
       if (!prev || !prev.liveStatus || !wsData.session_active) return prev;
       return {
         ...prev,
@@ -83,6 +66,9 @@ export function useDashboard(enabled: boolean = true): UseDashboardReturn {
           riskLevel: (wsData.risk_level?.toLowerCase() as 'low' | 'moderate' | 'high') ?? prev.liveStatus.riskLevel,
           riskScore: wsData.risk_score ?? prev.liveStatus.riskScore,
           confidence: wsData.confidence ?? prev.liveStatus.confidence,
+          // Keep the feed's FPS badge honest between REST polls — otherwise it
+          // shows "—" (or a stale value) while frames are actually flowing.
+          fps: wsData.fps ?? prev.liveStatus.fps,
           currentTask: wsData.task_name ?? prev.liveStatus.currentTask,
           workerStatus: wsData.person_detected ? 'Person Detected' : 'No Person',
         },
@@ -95,33 +81,7 @@ export function useDashboard(enabled: boolean = true): UseDashboardReturn {
         } : prev.session,
       };
     });
-  }, [wsData]);
+  }, [wsData, mutate]);
 
-  useEffect(() => {
-    if (!enabled) {
-      setLoading(false);
-      return;
-    }
-    mountedRef.current = true;
-    // Load dashboard immediately, sessions once
-    fetchDashboard();
-    if (!sessionsLoadedRef.current) {
-      fetchSessions();
-    }
-    // Dashboard polls at refreshInterval; sessions do NOT poll
-    const interval = setInterval(fetchDashboard, settings.refreshInterval * 1000);
-    return () => {
-      mountedRef.current = false;
-      clearInterval(interval);
-    };
-  }, [fetchDashboard, fetchSessions, settings.refreshInterval, enabled]);
-
-  return {
-    dashboard,
-    sessions,
-    loading,
-    error,
-    refetch: fetchDashboard,
-    refetchSessions: fetchSessions,
-  };
+  return { dashboard, sessions, loading, error, degraded, refetch, refetchSessions };
 }

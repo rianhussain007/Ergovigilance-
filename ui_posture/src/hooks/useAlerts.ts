@@ -1,13 +1,15 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useEffect } from 'react';
 import type { AlertsResponse } from '@/src/types/api';
 import { getAlerts } from '@/src/services/dashboardService';
-import { getStoredToken } from '@/src/auth/AuthContext';
 import { useAlertsWS } from './useWebSocket';
+import { usePolledResource } from './usePolling';
 
 export interface UseAlertsReturn {
   alerts: AlertsResponse;
   loading: boolean;
   error: string | null;
+  /** A later poll failed: the alerts shown may be stale. */
+  degraded: boolean;
   refetch: () => void;
 }
 
@@ -26,50 +28,22 @@ const EMPTY_ALERTS: AlertsResponse = {
 /**
  * Hook for consuming alert data from the Alert Engine.
  *
- * Uses WebSocket for real-time alert updates when a session is active.
- * Falls back to polling for initial load and session-inactive state.
+ * Polls every 10 s through the shared polled-resource primitive (paused while
+ * the tab is hidden, backs off when the backend is away) and merges real-time
+ * WebSocket pushes on top.
  */
 export function useAlerts(): UseAlertsReturn {
-  const [alerts, setAlerts] = useState<AlertsResponse>(EMPTY_ALERTS);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const mountedRef = useRef(true);
+  const { data: alerts, loading, error, degraded, refetch, mutate } = usePolledResource(getAlerts, {
+    initial: EMPTY_ALERTS,
+    intervalMs: 10000,
+    label: 'Alerts',
+  });
   const { data: wsAlerts } = useAlertsWS();
 
-  const fetchData = useCallback(async (isInitial = false) => {
-    if (isInitial) {
-      setLoading(true);
-      setError(null);
-    }
-    if (!getStoredToken()) {
-      if (!mountedRef.current) return;
-      setAlerts(EMPTY_ALERTS);
-      if (isInitial) {
-        setError(null);
-        setLoading(false);
-      }
-      return;
-    }
-    try {
-      const data = await getAlerts();
-      if (!mountedRef.current) return;
-      setAlerts((prev) => {
-        if (JSON.stringify(prev) === JSON.stringify(data)) return prev;
-        return data;
-      });
-      if (isInitial) setError(null);
-    } catch (err) {
-      if (!mountedRef.current) return;
-      if (isInitial) setError(err instanceof Error ? err.message : 'Failed to load alerts');
-    } finally {
-      if (isInitial && mountedRef.current) setLoading(false);
-    }
-  }, []);
-
-  // Apply WebSocket alert updates
+  // Apply WebSocket alert updates on top of the polled snapshot.
   useEffect(() => {
     if (!wsAlerts) return;
-    setAlerts((prev) => ({
+    mutate((prev) => ({
       ...prev,
       active: wsAlerts.alerts as unknown as AlertsResponse['active'],
       summary: {
@@ -77,17 +51,7 @@ export function useAlerts(): UseAlertsReturn {
         active_count: wsAlerts.active_count,
       },
     }));
-  }, [wsAlerts]);
+  }, [wsAlerts, mutate]);
 
-  useEffect(() => {
-    mountedRef.current = true;
-    fetchData(true);
-    const interval = setInterval(() => fetchData(false), 10000);
-    return () => {
-      mountedRef.current = false;
-      clearInterval(interval);
-    };
-  }, [fetchData]);
-
-  return { alerts, loading, error, refetch: () => fetchData(true) };
+  return { alerts, loading, error, degraded, refetch };
 }
