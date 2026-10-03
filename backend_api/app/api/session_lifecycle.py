@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from app.core.auth import ELEVATED_ROLES, get_current_user, require_live_session_access
 from app.core.database import get_worker, insert_audit_log
+from app.core.response_cache import invalidate_cache
 from app.core.security import AuthenticatedUser
 from app.services.live_monitor import get_live_service, get_live_service_or_none
 from app.schemas.api import SessionActionResponse
@@ -73,6 +74,9 @@ def start_session(
             details=details,
         )
 
+        # /api/dashboard is cached for a few seconds; drop it so the very next
+        # poll reflects the new live state instead of a stale "no session" body.
+        invalidate_cache()
         logger.info("Session started: %s", session_id)
         return SessionActionResponse(
             id=session_id,
@@ -107,6 +111,9 @@ def stop_session(user: AuthenticatedUser = Depends(get_current_user)):
     worker_id = getattr(service, "current_worker_id", None)
 
     result = service.stop_session()
+    # Drop the cached dashboard so the next poll stops showing LIVE immediately
+    # (otherwise the header/page can show a stopped session for the TTL window).
+    invalidate_cache()
     logger.info("Session stopped by %s: %s", user.id, session_id)
 
     # Log to audit trail
@@ -123,10 +130,17 @@ def stop_session(user: AuthenticatedUser = Depends(get_current_user)):
         details=details,
     )
 
+    saved_path = result.get("saved_path")
+    if saved_path and (result.get("summary") or {}).get("total_frames") == 0:
+        message = "Session ended. Recorded, but no person was detected — saved with no risk data."
+    elif saved_path:
+        message = f"Session ended. Summary: {saved_path}"
+    else:
+        message = "Session ended. Summary: not saved"
     return SessionActionResponse(
         id=session_id,
         status="ended",
-        message=f"Session ended. Summary: {result.get('saved_path', 'not saved')}",
+        message=message,
     )
 
 

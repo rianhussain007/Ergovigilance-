@@ -54,6 +54,16 @@ def _load_sessions(user: AuthenticatedUser) -> list[dict]:
     return sessions
 
 
+def _is_analyzed(s: dict) -> bool:
+    """False for O1 "no person detected" stub sessions (0 analyzed frames).
+
+    Stubs are real sessions and count toward total_sessions, but they carry no
+    risk measurements — folding them into risk averages/trends would drag every
+    score toward zero and fake an "improving" trend.
+    """
+    return not (s.get("no_person_detected") or s.get("total_frames") == 0)
+
+
 def _iso_week(session_timestamp: str) -> str:
     """Convert '20260713_180306' to 'W28' (ISO week number)."""
     try:
@@ -79,10 +89,22 @@ async def get_analytics(
         }
 
     n = len(sessions)
+    # O1: stub sessions (ran, but no person was ever in frame) are counted in
+    # total_sessions but excluded from every risk/feature aggregate — they
+    # carry no measurements, so averaging them in would drag scores to zero.
+    analyzed = [s for s in sessions if _is_analyzed(s)]
+    if not analyzed:
+        return {
+            "summary": {"total_sessions": n, "avg_risk_score": 0, "improving": 0, "stable": 0, "deteriorating": 0},
+            "weekly_risk_trend": [],
+            "risk_distribution": [],
+            "issue_frequency": [],
+            "neck_trunk_trend": [],
+        }
 
     # ── Summary ──────────────────────────────────────────────────────
     risk_scores = []
-    for s in sessions:
+    for s in analyzed:
         rp = s.get("risk_percentages", {})
         low = rp.get("LOW", 0)
         med = rp.get("MEDIUM", 0)
@@ -90,19 +112,19 @@ async def get_analytics(
         total = low + med + high
         risk_scores.append((med * 50 + high * 100) / max(total, 1))
 
-    avg_risk = round(sum(risk_scores) / n, 1) if risk_scores else 0
+    avg_risk = round(sum(risk_scores) / len(risk_scores), 1) if risk_scores else 0
 
-    neck_vals = [s.get("avg_neck_flexion", 0) for s in sessions]
-    trunk_vals = [s.get("avg_trunk_flexion", 0) for s in sessions]
-    shoulder_vals = [s.get("avg_shoulder_symmetry", 0) for s in sessions]
-    knee_vals = [s.get("avg_knee_angle", 0) for s in sessions]
+    neck_vals = [s.get("avg_neck_flexion", 0) for s in analyzed]
+    trunk_vals = [s.get("avg_trunk_flexion", 0) for s in analyzed]
+    shoulder_vals = [s.get("avg_shoulder_symmetry", 0) for s in analyzed]
+    knee_vals = [s.get("avg_knee_angle", 0) for s in analyzed]
 
     improving = sum(1 for m in ["avg_neck_flexion", "avg_trunk_flexion", "avg_shoulder_symmetry"]
                     if _compute_trend_for_metric(
-                        [s.get(m, 0) for s in sessions], m) == "Improving")
+                        [s.get(m, 0) for s in analyzed], m) == "Improving")
     deteriorating = sum(1 for m in ["avg_neck_flexion", "avg_trunk_flexion", "avg_shoulder_symmetry"]
                         if _compute_trend_for_metric(
-                            [s.get(m, 0) for s in sessions], m) == "Deteriorating")
+                            [s.get(m, 0) for s in analyzed], m) == "Deteriorating")
     stable = 3 - improving - deteriorating
 
     summary = {
@@ -115,7 +137,7 @@ async def get_analytics(
 
     # ── Weekly Risk Trend ────────────────────────────────────────────
     week_data = defaultdict(list)
-    for i, s in enumerate(sessions):
+    for i, s in enumerate(analyzed):
         wk = _iso_week(s.get("session_timestamp", ""))
         week_data[wk].append(risk_scores[i])
 
@@ -125,9 +147,9 @@ async def get_analytics(
     ]
 
     # ── Risk Distribution (averaged percentages) ─────────────────────
-    total_low = sum(s.get("risk_percentages", {}).get("LOW", 0) for s in sessions)
-    total_med = sum(s.get("risk_percentages", {}).get("MEDIUM", 0) for s in sessions)
-    total_high = sum(s.get("risk_percentages", {}).get("HIGH", 0) for s in sessions)
+    total_low = sum(s.get("risk_percentages", {}).get("LOW", 0) for s in analyzed)
+    total_med = sum(s.get("risk_percentages", {}).get("MEDIUM", 0) for s in analyzed)
+    total_high = sum(s.get("risk_percentages", {}).get("HIGH", 0) for s in analyzed)
     total = total_low + total_med + total_high or 1
 
     risk_distribution = [
@@ -137,14 +159,14 @@ async def get_analytics(
     ]
 
     # ── Issue Frequency ──────────────────────────────────────────────
-    issues = [s.get("most_frequent_issue") for s in sessions if s.get("most_frequent_issue")]
+    issues = [s.get("most_frequent_issue") for s in analyzed if s.get("most_frequent_issue")]
     issue_counts = Counter(issues).most_common(5)
     issue_frequency = [{"name": name, "count": count} for name, count in issue_counts]
 
     # ── Neck & Trunk Trend (weekly) ──────────────────────────────────
     neck_week = defaultdict(list)
     trunk_week = defaultdict(list)
-    for i, s in enumerate(sessions):
+    for i, s in enumerate(analyzed):
         wk = _iso_week(s.get("session_timestamp", ""))
         neck_week[wk].append(neck_vals[i])
         trunk_week[wk].append(trunk_vals[i])

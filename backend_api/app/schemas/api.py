@@ -31,6 +31,10 @@ class SessionInfo(BaseModel):
     duration: int
     framesAnalyzed: int
     cameraStatus: str
+    # True while the capture loop is reopening a dropped camera. Without this
+    # field the flag was silently dropped (Pydantic ignores extras), so the
+    # dashboard could never show the "Reconnecting…" state.
+    cameraReconnecting: bool = False
 
 
 class LiveStatus(BaseModel):
@@ -40,6 +44,9 @@ class LiveStatus(BaseModel):
     currentTask: str
     taskDurationSeconds: float = 0.0
     workerStatus: str
+    # Real analysis FPS from the pipeline. Previously the feed badge showed a
+    # hardcoded 29.97 regardless of whether frames were actually flowing.
+    fps: float = 0.0
 
 
 class ErgonomicFeature(BaseModel):

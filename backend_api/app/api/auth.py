@@ -30,6 +30,7 @@ from app.core.security import (
     verify_password,
 )
 from app.core.config import settings
+from app.core.response_cache import invalidate_cache
 
 import os
 import logging
@@ -47,6 +48,38 @@ logger = logging.getLogger(__name__)
 # There is deliberately no per-account lockout here. Locking a known email let
 # anyone deny service to that user on purpose, so failures are recorded for the
 # audit trail (record_login_attempt below) and throttled by IP instead.
+
+
+def demo_login_enabled() -> bool:
+    """Whether the credential-free ``POST /auth/demo`` route is mounted at all.
+
+    Demo login hands out a real ``operator`` token to an anonymous caller, so it
+    must be **opt-in**: off unless ``ENABLE_DEMO`` is explicitly true. A customer
+    deployment that forgets to set it gets a 404 — the safe default — rather than
+    an unauthenticated backdoor that reads worker names and stops live sessions.
+
+    ``DEBUG=true`` implies enabled so local development and the in-repo test
+    suites keep working without extra configuration.
+    """
+    raw = os.getenv("ENABLE_DEMO", "").strip().lower()
+    if raw in ("1", "true", "yes", "on"):
+        return True
+    if raw in ("0", "false", "no", "off"):
+        return False
+    return bool(settings.DEBUG)
+
+
+def _demo_is_demo_deployment() -> bool:
+    """True when the whole process was started as a synthetic-data demo.
+
+    ``backend/services/demo_seeding.DEMO_MODE`` is a module-level constant read
+    at import time, which is the only trustworthy signal for "this deployment is
+    serving synthetic data". The per-request ``os.environ`` write in
+    :func:`demo_login` does not change it.
+    """
+    from backend.services.demo_seeding import DEMO_MODE
+
+    return bool(DEMO_MODE)
 
 
 class LoginRequest(BaseModel):
@@ -264,22 +297,44 @@ async def login_with_mfa(request: Request, body: MFALoginRequest):
 async def demo_login():
     """One-click demo login — returns a token for the built-in demo operator.
 
-    No credentials required. Enables DEMO_MODE so the dashboard shows
-    synthetic sessions, alerts, and recommendations.
+    No credentials required, so this route is **opt-in only**: it 404s unless
+    ``ENABLE_DEMO=true`` (or ``DEBUG=true``). See :func:`demo_login_enabled`.
+
+    Sets ``DEMO_MODE`` so the repository layer serves synthetic data.
     """
-    # Activate demo mode so the repository layer serves synthetic data
+    if not demo_login_enabled():
+        # 404, not 403: on a production deployment this route should not exist
+        # as far as an attacker or a scanner is concerned.
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Not found",
+        )
+
+    # Activate demo mode so the repository layer serves synthetic data.
+    #
+    # NOTE: the repositories read DEMO_MODE once at import time (see
+    # backend/services/demo_seeding.py), so setting os.environ here only takes
+    # effect for a process started with DEMO_MODE=true. It is kept for parity
+    # with .env.demo / docker, not as a runtime switch.
     os.environ["DEMO_MODE"] = "true"
 
-    # Reset any in-flight monitoring session so every Try Demo starts clean
-    # (an active session from a previous visitor would otherwise keep running
-    # and leak stale frames/alerts into the new demo).
-    try:
-        service = get_live_service_or_none()
-        if service is not None and service.is_running():
-            logger.info("Stopping leftover session before demo login")
-            service.stop_session()
-    except Exception:
-        logger.exception("Failed to reset active session during demo login")
+    # Reset any in-flight monitoring session so every Try Demo starts clean.
+    #
+    # Only on an explicitly-enabled demo deployment: this route is anonymous, so
+    # calling stop_session() unconditionally made one unauthenticated request
+    # able to terminate a paying customer's live monitoring session. On a
+    # deployment that is not in demo mode we never touch the live service.
+    if _demo_is_demo_deployment():
+        try:
+            service = get_live_service_or_none()
+            if service is not None and service.is_running():
+                logger.info("Stopping leftover session before demo login")
+                service.stop_session()
+                # Demo login always starts "clean" — never inherit a cached
+                # dashboard that still shows the previous session as LIVE.
+                invalidate_cache()
+        except Exception:
+            logger.exception("Failed to reset active session during demo login")
 
     # Use the seeded operator account
     row = get_user_by_email("operator@example.local")

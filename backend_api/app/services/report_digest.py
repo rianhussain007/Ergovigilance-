@@ -67,12 +67,17 @@ def generate_digest(since_hours: float = 24.0, save: bool = True) -> dict[str, A
         recent.append(s)
 
     total_frames = sum(int(s.get("total_frames") or 0) for s in recent)
+    # O1: stub sessions (no person detected) hold no measurements — exclude
+    # them from risk aggregation/weighting but keep them in session_count.
+    no_person = [s for s in recent
+                 if s.get("no_person_detected") or not s.get("total_frames")]
+    analyzed = [s for s in recent if s not in no_person]
     risk_sums = {"LOW": 0.0, "MEDIUM": 0.0, "HIGH": 0.0}
-    weighted = sum(max(1, int(s.get("total_frames") or 0)) for s in recent)
+    weighted = sum(max(1, int(s.get("total_frames") or 0)) for s in analyzed)
     alert_count = 0
     issue_counts: dict[str, int] = {}
     highest = "LOW"
-    for s in recent:
+    for s in analyzed:
         rp = s.get("risk_percentages") or {}
         for level in risk_sums:
             risk_sums[level] += float(rp.get(level) or 0.0) * max(1, int(s.get("total_frames") or 0))
@@ -96,6 +101,7 @@ def generate_digest(since_hours: float = 24.0, save: bool = True) -> dict[str, A
         "period_start": cutoff.isoformat(),
         "summary": {
             "session_count": len(recent),
+            "no_person_session_count": len(no_person),
             "total_frames": total_frames,
             "alert_count": alert_count,
             "highest_risk_level": highest,
@@ -105,7 +111,7 @@ def generate_digest(since_hours: float = 24.0, save: bool = True) -> dict[str, A
                     k: round(v / weighted, 1) if weighted else 0.0
                     for k, v in risk_sums.items()
                 }
-                if recent
+                if analyzed
                 else {"LOW": 0.0, "MEDIUM": 0.0, "HIGH": 0.0}
             ),
         },

@@ -419,6 +419,11 @@ class LiveMonitoringService:
         # Camera reconnect bookkeeping (capture thread only).
         self._read_failures: int = 0
         self._reconnect_delay: float = _CAPTURE_RECONNECT_BASE_S
+        # Monotonic counter bumped on every start_session(). A background init
+        # thread captures its generation and aborts if superseded, so a slow
+        # start that races a stop/new-start can never resurrect an "active"
+        # camera_status for a session that has already ended.
+        self._session_generation: int = 0
 
     def start_session(
         self,
@@ -474,8 +479,20 @@ class LiveMonitoringService:
         self._reconnect_delay = _CAPTURE_RECONNECT_BASE_S
         self.state.camera_reconnecting = False
 
+        # Generation token for this start. The background init captures it and
+        # bails out if a later start()/stop() has superseded it.
+        self._session_generation += 1
+        generation = self._session_generation
+
         # Heavy init in background thread - camera open + model load + threads
         def _init_and_start():
+            def _stale() -> bool:
+                # True once this session has been stopped or replaced. Guarding
+                # on it stops a slow init from flipping camera_status back to
+                # "active" (and spawning capture threads) for a dead session —
+                # the phantom-LIVE bug surfaced on the Live Monitoring page.
+                return generation != self._session_generation or not self._running
+
             try:
                 # Open camera (this is the slow part: 0.5-3s on Windows)
                 import sys as _sys
@@ -484,23 +501,34 @@ class LiveMonitoringService:
                     self.cap = cv2.VideoCapture(source + _backend)
                 else:
                     self.cap = cv2.VideoCapture(source)
-                if not self.cap.isOpened():
+                cap = self.cap
+                if not cap.isOpened():
                     logger.error("Cannot open camera at source %s", source)
-                    self.state.camera_status = "error"
-                    self.state.session_active = False
+                    if not _stale():
+                        self.state.camera_status = "error"
+                        self.state.session_active = False
                     return
                 if self._is_demo_source:
-                    self._demo_fps = float(self.cap.get(cv2.CAP_PROP_FPS) or 15.0) or 15.0
+                    self._demo_fps = float(cap.get(cv2.CAP_PROP_FPS) or 15.0) or 15.0
 
                 # 640x480 - fast inference, sufficient for MediaPipe
-                self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-                self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-                fw = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                fh = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+                cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+                fw = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                fh = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
                 # Ensure pose model is loaded (fast if pre-loaded at startup)
                 if not self.engine._initialized:
                     self.engine.initialize()
+
+                # A stop() (or a newer start()) may have landed while the model
+                # was loading — release our camera and abort silently.
+                if _stale():
+                    logger.info("Session %s superseded during init — aborting", session_id)
+                    if self.cap is cap:
+                        cap.release()
+                        self.cap = None
+                    return
 
                 # Set frame dimensions now that camera is open
                 self.state.frame_width = fw
@@ -547,8 +575,9 @@ class LiveMonitoringService:
                 logger.info("Session %s fully initialized (camera open, threads started)", session_id)
             except Exception as exc:
                 logger.error("Background session init failed: %s", exc, exc_info=True)
-                self.state.camera_status = "error"
-                self.state.session_active = False
+                if not _stale():
+                    self.state.camera_status = "error"
+                    self.state.session_active = False
 
         threading.Thread(target=_init_and_start, daemon=True, name="session-init").start()
         return session_id
@@ -644,7 +673,7 @@ class LiveMonitoringService:
         try:
             os.makedirs(self.sessions_dir, exist_ok=True)
             ts = session_timestamp or datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
-            saved_path = save_session_summary(summary, self.sessions_dir, ts, alerts_data=self.alert_engine.export(), session_id=session_id)
+            saved_path = save_session_summary(summary, self.sessions_dir, ts, alerts_data=self.alert_engine.export(), session_id=session_id, allow_empty=True)
             if saved_path:
                 self._tag_saved_session(
                     saved_path=saved_path,

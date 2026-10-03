@@ -167,6 +167,12 @@ async def get_worker_summary(
         s for s in all_sessions
         if s.get("created_by_user_id") == user.id
     ]
+    # O1: "no person detected" stub sessions — listed with an honest task/
+    # risk label, but excluded from the trend and privacy gating below.
+    my_analyzed = [
+        s for s in my_sessions
+        if not (s.get("no_person_detected") or not s.get("total_frames"))
+    ]
 
     sessions_summary: list[dict] = []
     for s in my_sessions[:20]:  # last 20
@@ -183,12 +189,13 @@ async def get_worker_summary(
         mins = int(duration_secs // 60)
         secs = int(duration_secs % 60)
         duration_str = f"{mins}m {secs}s" if mins > 0 else f"{secs}s"
+        no_person = bool(s.get("no_person_detected")) or not s.get("total_frames")
         sessions_summary.append({
             "id": s.get("session_id", ""),
             "date": date_str,
             "duration": duration_str,
-            "highestRisk": s.get("highest_risk_level", "LOW"),
-            "task": s.get("task_name", "Not classified"),
+            "highestRisk": "NO DATA" if no_person else s.get("highest_risk_level", "LOW"),
+            "task": "No person detected" if no_person else (s.get("task_name") or "Not classified"),
             "status": "completed",
         })
 
@@ -211,10 +218,10 @@ async def get_worker_summary(
                     "confidence_band": a.confidence_band,
                 })
 
-    # Risk trend
+    # Risk trend (analyzed sessions only — stubs carry no risk data)
     risk_scores = [
         {"HIGH": 80, "MEDIUM": 50, "LOW": 20}.get(s.get("highest_risk_level", "LOW"), 20)
-        for s in my_sessions[:10]
+        for s in my_analyzed[:10]
     ]
     trend = "stable"
     if len(risk_scores) >= 2:
@@ -227,7 +234,7 @@ async def get_worker_summary(
 
     # Privacy from DB
     from app.core.database import get_worker
-    worker_row = get_worker("W-001") if my_sessions else None
+    worker_row = get_worker("W-001") if my_analyzed else None
     identity_mode = worker_row["identity_mode"] if worker_row and "identity_mode" in worker_row.keys() else "off"
     consent_status = worker_row["consent_status"] if worker_row and "consent_status" in worker_row.keys() else "pending"
 

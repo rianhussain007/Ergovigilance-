@@ -128,14 +128,30 @@ class LiveRepository(DashboardRepository):
         service = get_live_service()
         state = service.get_state_snapshot()
 
-        session_id = state.session_id or "SESH-LIVE-001"
-        start_time = ""
-        duration = 0
-        if state.session_start:
-            start_time = __import__("datetime").datetime.fromtimestamp(
-                state.session_start
-            ).strftime("%Y-%m-%dT%H:%M:%SZ")
-            duration = int(time.time() - state.session_start)
+        # Single source of truth for "is a session actually running": the same
+        # flag that /api/session/status and /api/video/feed use. ``camera_status``
+        # alone is NOT enough — a start/stop race (or a late background init
+        # thread) can leave it "active" after the session has ended, which
+        # previously rendered a phantom LIVE session (with an ever-growing
+        # duration and a dead feed) in the header and on Live Monitoring.
+        session_active = bool(state.session_active)
+        if session_active:
+            session_id = state.session_id or "SESH-LIVE-001"
+            camera_status = state.camera_status
+            camera_reconnecting = bool(getattr(state, "camera_reconnecting", False))
+            start_time = ""
+            duration = 0
+            if state.session_start:
+                start_time = __import__("datetime").datetime.fromtimestamp(
+                    state.session_start
+                ).strftime("%Y-%m-%dT%H:%M:%SZ")
+                duration = int(time.time() - state.session_start)
+        else:
+            session_id = ""
+            camera_status = "disconnected"
+            camera_reconnecting = False
+            start_time = ""
+            duration = 0
 
         features_list = []
         feature_configs = [
@@ -197,19 +213,23 @@ class LiveRepository(DashboardRepository):
         return DashboardResponse(
             session={
                 "id": session_id,
-                "workerName": "Live Session",
+                # The camera panel prints this beside a "*" as the monitored
+                # worker. Hardcoding "Live Session" made an idle screen look
+                # live — report the honest idle state when nothing is running.
+                "workerName": "Live Session" if session_active else "No active session",
                 "workerId": "CAM-001",
                 "startTime": start_time,
                 "currentTime": state.timestamp,
                 "duration": duration,
                 "framesAnalyzed": analytics.get("total_frames", 0),
-                "cameraStatus": state.camera_status,
-                "cameraReconnecting": bool(getattr(state, "camera_reconnecting", False)),
+                "cameraStatus": camera_status,
+                "cameraReconnecting": camera_reconnecting,
             },
             liveStatus={
                 "riskLevel": {"LOW": "low", "MEDIUM": "moderate", "HIGH": "high"}.get(state.risk_level, "low"),
                 "riskScore": state.risk_score,
                 "confidence": state.confidence,
+                "fps": float(state.fps or 0.0),
                 "currentTask": state.task_name,
                 "taskConfidence": getattr(state, "task_confidence", 0.0),
                 "taskDurationSeconds": state.task_duration_seconds,
@@ -295,6 +315,7 @@ class LiveRepository(DashboardRepository):
                 "taskConfidence": 87.0,
                 "taskDurationSeconds": 340.0,
                 "workerStatus": "active",
+                "fps": 30.0,
             },
             ergonomicFeatures=features,
             issues=issues,
@@ -416,6 +437,17 @@ class LiveRepository(DashboardRepository):
             if dominant not in ("LOW", "MEDIUM", "HIGH"):
                 dominant = highest
 
+            # O1: a session that ran but never saw a person is saved as an
+            # explicit stub — show it distinctly instead of rendering it as a
+            # LOW-risk session (which would misreport "no data" as "all fine").
+            no_person = bool(data.get("no_person_detected")) or data.get("total_frames") == 0
+            if no_person:
+                task_label = "No person detected"
+                risk_label = "NO DATA"
+            else:
+                task_label = data.get("task_name") or "Not classified"
+                risk_label = None
+
             date_str = ""
             if ts:
                 try:
@@ -431,14 +463,14 @@ class LiveRepository(DashboardRepository):
                 id=data.get("session_id") or (f"SESH-{ts}" if ts else f"SESH-{int(time.time())}"),
                 date=date_str,
                 duration=duration_str,
-                highestRisk=data.get("most_frequent_issue") or highest_risk,
-                highest_risk_level=highest,
-                risk_level=dominant,
+                highestRisk=risk_label or data.get("most_frequent_issue") or highest_risk,
+                highest_risk_level=risk_label or highest,
+                risk_level=risk_label or dominant,
                 risk_percentages=data.get("risk_percentages") or {},
                 # Real per-session task classification (persisted at save time
                 # since task recognition is live-only). Older sessions predate
                 # the field — show them honestly instead of a fake value.
-                task=data.get("task_name") or "Not classified",
+                task=task_label,
                 status="completed",
                 worker_id=data.get("worker_id"),
                 created_by_user_id=created_by_user_id,
@@ -533,6 +565,10 @@ class LiveRepository(DashboardRepository):
             )
 
         risk_pct = data.get("risk_percentages") or {}
+        # O1: an empty (no person detected) session has no risk data — label it
+        # instead of reporting the LOW default as if it were measured.
+        no_person_detail = bool(data.get("no_person_detected")) or data.get("total_frames") == 0
+        detail_highest = "NO DATA" if no_person_detail else data.get("highest_risk_level", "LOW")
 
         return SessionDetailResponse(
             id=session_id,
@@ -543,7 +579,7 @@ class LiveRepository(DashboardRepository):
             risk_percentages=risk_pct,
             most_frequent_issue=data.get("most_frequent_issue"),
             most_frequent_issue_count=data.get("most_frequent_issue_count", 0),
-            highest_risk_level=data.get("highest_risk_level", "LOW"),
+            highest_risk_level=detail_highest,
             highest_risk_timestamp=data.get("highest_risk_timestamp"),
             avg_neck_flexion=data.get("avg_neck_flexion", 0.0),
             avg_trunk_flexion=data.get("avg_trunk_flexion", 0.0),

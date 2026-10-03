@@ -57,6 +57,12 @@ def _load_filtered_sessions(user: AuthenticatedUser) -> list[dict]:
             s for s in sessions
             if s.get("created_by_user_id") == user.id
         ]
+    # O1: drop "no person detected" stub sessions (0 analyzed frames) — they
+    # have no risk measurements and would flatten the trend toward zero.
+    sessions = [
+        s for s in sessions
+        if not (s.get("no_person_detected") or s.get("total_frames") == 0)
+    ]
     return sessions
 
 
